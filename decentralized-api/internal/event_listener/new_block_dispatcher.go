@@ -510,6 +510,8 @@ func (d *OnNewBlockDispatcher) executeMissedValidationRecoveryWithSeed(previousE
 	// Execute recovery validations
 	d.validator.ExecuteRecoveryValidations(missedInferences)
 
+	time.Sleep(4 * time.Minute)
+
 	logging.Info("Missed validation recovery completed", types.Validation,
 		"previousEpochIndex", previousEpochIndex,
 		"recoveredCount", len(missedInferences))

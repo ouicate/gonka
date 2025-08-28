@@ -1,11 +1,11 @@
 package admin
 
 import (
-	"decentralized-api/apiconfig"
 	"decentralized-api/cosmosclient"
 	"decentralized-api/logging"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/productscience/inference/api/inference/inference"
@@ -13,14 +13,15 @@ import (
 )
 
 type ClaimRewardRecoverRequest struct {
-	EpochIndex *uint64 `json:"epoch_index,omitempty"` // Optional: if not provided, uses previous epoch
-	ForceClaim bool    `json:"force_claim"`           // Force claim even if already claimed
+	Seed       *int64 `json:"seed,omitempty"` // Optional: if not provided, uses stored seed
+	ForceClaim bool   `json:"force_claim"`    // Force claim even if already claimed
 }
 
 type ClaimRewardRecoverResponse struct {
 	Success           bool   `json:"success"`
 	Message           string `json:"message"`
 	EpochIndex        uint64 `json:"epoch_index"`
+	Seed              int64  `json:"seed"`
 	MissedValidations int    `json:"missed_validations"`
 	AlreadyClaimed    bool   `json:"already_claimed"`
 	ClaimExecuted     bool   `json:"claim_executed"`
@@ -32,29 +33,23 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
 	}
 
-	// Determine which epoch to recover
-	var epochIndex uint64
-	var seed apiconfig.SeedInfo
+	// Always use the previous epoch (only epoch we can recover)
+	previousSeed := s.configManager.GetPreviousSeed()
+	epochIndex := previousSeed.EpochIndex
 
-	if req.EpochIndex != nil {
-		// Specific epoch requested
-		epochIndex = *req.EpochIndex
-		// For now, we can only recover the previous epoch (where we have the seed)
-		previousSeed := s.configManager.GetPreviousSeed()
-		if previousSeed.EpochIndex != epochIndex {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				"Can only recover previous epoch. Current previous epoch: "+strconv.FormatUint(previousSeed.EpochIndex, 10))
-		}
-		seed = previousSeed
+	// Determine the seed to use
+	var seedValue int64
+	if req.Seed != nil {
+		// Custom seed provided
+		seedValue = *req.Seed
 	} else {
-		// Default to previous epoch
-		seed = s.configManager.GetPreviousSeed()
-		epochIndex = seed.EpochIndex
+		// Use stored seed
+		seedValue = previousSeed.Seed
 	}
 
 	// Check if seed is valid
-	if seed.Seed == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "No valid seed available for epoch "+strconv.FormatUint(epochIndex, 10))
+	if seedValue == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "No valid seed available for previous epoch "+strconv.FormatUint(epochIndex, 10))
 	}
 
 	// Check if already claimed
@@ -64,6 +59,7 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 			Success:           false,
 			Message:           "Rewards already claimed for this epoch. Use force_claim=true to override.",
 			EpochIndex:        epochIndex,
+			Seed:              seedValue,
 			MissedValidations: 0,
 			AlreadyClaimed:    true,
 			ClaimExecuted:     false,
@@ -72,12 +68,12 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 
 	logging.Info("Starting manual validation recovery", types.Validation,
 		"epochIndex", epochIndex,
-		"seed", seed.Seed,
+		"seed", seedValue,
 		"alreadyClaimed", alreadyClaimed,
 		"forceClaim", req.ForceClaim)
 
 	// Detect missed validations
-	missedInferences, err := s.validator.DetectMissedValidations(epochIndex, seed.Seed)
+	missedInferences, err := s.validator.DetectMissedValidations(epochIndex, seedValue)
 	if err != nil {
 		logging.Error("Failed to detect missed validations", types.Validation, "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to detect missed validations: "+err.Error())
@@ -94,6 +90,8 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 		logging.Info("Manual recovery validations completed", types.Validation,
 			"epochIndex", epochIndex,
 			"recoveredCount", missedCount)
+
+		time.Sleep(4 * time.Minute)
 	}
 
 	// Claim rewards if not already claimed or if forced
@@ -102,8 +100,8 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 		// Cast to concrete type for RequestMoney
 		concreteRecorder := s.recorder.(*cosmosclient.InferenceCosmosClient)
 		err := concreteRecorder.ClaimRewards(&inference.MsgClaimRewards{
-			Seed:       seed.Seed,
-			EpochIndex: seed.EpochIndex,
+			Seed:       seedValue,
+			EpochIndex: epochIndex,
 		})
 		if err != nil {
 			logging.Error("Failed to claim rewards in manual recovery", types.Claims, "error", err)
@@ -124,6 +122,7 @@ func (s *Server) postClaimRewardRecover(ctx echo.Context) error {
 		Success:           true,
 		Message:           "Manual claim reward recovery completed successfully",
 		EpochIndex:        epochIndex,
+		Seed:              seedValue,
 		MissedValidations: missedCount,
 		AlreadyClaimed:    alreadyClaimed,
 		ClaimExecuted:     claimExecuted,
