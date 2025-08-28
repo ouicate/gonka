@@ -71,6 +71,171 @@ func (s *InferenceValidator) VerifyInvalidation(events map[string][]string, reco
 
 }
 
+// shouldValidateInference determines if the current participant should validate a specific inference
+// This function extracts the core validation decision logic for reuse in recovery scenarios
+func (s *InferenceValidator) shouldValidateInference(
+	inferenceDetails *types.InferenceValidationDetails,
+	seed int64,
+	validatorPower uint64,
+	validatorAddress string,
+	validationParams *types.ValidationParams,
+) (bool, string) {
+	// Skip if this participant is the executor
+	if inferenceDetails.ExecutorId == validatorAddress {
+		return false, "Skipping validation: participant is the executor"
+	}
+
+	// Skip if total power is invalid
+	if inferenceDetails.TotalPower <= inferenceDetails.ExecutorPower {
+		return false, "Skipping validation: total power is less than or equal to executor power"
+	}
+
+	// Use the same validation logic as real-time validations
+	shouldValidate, message := calculations.ShouldValidate(
+		seed,
+		inferenceDetails,
+		uint32(inferenceDetails.TotalPower),
+		uint32(validatorPower),
+		uint32(inferenceDetails.ExecutorPower),
+		validationParams)
+
+	return shouldValidate, message
+}
+
+// DetectMissedValidations identifies which validations were missed for a specific epoch
+// Returns a list of inference objects that the current participant should have validated but didn't
+func (s *InferenceValidator) DetectMissedValidations(epochIndex uint64, seed int64) ([]types.Inference, error) {
+	logging.Info("Starting missed validation detection", types.Validation, "epochIndex", epochIndex, "seed", seed)
+
+	queryClient := s.recorder.NewInferenceQueryClient()
+	address := s.recorder.GetAddress()
+
+	// Get all inferences (automatically pruned to recent 2-3 epochs)
+	allInferencesResp, err := queryClient.InferenceAll(s.recorder.GetContext(), &types.QueryAllInferenceRequest{})
+	if err != nil {
+		logging.Error("Failed to query all inferences", types.Validation, "error", err)
+		return nil, fmt.Errorf("failed to query all inferences: %w", err)
+	}
+
+	// Filter inferences by epoch
+	var epochInferences []types.Inference
+	for _, inf := range allInferencesResp.Inference {
+		if inf.EpochId == epochIndex {
+			epochInferences = append(epochInferences, inf)
+		}
+	}
+
+	if len(epochInferences) == 0 {
+		logging.Info("No inferences found for epoch", types.Validation, "epochIndex", epochIndex)
+		return []types.Inference{}, nil
+	}
+
+	logging.Info("Found inferences for epoch", types.Validation, "epochIndex", epochIndex, "count", len(epochInferences))
+
+	// Create a map for quick lookup of inferences by ID
+	inferenceMap := make(map[string]types.Inference)
+	inferenceIds := make([]string, len(epochInferences))
+	for i, inf := range epochInferences {
+		inferenceIds[i] = inf.InferenceId
+		inferenceMap[inf.InferenceId] = inf
+	}
+
+	validationParamsResp, err := queryClient.GetInferenceValidationParameters(s.recorder.GetContext(), &types.QueryGetInferenceValidationParametersRequest{
+		Ids:       inferenceIds,
+		Requester: address,
+	})
+	if err != nil {
+		logging.Error("Failed to get validation parameters", types.Validation, "error", err)
+		return nil, fmt.Errorf("failed to get validation parameters: %w", err)
+	}
+
+	// Get validation params
+	params, err := queryClient.Params(s.recorder.GetContext(), &types.QueryParamsRequest{})
+	if err != nil {
+		logging.Error("Failed to get params", types.Validation, "error", err)
+		return nil, fmt.Errorf("failed to get params: %w", err)
+	}
+
+	// Get what validations were already submitted by this participant
+	epochGroupValidationsResp, err := queryClient.EpochGroupValidations(s.recorder.GetContext(), &types.QueryGetEpochGroupValidationsRequest{
+		Participant: address,
+		EpochIndex:  epochIndex,
+	})
+
+	// Create a set of already validated inference IDs
+	alreadyValidated := make(map[string]bool)
+	if err == nil {
+		for _, inferenceId := range epochGroupValidationsResp.EpochGroupValidations.ValidatedInferences {
+			alreadyValidated[inferenceId] = true
+		}
+	} else {
+		logging.Warn("Failed to get epoch group validations or no validations found", types.Validation, "error", err, "participant", address, "epochIndex", epochIndex)
+	}
+
+	// Check each inference to see if it should have been validated but wasn't
+	var missedValidations []types.Inference
+	for _, inferenceDetails := range validationParamsResp.Details {
+		// Check if this participant should validate this inference
+		shouldValidate, message := s.shouldValidateInference(
+			inferenceDetails,
+			seed,
+			validationParamsResp.ValidatorPower,
+			address,
+			params.Params.ValidationParams)
+
+		logging.Debug("Validation check result", types.Validation,
+			"inferenceId", inferenceDetails.InferenceId,
+			"shouldValidate", shouldValidate,
+			"message", message,
+			"alreadyValidated", alreadyValidated[inferenceDetails.InferenceId])
+
+		// If should validate but didn't, add to missed list
+		if shouldValidate && !alreadyValidated[inferenceDetails.InferenceId] {
+			if inference, exists := inferenceMap[inferenceDetails.InferenceId]; exists {
+				missedValidations = append(missedValidations, inference)
+				logging.Info("Found missed validation", types.Validation, "inferenceId", inferenceDetails.InferenceId)
+			} else {
+				logging.Warn("Inference not found in map", types.Validation, "inferenceId", inferenceDetails.InferenceId)
+			}
+		}
+	}
+
+	logging.Info("Missed validation detection complete", types.Validation,
+		"epochIndex", epochIndex,
+		"totalInferences", len(epochInferences),
+		"missedValidations", len(missedValidations))
+
+	return missedValidations, nil
+}
+
+// ExecuteRecoveryValidations executes validation for a list of missed inferences
+// This function uses the inference data already obtained and executes validations in parallel goroutines
+func (s *InferenceValidator) ExecuteRecoveryValidations(missedInferences []types.Inference) {
+	if len(missedInferences) == 0 {
+		logging.Info("No missed validations to execute", types.Validation)
+		return
+	}
+
+	logging.Info("Starting recovery validation execution", types.Validation, "missedValidations", len(missedInferences))
+
+	// Execute recovery validations in parallel goroutines (same pattern as SampleInferenceToValidate)
+	for _, inf := range missedInferences {
+		go func(inference types.Inference) {
+			logging.Info("Executing recovery validation", types.Validation, "inferenceId", inference.InferenceId)
+
+			// Use existing validation infrastructure
+			// The validateInferenceAndSendValMessage function handles all validation logic, node locking, and message sending
+			// Cast the interface back to concrete type (safe since it's always *InferenceCosmosClient)
+			concreteRecorder := s.recorder.(*cosmosclient.InferenceCosmosClient)
+			s.validateInferenceAndSendValMessage(inference, *concreteRecorder, false)
+
+			logging.Info("Recovery validation completed", types.Validation, "inferenceId", inference.InferenceId)
+		}(inf)
+	}
+
+	logging.Info("Recovery validation execution initiated for all missed validations", types.Validation, "count", len(missedInferences))
+}
+
 func (s *InferenceValidator) SampleInferenceToValidate(ids []string, transactionRecorder cosmosclient.InferenceCosmosClient) {
 	if ids == nil {
 		logging.Debug("No inferences to validate", types.Validation)
@@ -100,25 +265,20 @@ func (s *InferenceValidator) SampleInferenceToValidate(ids []string, transaction
 	logInferencesToSample(r.Details)
 
 	address := transactionRecorder.GetAddress()
+	currentSeed := s.configManager.GetCurrentSeed().Seed
 	var toValidateIds []string
-	for _, inferenceWithExecutor := range r.Details {
-		if inferenceWithExecutor.ExecutorId == address {
-			continue
-		}
 
-		currentSeed := s.configManager.GetCurrentSeed().Seed
-		if inferenceWithExecutor.TotalPower <= inferenceWithExecutor.ExecutorPower {
-			logging.Warn("Total power is less than or equal to executor power, skipping validation", types.Validation, "inferenceId", inferenceWithExecutor.InferenceId, "totalPower", inferenceWithExecutor.TotalPower, "executorPower", inferenceWithExecutor.ExecutorPower)
-			continue
-		}
-		shouldValidate, message := calculations.ShouldValidate(
-			currentSeed,
+	for _, inferenceWithExecutor := range r.Details {
+		// Use the extracted validation decision logic
+		shouldValidate, message := s.shouldValidateInference(
 			inferenceWithExecutor,
-			uint32(inferenceWithExecutor.TotalPower),
-			uint32(r.ValidatorPower),
-			uint32(inferenceWithExecutor.ExecutorPower),
+			currentSeed,
+			r.ValidatorPower,
+			address,
 			params.Params.ValidationParams)
-		logging.Info(message, types.Validation, "inferenceId", inferenceWithExecutor.InferenceId, "seed", currentSeed, "validator", transactionRecorder.GetAddress())
+
+		logging.Info(message, types.Validation, "inferenceId", inferenceWithExecutor.InferenceId, "seed", currentSeed, "validator", address)
+
 		if shouldValidate {
 			toValidateIds = append(toValidateIds, inferenceWithExecutor.InferenceId)
 		}
