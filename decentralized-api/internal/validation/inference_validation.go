@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/productscience/inference/api/inference/inference"
@@ -325,18 +326,48 @@ func logInferencesToValidate(toValidate []string) {
 }
 
 func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
-	valResult, err := broker.LockNode(s.nodeBroker, inf.Model, inf.NodeVersion, func(node *broker.Node) (ValidationResult, error) {
-		return s.validate(inf, node)
-	})
+	const maxRetries = 5
+	const retryInterval = 4 * time.Minute
 
-	if err != nil && errors.Is(err, broker.ErrNoNodesAvailable) {
-		logging.Error("Failed to validate inference. No nodes available, probably unsupported model.", types.Validation, "id", inf.InferenceId, "error", err)
-		valResult = ModelNotSupportedValidationResult{
-			InferenceId: inf.InferenceId,
+	var valResult ValidationResult
+	var err error
+
+	// Retry logic for LockNode operation
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		valResult, err = broker.LockNode(s.nodeBroker, inf.Model, inf.NodeVersion, func(node *broker.Node) (ValidationResult, error) {
+			return s.validate(inf, node)
+		})
+
+		if err == nil {
+			// Success, break out of retry loop
+			break
 		}
-	} else if err != nil {
-		logging.Error("Failed to validate inference.", types.Validation, "id", inf.InferenceId, "error", err)
-		return
+
+		// For all errors, check if we should retry
+		if attempt < maxRetries {
+			logging.Warn("Failed to validate inference, retrying", types.Validation,
+				"id", inf.InferenceId,
+				"attempt", attempt,
+				"maxRetries", maxRetries,
+				"error", err,
+				"nextRetryIn", retryInterval)
+			time.Sleep(retryInterval)
+		} else {
+			// Final attempt failed - check if it's ErrNoNodesAvailable for special handling
+			if errors.Is(err, broker.ErrNoNodesAvailable) {
+				logging.Error("Failed to validate inference after all retry attempts. No nodes available, probably unsupported model.", types.Validation, "id", inf.InferenceId, "attempts", maxRetries, "error", err)
+				valResult = ModelNotSupportedValidationResult{
+					InferenceId: inf.InferenceId,
+				}
+				break
+			} else {
+				logging.Error("Failed to validate inference after all retry attempts", types.Validation,
+					"id", inf.InferenceId,
+					"attempts", maxRetries,
+					"error", err)
+				return
+			}
+		}
 	}
 
 	msgValidation, err := ToMsgValidation(valResult)

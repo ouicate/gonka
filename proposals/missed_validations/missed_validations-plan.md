@@ -100,6 +100,23 @@ Each task includes:
 - **Dependencies**: 2.1
 - **Result**: Background processing fully implemented. Recovery runs in separate goroutine with comprehensive logging. Context cancellation and rate limiting deemed unnecessary for current scope - recovery is lightweight and runs once per epoch transition.
 
+### Section 3: Validation Retry Logic
+
+#### 3.1 Recovery Validation Retry Implementation
+- **Task**: [x] Add retry logic for failed recovery validations
+- **What**: Implement retry mechanism for validation failures in recovery process:
+  - ✅ Add retry logic to `validateInferenceAndSendValMessage` when called from recovery
+  - ✅ Implement fixed interval retry (every 4 minutes)
+  - ✅ Maximum retry attempts: 5 times per inference
+  - ✅ Track retry attempts per inference to avoid infinite loops
+  - ✅ Log retry attempts and final success/failure status
+  - ✅ Only retry on transient failures (network errors, temporary node unavailability)
+  - ✅ Skip retry on permanent failures (invalid inference data, validation logic errors)
+- **Where**: `decentralized-api/internal/validation/inference_validation.go`
+- **Why**: Improve recovery success rate for transient failures during validation execution
+- **Dependencies**: 2.2
+- **Result**: Implemented comprehensive retry logic directly in `validateInferenceAndSendValMessage()`. Added retry loop with 4-minute intervals and 5 max attempts. **All errors are now retried** including `ErrNoNodesAvailable` (nodes might be temporarily busy/loading). Only after all retry attempts are exhausted does `ErrNoNodesAvailable` result in `ModelNotSupportedValidationResult`. Retry logic covers the LockNode operation which is the most common failure point. Comprehensive logging for retry attempts, success, and final failure states. Build successful.
+
 ### Section 8: Testing and Validation
 
 #### 8.1 Unit Tests for Recovery Logic
