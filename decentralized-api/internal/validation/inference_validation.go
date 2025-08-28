@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/google/uuid"
 	"github.com/productscience/inference/api/inference/inference"
 	"github.com/productscience/inference/x/inference/calculations"
@@ -111,16 +112,38 @@ func (s *InferenceValidator) DetectMissedValidations(epochIndex uint64, seed int
 	queryClient := s.recorder.NewInferenceQueryClient()
 	address := s.recorder.GetAddress()
 
-	// Get all inferences (automatically pruned to recent 2-3 epochs)
-	allInferencesResp, err := queryClient.InferenceAll(s.recorder.GetContext(), &types.QueryAllInferenceRequest{})
-	if err != nil {
-		logging.Error("Failed to query all inferences", types.Validation, "error", err)
-		return nil, fmt.Errorf("failed to query all inferences: %w", err)
+	// Get all inferences (automatically pruned to recent 2-3 epochs) with pagination
+	var allInferences []types.Inference
+	var nextKey []byte
+
+	for {
+		req := &types.QueryAllInferenceRequest{
+			Pagination: &query.PageRequest{
+				Key:   nextKey,
+				Limit: 1000, // Use larger page size for efficiency
+			},
+		}
+
+		resp, err := queryClient.InferenceAll(s.recorder.GetContext(), req)
+		if err != nil {
+			logging.Error("Failed to query inferences page", types.Validation, "error", err)
+			return nil, fmt.Errorf("failed to query inferences: %w", err)
+		}
+
+		allInferences = append(allInferences, resp.Inference...)
+
+		// Check if there are more pages
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+			break
+		}
+		nextKey = resp.Pagination.NextKey
 	}
+
+	logging.Debug("Retrieved all inferences", types.Validation, "totalCount", len(allInferences))
 
 	// Filter inferences by epoch
 	var epochInferences []types.Inference
-	for _, inf := range allInferencesResp.Inference {
+	for _, inf := range allInferences {
 		if inf.EpochId == epochIndex {
 			epochInferences = append(epochInferences, inf)
 		}
