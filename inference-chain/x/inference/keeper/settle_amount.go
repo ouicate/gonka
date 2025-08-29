@@ -89,7 +89,7 @@ func (k Keeper) SetSettleAmountWithBurn(ctx context.Context, settleAmount types.
 	// Set the new settle amount
 	k.SetSettleAmount(ctx, settleAmount)
 	k.SafeLogSubAccountTransaction(ctx, types.ModuleName, settleAmount.Participant, types.SettleSubAccount, settleAmount.GetTotalCoins(), "awaiting claim")
-	k.SafeLogSubAccountTransactionUint(ctx, settleAmount.Participant, types.ModuleName, types.OwedSubAccount, settleAmount.WorkCoins, "moved to settler")
+	k.SafeLogSubAccountTransactionUint(ctx, settleAmount.Participant, types.ModuleName, types.OwedSubAccount, settleAmount.WorkCoins, "moved to settled")
 	return nil
 }
 
