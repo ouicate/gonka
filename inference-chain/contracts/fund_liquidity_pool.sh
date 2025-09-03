@@ -31,14 +31,14 @@ echo "Waiting for deployment proposal $PROPOSAL_ID to pass..."
 for i in $(seq 1 60); do
     PROPOSAL_STATUS=$($APP_NAME query gov proposal "$PROPOSAL_ID" --chain-id "$CHAIN_ID" --output json 2>/dev/null | jq -r '.proposal.status // empty')
     
-    if [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_PASSED" ]; then
+    if [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_PASSED" ] || [ "$PROPOSAL_STATUS" = "1" ]; then
         echo "Deployment proposal $PROPOSAL_ID passed!"
         sleep 10
         break
-    elif [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_REJECTED" ]; then
+    elif [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_REJECTED" ] || [ "$PROPOSAL_STATUS" = "2" ]; then
         echo "Deployment proposal $PROPOSAL_ID was rejected"
         exit 1
-    elif [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_FAILED" ]; then
+    elif [ "$PROPOSAL_STATUS" = "PROPOSAL_STATUS_FAILED" ] || [ "$PROPOSAL_STATUS" = "3" ]; then
         echo "Deployment proposal $PROPOSAL_ID failed"
         exit 1
     fi

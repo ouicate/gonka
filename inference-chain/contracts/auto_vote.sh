@@ -27,21 +27,21 @@ if [ -z "$PROPOSAL_ID" ]; then
     echo "Vote options: yes, no, abstain, no_with_veto"
     echo ""
     echo "Active proposals:"
-    $APP_NAME query gov proposals --output json | jq -r '.proposals[] | select(.status == "PROPOSAL_STATUS_VOTING_PERIOD") | "\(.id): \(.title)"' 2>/dev/null || echo "No active proposals"
+    $APP_NAME query gov proposals --output json | jq -r '.proposals[] | select(.status == "PROPOSAL_STATUS_VOTING_PERIOD" or .status == "1") | "\(.id): \(.title)"' 2>/dev/null || echo "No active proposals"
     exit 1
 fi
 
 echo "Waiting for proposal $PROPOSAL_ID to enter voting period..."
 for i in $(seq 1 30); do
     STATUS=$($APP_NAME query gov proposal "$PROPOSAL_ID" --output json 2>/dev/null | jq -r '.proposal.status // empty')
-    if [ "$STATUS" = "PROPOSAL_STATUS_VOTING_PERIOD" ]; then
+    if [ "$STATUS" = "PROPOSAL_STATUS_VOTING_PERIOD" ] || [ "$STATUS" = "1" ]; then
         echo "Proposal is in voting period, proceeding to vote..."
         break
     fi
     sleep 2
 done
 
-if [ "$STATUS" != "PROPOSAL_STATUS_VOTING_PERIOD" ]; then
+if [ "$STATUS" != "PROPOSAL_STATUS_VOTING_PERIOD" ] && [ "$STATUS" != "1" ]; then
     echo "Proposal $PROPOSAL_ID is not in voting period after waiting, cannot vote"
     echo "Current status: $STATUS"
     exit 1
