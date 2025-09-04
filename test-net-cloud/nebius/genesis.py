@@ -40,6 +40,11 @@ def clean_state():
         shutil.rmtree(INFERENCED_STATE_DIR)
 
 
+def download_models():
+    # mkdir -p $HF_HOME
+    # huggingface-cli download Qwen/Qwen2.5-7B-Instruct
+    pass
+
 def clone_repo():
     if not GONKA_REPO_DIR.exists():
         print(f"Cloning {GONKA_REPO_DIR}")
@@ -86,6 +91,9 @@ def install_inferenced():
         print(f"Extracting {inferenced_zip} to {BASE_DIR}")
         with zipfile.ZipFile(inferenced_zip, 'r') as zip_ref:
             zip_ref.extractall(BASE_DIR)
+        
+        # chmod +x $BASE_DIR/inferenced
+        os.chmod(inferenced_path, 0o755)
     else:
         print(f"{inferenced_path} already exists")
 
