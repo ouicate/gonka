@@ -4,11 +4,19 @@ import hashlib
 import urllib.request
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 
 BASE_DIR = Path(os.environ["HOME"]).absolute()
 GENESIS_VAL_NAME = "testnet-genesis"
 GONKA_REPO_DIR = BASE_DIR / "gonka"
+
+INFERENCED_BINARY = SimpleNamespace(
+    zip_file=BASE_DIR / "inferenced-linux-amd64.zip",
+    url="https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.0/inferenced-linux-amd64.zip",
+    checksum="24d4481bee27573b5a852265cf0672e1603e405ae1f1f9fba15a7a986feca569",
+    path=BASE_DIR / "inferenced",
+)
 
 
 def clean_state():
@@ -16,7 +24,11 @@ def clean_state():
         print(f"Removing {GONKA_REPO_DIR}")
         shutil.rmtree(GONKA_REPO_DIR)
     
-    if (BASE_DIR / "inferenced").exists():
+    if INFERENCED_BINARY.zip_file.exists():
+        print(f"Removing {BASE_DIR / 'inferenced-linux-amd64.zip'}")
+        os.remove(BASE_DIR / "inferenced-linux-amd64.zip")
+    
+    if INFERENCED_BINARY.path.exists():
         print(f"Removing {BASE_DIR / 'inferenced'}")
         shutil.rmtree(BASE_DIR / "inferenced")
 
@@ -40,28 +52,25 @@ def create_state_dirs():
 
 
 def install_inferenced():
-    # Expected sha256: 24d4481bee27573b5a852265cf0672e1603e405ae1f1f9fba15a7a986feca569
-    # download: https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.0/inferenced-linux-amd64.zip
+    url = INFERENCED_BINARY.url
+    inferenced_zip = INFERENCED_BINARY.zip_file
+    checksum = INFERENCED_BINARY.checksum
+    inferenced_path = INFERENCED_BINARY.path
 
-    url = "https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.0/inferenced-linux-amd64.zip"
-    expected_sha256 = "24d4481bee27573b5a852265cf0672e1603e405ae1f1f9fba15a7a986feca569"
-    inferenced_zip = BASE_DIR / "inferenced-linux-amd64.zip"
-    inferenced_path = BASE_DIR / "inferenced"
-    
     # Download if not exists
     if not inferenced_zip.exists():
-        print(f"Downloading {url}")
+        print(f"Downloading inferenced binary zip: {INFERENCED_BINARY.url}")
         urllib.request.urlretrieve(url, inferenced_zip)
     else:
         print(f"{inferenced_zip} already exists")
     
     # Verify checksum
-    print(f"Verifying checksum...")
+    print(f"Verifying inferenced binary zip checksum...")
     with open(inferenced_zip, 'rb') as f:
         file_hash = hashlib.sha256(f.read()).hexdigest()
     
-    if file_hash != expected_sha256:
-        raise ValueError(f"Checksum mismatch! Expected: {expected_sha256}, Got: {file_hash}")
+    if file_hash != checksum:
+        raise ValueError(f"Checksum mismatch! Expected: {checksum}, Got: {file_hash}")
     else:
         print("Checksum verified successfully")
     
