@@ -18,4 +18,9 @@ export NB_SUBNET_ID=$(nebius vpc subnet create \
 # Go to nebius AI cloud and create a L40S, 1CPU, 64GB RAM instance
 
 # To connect to the instance:
-ssh dima@89.169.111.79
+USER="dima"
+ssh $USER@89.169.111.79
+
+# Copy the script to the instance
+USER="dima"
+scp genesis.py $USER@89.169.111.79:/home/$USER/
