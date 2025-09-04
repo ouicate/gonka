@@ -19,6 +19,8 @@ INFERENCED_BINARY = SimpleNamespace(
     path=BASE_DIR / "inferenced",
 )
 
+INFERENCED_STATE_DIR = BASE_DIR / ".inference"
+
 
 def clean_state():
     if GONKA_REPO_DIR.exists():
@@ -32,6 +34,10 @@ def clean_state():
     if INFERENCED_BINARY.path.exists():
         print(f"Removing {BASE_DIR / 'inferenced'}")
         shutil.rmtree(BASE_DIR / "inferenced")
+
+    if INFERENCED_STATE_DIR.exists():
+        print(f"Removing {INFERENCED_STATE_DIR}")
+        shutil.rmtree(INFERENCED_STATE_DIR)
 
 
 def clone_repo():
