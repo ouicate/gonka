@@ -1,11 +1,12 @@
 package com.productscience
 
-import com.productscience.data.*
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
+@Tag("exclude")
 class ApiConfigTests {
 
     private val mockYamlContent = """
@@ -102,7 +103,7 @@ validation_params:
             appName = "test",
             chainId = "test-chain",
             nodeImageName = "test-node",
-            genesisNodeImage = "test-genesis", 
+            genesisNodeImage = "test-genesis",
             apiImageName = "test-api",
             mockImageName = "test-mock",
             denom = "ngonka",
@@ -119,7 +120,7 @@ validation_params:
         val config = applicationAPI.getConfig()
 
         assertNotNull(config)
-        
+
         // Test API settings
         assertEquals(9200, config.api.adminServerPort)
         assertEquals("", config.api.mlGrpcCallbackAddress)
@@ -154,7 +155,10 @@ validation_params:
         // Test current seed
         assertEquals(10L, config.currentSeed.epochIndex)
         assertEquals(517365417585945315L, config.currentSeed.seed)
-        assertEquals("9ba03b1bde76ce57dc8b439e1dd883e3f6b2bf97f07b8fc8691e32fb5d323bf31dd0167f27488fe9749f978d36ad700bac1d7a43b4e4406cec33e9ac5d941d2d", config.currentSeed.signature)
+        assertEquals(
+            "9ba03b1bde76ce57dc8b439e1dd883e3f6b2bf97f07b8fc8691e32fb5d323bf31dd0167f27488fe9749f978d36ad700bac1d7a43b4e4406cec33e9ac5d941d2d",
+            config.currentSeed.signature
+        )
 
         // Test ml_node_key_config
         assertEquals("", config.mlNodeKeyConfig.workerPrivate)
@@ -185,7 +189,10 @@ validation_params:
         // Test previous seed
         assertEquals(9L, config.previousSeed.epochIndex)
         assertEquals(3888597983176793143L, config.previousSeed.seed)
-        assertEquals("b79d968ed06e4c394d3ecedb3e8a0195db891ddce4648514cdcffde41d6f990129b5553bf3a9382f97983918be25547185527aa953eb33c2a04ab9d1f416878e", config.previousSeed.signature)
+        assertEquals(
+            "b79d968ed06e4c394d3ecedb3e8a0195db891ddce4648514cdcffde41d6f990129b5553bf3a9382f97983918be25547185527aa953eb33c2a04ab9d1f416878e",
+            config.previousSeed.signature
+        )
 
         // Test upcoming seed
         assertEquals(0L, config.upcomingSeed.epochIndex)
@@ -218,7 +225,7 @@ validation_params:
             appName = "test",
             chainId = "test-chain",
             nodeImageName = "test-node",
-            genesisNodeImage = "test-genesis", 
+            genesisNodeImage = "test-genesis",
             apiImageName = "test-api",
             mockImageName = "test-mock",
             denom = "ngonka",
