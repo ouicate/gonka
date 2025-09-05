@@ -58,9 +58,9 @@ data class InferencePayload(
 
     fun checkComplete(): Boolean =
         !this.requestedBy.isNullOrEmpty() &&
-            !this.executedBy.isNullOrEmpty() &&
-            !this.model.isNullOrEmpty() &&
-            this.status > 0
+                !this.executedBy.isNullOrEmpty() &&
+                !this.model.isNullOrEmpty() &&
+                this.status > 0
 }
 
 enum class InferenceStatus(val value: Int) {
@@ -124,3 +124,20 @@ data class MsgFinishInference(
     val model: String = "",
 ) : TxMessage
 
+data class MsgValidation(
+    override val type: String = "/inference.inference.MsgValidation",
+    val creator: String = "",
+    val id: String = "",
+    val inferenceId: String = "",
+    val responseHash: String = "",
+    val responsePayload: String = "",
+    val value: Double = 0.0,
+    val revalidation: Boolean = false,
+) : TxMessage
+
+data class MsgClaimRewards(
+    override val type: String = "/inference.inference.MsgClaimRewards",
+    val creator: String = "",
+    val seed: Long = 0,
+    val epochIndex: Long = 0
+) : TxMessage

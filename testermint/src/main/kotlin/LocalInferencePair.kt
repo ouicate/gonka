@@ -110,10 +110,14 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
             chainContainer.id,
             configWithName
         )
+        val apiExecutor = DockerExecutor(
+            apiContainer.id,
+            configWithName
+        )
 
         LocalInferencePair(
             node = ApplicationCLI(configWithName, nodeLogs, executor, listOf()),
-            api = ApplicationAPI(apiUrls, configWithName, dapiLogs),
+            api = ApplicationAPI(apiUrls, configWithName, dapiLogs, apiExecutor),
             mock = mockContainer?.let {
                 MockServerInferenceMock(
                     baseUrl = "http://localhost:${it.getMappedPort(8080)!!}", name = it.names.first()

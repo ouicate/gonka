@@ -170,10 +170,8 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	})
 
 	if err != nil && errors.Is(err, broker.ErrNoNodesAvailable) {
-		logging.Error("Failed to validate inference. No nodes available, probably unsupported model.", types.Validation, "id", inf.InferenceId, "error", err)
-		valResult = ModelNotSupportedValidationResult{
-			InferenceId: inf.InferenceId,
-		}
+		logging.Warn("Failed to validate inference. No nodes available, probably unsupported model.", types.Validation, "id", inf.InferenceId, "error", err)
+		return
 	} else if err != nil {
 		logging.Error("Failed to validate inference.", types.Validation, "id", inf.InferenceId, "error", err)
 		return
@@ -204,20 +202,20 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 
 	var requestMap map[string]interface{}
 	if err := json.Unmarshal([]byte(inference.PromptPayload), &requestMap); err != nil {
-		logging.Error("Failed to unmarshal inference.PromptPayload.", types.Validation, "id", inference.InferenceId, "error", err)
-		return nil, err
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal inference.PromptPayload.", err}, nil
 	}
 
 	originalResponse, err := unmarshalResponse(&inference)
 	if err != nil {
-		logging.Error("Failed to unmarshal inference.ResponsePayload.", types.Validation, "id", inference.InferenceId, "error", err)
-		return nil, err
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal inference.ResponsePayload.", err}, nil
 	}
 
 	enforcedStr, err := originalResponse.GetEnforcedStr()
 	if err != nil {
-		return nil, err
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to get enforced string.", err}, nil
 	}
+
+	// From here on, errors are on the part of the validator, not the inference that was passed in
 	requestMap["enforced_str"] = enforcedStr
 	// A hack to simplify processing the response:
 	requestMap["stream"] = false
@@ -335,6 +333,24 @@ func (r SimilarityValidationResult) IsSuccessful() bool {
 	return r.Value > 0.99
 }
 
+type InvalidInferenceResult struct {
+	InferenceId string
+	Reason      string
+	Error       error
+}
+
+func (r InvalidInferenceResult) IsSuccessful() bool {
+	return false
+}
+
+func (r InvalidInferenceResult) GetInferenceId() string {
+	return r.InferenceId
+}
+
+func (r InvalidInferenceResult) GetValidationResponseBytes() []byte {
+	return []byte{}
+}
+
 func compareLogits(
 	originalLogits []completionapi.Logprob,
 	validationLogits []completionapi.Logprob,
@@ -440,22 +456,6 @@ func positionDistance(
 	return distance, nil
 }
 
-type ModelNotSupportedValidationResult struct {
-	InferenceId string
-}
-
-func (r ModelNotSupportedValidationResult) GetInferenceId() string {
-	return r.InferenceId
-}
-
-func (r ModelNotSupportedValidationResult) GetValidationResponseBytes() []byte {
-	return nil
-}
-
-func (ModelNotSupportedValidationResult) IsSuccessful() bool {
-	return false
-}
-
 func ToMsgValidation(result ValidationResult) (*inference.MsgValidation, error) {
 	// Match type of result from implementations of ValidationResult
 	var simVal float64
@@ -471,9 +471,9 @@ func ToMsgValidation(result ValidationResult) (*inference.MsgValidation, error) 
 	case *SimilarityValidationResult:
 		simVal = result.(*SimilarityValidationResult).Value
 		logging.Info("Cosine similarity validation result", types.Validation, "cosineSimValue", simVal)
-	case ModelNotSupportedValidationResult:
-		simVal = 1
-		logging.Info("Model not supported validation result. Assuming is valid", types.Validation, "inference_id", result.GetInferenceId())
+	case *InvalidInferenceResult:
+		simVal = 0
+		logging.Warn("Invalid inference result", types.Validation, "reason", result.(*InvalidInferenceResult).Reason, "inferenceId", result.GetInferenceId(), "error", result.(*InvalidInferenceResult).Error)
 	default:
 		logging.Error("Unknown validation result type", types.Validation, "type", fmt.Sprintf("%T", result), "result", result)
 		return nil, errors.New("unknown validation result type")
@@ -481,6 +481,7 @@ func ToMsgValidation(result ValidationResult) (*inference.MsgValidation, error) 
 
 	responseHash, _, err := utils.GetResponseHash(result.GetValidationResponseBytes())
 	if err != nil {
+		logging.Error("Failed to get response hash", types.Validation, "error", err)
 		return nil, err
 	}
 
