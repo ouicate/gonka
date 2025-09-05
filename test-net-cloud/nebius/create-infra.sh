@@ -19,9 +19,13 @@ export NB_SUBNET_ID=$(nebius vpc subnet create \
 
 # To connect to the instance:
 ssh ubuntu@89.169.111.79
+# or (if you configured it in the ~/.ssh/config)
+ssh testnet-1
 
 # Copy the script to the instance
 scp genesis.py testnet@89.169.111.79:/home/testnet/
+# or
+scp genesis.py testnet-1:/home/testnet/
 
 # Additional on-machine steps:
 sudo apt get update

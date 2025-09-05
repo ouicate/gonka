@@ -21,6 +21,19 @@ INFERENCED_BINARY = SimpleNamespace(
 
 INFERENCED_STATE_DIR = BASE_DIR / ".inference"
 
+CONFIG_SUBSTITUTIONS = {
+    "KEY_NAME": "genesis", # TODO: allow to customize
+    "KEYRING_PASSWORD": "12345678", # TODO: allow to customize
+    "API_PORT": "8000",
+    "PUBLIC_URL": "http://89.169.111.79:8000", # TODO: allow to customize
+    "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000", # TODO: allow to customize
+    "HF_HOME": (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
+    "SEED_API_URL": "http://node2.gonka.ai:8000", # FIXME:
+    "SEED_NODE_RPC_URL": "http://node2.gonka.ai:26657", # FIXME:
+    "SEED_NODE_P2P_URL": "tcp://node2.gonka.ai:5000", # FIXME:
+    "RPC_SERVER_URL_1": "http://node1.gonka.ai:26657", # FIXME:
+    "RPC_SERVER_URL_2": "http://node2.gonka.ai:26657", # FIXME:
+}
 
 def clean_state():
     if GONKA_REPO_DIR.exists():
@@ -118,7 +131,7 @@ def create_account_key():
     
     # Execute the key creation command with automated password input
     # The password is "12345678" and needs to be entered twice
-    password = "12345678\n"  # \n for newline
+    password = f"{CONFIG_SUBSTITUTIONS['KEYRING_PASSWORD']}\n"  # \n for newline
     password_input = password + password  # Enter password twice
     
     process = subprocess.Popen([
@@ -139,6 +152,11 @@ def create_account_key():
     print("Account key created successfully!")
     print("Key details:")
     print(stdout)
+
+
+def pull_images():
+    # docker compose -f docker-compose.yml -f docker-compose.mlnode.yml pull
+    os.system(f"docker compose -f docker-compose.yml -f docker-compose.mlnode.yml pull")
 
 
 def main():
