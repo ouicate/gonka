@@ -109,7 +109,7 @@ def create_state_dirs():
     my_dir = GONKA_REPO_DIR / f"genesis/validators/{GENESIS_VAL_NAME}"
     if not my_dir.exists():
         print(f"Creating {my_dir}")
-        os.system(f"cp -r {template_dir} {my_dir}")
+    os.system(f"cp -r {template_dir} {my_dir}")
     else:
         print(f"{my_dir} already exists, contents: {list(my_dir.iterdir())}")
 
@@ -426,32 +426,60 @@ def extract_consensus_key():
 
 
 def get_or_create_warm_key(service="api"):
-    env = os.environ.copy()
-    # If you prefer to force-load env from a file, load it here into env.
-
-    show_cmd = [
-        "docker", "compose", "run", "--rm", "--no-deps", "-T", service,
-        "sh", "-lc",
-        'inferenced keys show "$KEY_NAME" --keyring-backend file -o json'
-    ]
-    add_cmd = [
-        "docker", "compose", "run", "--rm", "--no-deps", "-T", service,
-        "sh", "-lc",
-        'printf "%s\n%s\n" "$KEYRING_PASSWORD" "$KEYRING_PASSWORD" | '
-        'inferenced keys add "$KEY_NAME" --keyring-backend file -o json'
-    ]
-
-    def run_and_parse(cmd):
-        out = subprocess.check_output(cmd, env=env)
-        data = json.loads(out.decode("utf-8"))
-        # Some Cosmos CLIs return {"pubkey": {"@type": "...", "key": "..."}, ...}
-        return data["pubkey"]["key"]
-
+    """Get or create warm key using Docker compose"""
+    working_dir = GONKA_REPO_DIR / "deploy/join"
+    config_file = working_dir / "config.env"
+    
+    if not working_dir.exists():
+        raise FileNotFoundError(f"Working directory not found: {working_dir}")
+    
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}")
+    
+    print(f"Getting or creating warm key for service: {service}")
+    
+    # First try to show existing key
+    show_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T {service} sh -lc \"inferenced keys show \\$KEY_NAME --keyring-backend file -o json\"'"
+    
     try:
-        return run_and_parse(show_cmd)
-    except subprocess.CalledProcessError:
-        # Not found; create it
-        return run_and_parse(add_cmd)
+        print("Checking for existing key...")
+        result = subprocess.run(
+            show_cmd,
+            shell=True,
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            pubkey = data["pubkey"]["key"]
+            print(f"Found existing key: {pubkey}")
+            return pubkey
+        else:
+            print("Key not found, creating new key...")
+            raise subprocess.CalledProcessError(result.returncode, show_cmd)
+            
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        # Key doesn't exist or couldn't parse, create it
+        add_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T {service} sh -lc \"printf \\\"%s\\\\n%s\\\\n\\\" \\$KEYRING_PASSWORD \\$KEYRING_PASSWORD | inferenced keys add \\$KEY_NAME --keyring-backend file -o json\"'"
+        
+        result = subprocess.run(
+            add_cmd,
+            shell=True,
+            cwd=working_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print(f"Error creating key: {result.stderr}")
+            raise subprocess.CalledProcessError(result.returncode, add_cmd)
+        
+        data = json.loads(result.stdout)
+        pubkey = data["pubkey"]["key"]
+        print(f"Created new key: {pubkey}")
+        return pubkey
 
 
 def main():
@@ -479,7 +507,7 @@ def main():
     pull_images()
     run_genesis_initialization()
     extract_consensus_key()
-    # get_or_create_warm_key()
+    get_or_create_warm_key()
 
 
 if __name__ == "__main__":
