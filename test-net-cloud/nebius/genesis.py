@@ -453,9 +453,35 @@ def get_or_create_warm_key(service="api"):
         print(f"Error creating key: {result.stderr}")
         raise subprocess.CalledProcessError(result.returncode, add_cmd)
     
-    print(f"Stdout of creating a warm key: {result.stdout}")
-    pubkey = result.stdout.split("pubkey: '")[1].split("'")[0]
-    return pubkey
+    print("Warm key creation completed!")
+    print("Output:")
+    print("=" * 50)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("Errors/Warnings:")
+        print(result.stderr)
+    print("=" * 50)
+    
+    # Extract pubkey from output (same format as cold key)
+    full_output = result.stdout + result.stderr if result.stderr else result.stdout
+    pubkey_match = re.search(r"pubkey: '(.+?)'", full_output)
+    if pubkey_match:
+        pubkey_json = pubkey_match.group(1)
+        try:
+            pubkey_data = json.loads(pubkey_json)
+            pubkey = pubkey_data.get("key", "")
+            if pubkey:
+                print(f"Extracted warm key pubkey: {pubkey}")
+                return pubkey
+            else:
+                print("Warning: Could not extract key from pubkey JSON")
+        except json.JSONDecodeError:
+            print("Warning: Could not parse pubkey JSON")
+    else:
+        print("Warning: Could not find pubkey in output")
+    
+    raise ValueError("Failed to extract pubkey from warm key creation output")
 
 
 def main():
