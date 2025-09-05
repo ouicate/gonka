@@ -453,9 +453,8 @@ def get_or_create_warm_key(service="api"):
         print(f"Error creating key: {result.stderr}")
         raise subprocess.CalledProcessError(result.returncode, add_cmd)
     
-    data = json.loads(result.stdout)
-    pubkey = data["pubkey"]["key"]
-    print(f"Created warm key: {pubkey}")
+    print(f"Stdout of creating a warm key: {result.stdout}")
+    pubkey = result.stdout.split("pubkey: '")[1].split("'")[0]
     return pubkey
 
 
