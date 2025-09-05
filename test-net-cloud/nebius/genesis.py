@@ -394,6 +394,35 @@ def extract_consensus_key():
     print("Consensus key extraction completed successfully!")
 
 
+def get_or_create_warm_key(service="api"):
+    env = os.environ.copy()
+    # If you prefer to force-load env from a file, load it here into env.
+
+    show_cmd = [
+        "docker", "compose", "run", "--rm", "--no-deps", "-T", service,
+        "sh", "-lc",
+        'inferenced keys show "$KEY_NAME" --keyring-backend file -o json'
+    ]
+    add_cmd = [
+        "docker", "compose", "run", "--rm", "--no-deps", "-T", service,
+        "sh", "-lc",
+        'printf "%s\n%s\n" "$KEYRING_PASSWORD" "$KEYRING_PASSWORD" | '
+        'inferenced keys add "$KEY_NAME" --keyring-backend file -o json'
+    ]
+
+    def run_and_parse(cmd):
+        out = subprocess.check_output(cmd, env=env)
+        data = json.loads(out.decode("utf-8"))
+        # Some Cosmos CLIs return {"pubkey": {"@type": "...", "key": "..."}, ...}
+        return data["pubkey"]["key"]
+
+    try:
+        return run_and_parse(show_cmd)
+    except subprocess.CalledProcessError:
+        # Not found; create it
+        return run_and_parse(add_cmd)
+
+
 def main():
     if Path(os.getcwd()).absolute() != BASE_DIR:
         print(f"Changing directory to {BASE_DIR}")
@@ -411,6 +440,7 @@ def main():
     pull_images()
     run_genesis_initialization()
     extract_consensus_key()
+    get_or_create_warm_key()
 
 
 if __name__ == "__main__":
