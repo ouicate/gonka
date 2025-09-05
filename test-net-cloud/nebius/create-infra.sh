@@ -41,3 +41,7 @@ huggingface-cli download Qwen/Qwen2.5-7B-Instruct
 # Configure docker permissions
 sudo groupadd docker
 sudo usermod -aG docker $USER
+
+# Example to copy genesis.json
+ssh ubuntu@89.169.111.79 "sudo chmod 777 gonka/deploy/join/.inference/config/genesis.json"
+scp ubuntu@89.169.111.79:/home/ubuntu/gonka/deploy/join/.inference/config/genesis.json genesis.json
