@@ -37,3 +37,7 @@ export HF_HOME="/home/ubuntu/hf-cache"
 mkdir "$HF_HOME"
 pip install -U "huggingface_hub[cli]"
 huggingface-cli download Qwen/Qwen2.5-7B-Instruct
+
+# Configure docker permissions
+sudo groupadd docker
+sudo usermod -aG docker $USER
