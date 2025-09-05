@@ -48,19 +48,19 @@ CONFIG_ENV = {
 def clean_state():
     if GONKA_REPO_DIR.exists():
         print(f"Removing {GONKA_REPO_DIR}")
-        shutil.rmtree(GONKA_REPO_DIR)
+        os.system(f"sudo rm -rf {GONKA_REPO_DIR}")
     
     if INFERENCED_BINARY.zip_file.exists():
         print(f"Removing {BASE_DIR / 'inferenced-linux-amd64.zip'}")
-        os.remove(BASE_DIR / "inferenced-linux-amd64.zip")
+        os.system(f"sudo rm -f {BASE_DIR / 'inferenced-linux-amd64.zip'}")
     
     if INFERENCED_BINARY.path.exists():
         print(f"Removing {BASE_DIR / 'inferenced'}")
-        INFERENCED_BINARY.path.unlink()
+        os.system(f"sudo rm -f {BASE_DIR / 'inferenced'}")
 
     if INFERENCED_STATE_DIR.exists():
         print(f"Removing {INFERENCED_STATE_DIR}")
-        shutil.rmtree(INFERENCED_STATE_DIR)
+        os.system(f"sudo rm -rf {INFERENCED_STATE_DIR}")
 
 def clone_repo():
     if not GONKA_REPO_DIR.exists():
