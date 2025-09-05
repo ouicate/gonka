@@ -240,6 +240,70 @@ def pull_images():
         print(result.stdout)
 
 
+def create_docker_compose_override():
+    """Create a docker-compose override file for genesis initialization"""
+    working_dir = GONKA_REPO_DIR / "deploy/join"
+    override_file = working_dir / "docker-compose.genesis-override.yml"
+    
+    # Create the override content
+    override_content = """services:
+  node:
+    environment:
+      - INIT_ONLY=true
+      - IS_GENESIS=true
+"""
+    
+    with open(override_file, 'w') as f:
+        f.write(override_content)
+    
+    print(f"Created docker-compose override at {override_file}")
+    return override_file
+
+
+def run_genesis_initialization():
+    """Run the node container with genesis initialization settings"""
+    working_dir = GONKA_REPO_DIR / "deploy/join"
+    config_file = working_dir / "config.env"
+    override_file = create_docker_compose_override()
+    
+    if not working_dir.exists():
+        raise FileNotFoundError(f"Working directory not found: {working_dir}")
+    
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}")
+    
+    print("Running genesis initialization...")
+    print("This will initialize the node with INIT_ONLY=true and IS_GENESIS=true")
+    
+    # Create the command to source config.env and run docker compose with override
+    cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml -f {override_file} run --rm node'"
+    
+    # Run the command in the specified working directory
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        cwd=working_dir,
+        capture_output=True,
+        text=True
+    )
+    
+    print("Genesis initialization completed!")
+    print("Output:")
+    print("=" * 50)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("Errors/Warnings:")
+        print(result.stderr)
+    print("=" * 50)
+    
+    if result.returncode != 0:
+        print(f"Genesis initialization failed with return code: {result.returncode}")
+        raise subprocess.CalledProcessError(result.returncode, cmd)
+    
+    print("Genesis initialization completed successfully!")
+
+
 def main():
     if Path(os.getcwd()).absolute() != BASE_DIR:
         print(f"Changing directory to {BASE_DIR}")
@@ -255,6 +319,7 @@ def main():
     create_account_key()
     create_config_env_file()
     pull_images()
+    run_genesis_initialization()
 
 
 if __name__ == "__main__":
