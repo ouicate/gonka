@@ -179,12 +179,11 @@ class InferenceAccountingTests : TestermintTest() {
     @Test
     fun `start comes after finish inference`() {
         logSection("Clearing Claims")
-        genesis.waitForStage(EpochStage.START_OF_POC)
         genesis.waitForStage(EpochStage.CLAIM_REWARDS)
         logSection("Making inferences")
+        genesis.waitForNextInferenceWindow()
         val startLastRewardedEpoch = getRewardCalculationEpochIndex(genesis)
         val participants = genesis.api.getParticipants()
-
         participants.forEach {
             Logger.info("Participant: ${it.id}, Balance: ${it.balance}")
         }

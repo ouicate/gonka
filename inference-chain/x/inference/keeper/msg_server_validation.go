@@ -53,6 +53,13 @@ func (k msgServer) Validation(goCtx context.Context, msg *types.MsgValidation) (
 		return nil, types.ErrParticipantCannotValidateOwnInference
 	}
 
+	for _, validator := range inference.ValidatedBy {
+		if validator == msg.Creator {
+			k.LogError("Participant has already validated this inference", types.Validation, "participant", msg.Creator, "inferenceId", msg.InferenceId)
+			return nil, types.ErrDuplicateValidation
+		}
+	}
+
 	model, err := k.GetEpochModel(ctx, inference.Model)
 	if err != nil {
 		k.LogError("Failed to get epoch model", types.Validation,
@@ -87,7 +94,7 @@ func (k msgServer) Validation(goCtx context.Context, msg *types.MsgValidation) (
 		shouldShare, information := k.inferenceIsBeforeClaimsSet(ctx, inference, epochGroup)
 		k.LogInfo("Validation sharing decision", types.Validation, "inferenceId", inference.InferenceId, "validator", msg.Creator, "shouldShare", shouldShare, "information", information)
 		if shouldShare {
-			k.shareWorkWithValidators(ctx, inference, msg, executor)
+			k.shareWorkWithValidators(ctx, inference, msg, &executor)
 		}
 		inference.ValidatedBy = append(inference.ValidatedBy, msg.Creator)
 		executor.ConsecutiveInvalidInferences = 0
@@ -149,10 +156,15 @@ func (k msgServer) inferenceIsBeforeClaimsSet(ctx sdk.Context, inference types.I
 	}
 }
 
-func (k msgServer) shareWorkWithValidators(ctx sdk.Context, inference types.Inference, msg *types.MsgValidation, executor types.Participant) {
+func (k msgServer) shareWorkWithValidators(ctx sdk.Context, inference types.Inference, msg *types.MsgValidation, executor *types.Participant) {
 	originalWorkers := append([]string{inference.ExecutedBy}, inference.ValidatedBy...)
 	adjustments := calculations.ShareWork(originalWorkers, []string{msg.Creator}, inference.ActualCost)
+	k.validateAdjustments(adjustments, msg)
 	for _, adjustment := range adjustments {
+		// A note about the bookkeeping here:
+		// ShareWork will return negative adjustments for all existing shareholders, and a positive for the new (msg.Creator)
+		// We account for this by adding a negative amount to the CoinBalance. BUT, we only register the NEGATIVE adjustments,
+		// and we model them as moving money from the existing worker TO the positive
 		if adjustment.ParticipantId == executor.Address {
 			executor.CoinBalance += adjustment.WorkAdjustment
 			k.LogInfo("Adjusting executor balance for validation", types.Validation, "executor", executor.Address, "adjustment", adjustment.WorkAdjustment)
@@ -170,10 +182,33 @@ func (k msgServer) shareWorkWithValidators(ctx sdk.Context, inference types.Infe
 			k.LogInfo("Adjusting worker balance for validation", types.Validation, "worker", worker.Address, "adjustment", adjustment.WorkAdjustment)
 			k.LogInfo("Adjusting worker CoinBalance for validation", types.Balances, "worker", worker.Address, "adjustment", adjustment.WorkAdjustment, "coin_balance", worker.CoinBalance)
 			if adjustment.WorkAdjustment < 0 {
-				k.SafeLogSubAccountTransaction(ctx, msg.Creator, adjustment.ParticipantId, types.OwedSubAccount, -adjustment.WorkAdjustment, "share_validation_executor:"+inference.InferenceId)
+				k.SafeLogSubAccountTransaction(ctx, msg.Creator, adjustment.ParticipantId, types.OwedSubAccount, -adjustment.WorkAdjustment, "share_validation_worker:"+inference.InferenceId)
 			}
 			k.SetParticipant(ctx, worker)
 		}
+	}
+}
+
+func (k msgServer) validateAdjustments(adjustments []calculations.Adjustment, msg *types.MsgValidation) {
+	positiveAdjustmentTotal := int64(0)
+	negativeAdjustmentTotal := int64(0)
+	for _, adjustment := range adjustments {
+		if adjustment.ParticipantId == msg.Creator {
+			if adjustment.WorkAdjustment < 0 {
+				k.LogError("Validation adjustment for new validator cannot be negative", types.Validation, "adjustment", adjustment)
+			} else {
+				positiveAdjustmentTotal += adjustment.WorkAdjustment
+			}
+		} else {
+			if adjustment.WorkAdjustment > 0 {
+				k.LogError("Validation adjustment for existing validator cannot be positive", types.Validation, "adjustment", adjustment)
+			} else {
+				negativeAdjustmentTotal += adjustment.WorkAdjustment
+			}
+		}
+	}
+	if positiveAdjustmentTotal != negativeAdjustmentTotal {
+		k.LogError("Validation adjustment totals do not match", types.Validation, "positiveAdjustmentTotal", positiveAdjustmentTotal, "negativeAdjustmentTotal", negativeAdjustmentTotal)
 	}
 }
 
