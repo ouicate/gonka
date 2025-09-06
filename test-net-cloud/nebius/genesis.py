@@ -529,7 +529,7 @@ def setup_genesis_file():
     
     # Source and destination paths
     source_genesis = DEPLOY_DIR / ".inference/config/genesis.json"
-    dest_dir = INFERENCED_STATE_DIR / ".inference/config"
+    dest_dir = INFERENCED_STATE_DIR / "config"
     dest_genesis = dest_dir / "genesis.json"
     
     if not source_genesis.exists():
