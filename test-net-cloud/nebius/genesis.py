@@ -523,6 +523,32 @@ def get_or_create_warm_key(service="api"):
     return AccountKey(address=address, pubkey=pubkey, name=name)
 
 
+def setup_genesis_file():
+    """Copy genesis.json from Docker container to local state directory"""
+    print("Setting up genesis.json file...")
+    
+    # Source and destination paths
+    source_genesis = DEPLOY_DIR / ".inference/config/genesis.json"
+    dest_dir = INFERENCED_STATE_DIR / ".inference/config"
+    dest_genesis = dest_dir / "genesis.json"
+    
+    if not source_genesis.exists():
+        raise FileNotFoundError(f"Source genesis.json not found at {source_genesis}")
+    
+    # Create destination directory if it doesn't exist
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copy the genesis.json file
+    print(f"Copying {source_genesis} to {dest_genesis}")
+    shutil.copy2(source_genesis, dest_genesis)
+    
+    # Set permissions to 777
+    print(f"Setting permissions on {dest_genesis}")
+    os.chmod(dest_genesis, 0o777)
+    
+    print("Genesis.json setup completed successfully!")
+
+
 def add_genesis_account(account_key: AccountKey):
     """Add genesis account using the cold key address"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
@@ -657,16 +683,20 @@ def main():
     
     # Run the main processes
     pull_images()
+
+    # Phase 2. Genesis preparation
     run_genesis_initialization()
     consensus_key = extract_consensus_key()
     warm_key = get_or_create_warm_key()
     add_genesis_account(account_key)
     
+    # Phase 3. GENTX and GENPARTICIPANT generation
+    # Setup genesis.json file for local gentx generation
+    setup_genesis_file()
     # Generate gentx transaction
     node_id = CONFIG_ENV.get("NODE_ID", "")
     if not node_id:
         raise ValueError("NODE_ID not found in CONFIG_ENV")
-    
     generate_gentx(account_key, consensus_key, node_id, warm_key.address)
 
 
