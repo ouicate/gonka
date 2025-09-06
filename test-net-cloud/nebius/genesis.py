@@ -441,16 +441,18 @@ def extract_consensus_key():
         print("Warning: Could not extract consensus key from output")
         print("Full output for debugging:")
         print(full_output)
+        raise ValueError("Could not extract consensus key from output")
     
     if pubkey_result.returncode != 0:
         print(f"Consensus key extraction failed with return code: {pubkey_result.returncode}")
         raise subprocess.CalledProcessError(pubkey_result.returncode, pubkey_cmd)
     
     print("Consensus key extraction completed successfully!")
+    return consensus_key
 
 
 def get_or_create_warm_key(service="api"):
-    """Create warm key using Docker compose"""
+    """Create warm key using Docker compose and return AccountKey"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
     config_file = working_dir / "config.env"
     
@@ -487,25 +489,38 @@ def get_or_create_warm_key(service="api"):
         print(result.stderr)
     print("=" * 50)
     
-    # Extract pubkey from output (same format as cold key)
+    # Extract both address and pubkey from output (same format as cold key)
     full_output = result.stdout + result.stderr if result.stderr else result.stdout
-    pubkey_match = re.search(r"pubkey: '(.+?)'", full_output)
-    if pubkey_match:
-        pubkey_json = pubkey_match.group(1)
-        try:
-            pubkey_data = json.loads(pubkey_json)
-            pubkey = pubkey_data.get("key", "")
-            if pubkey:
-                print(f"Extracted warm key pubkey: {pubkey}")
-                return pubkey
-            else:
-                print("Warning: Could not extract key from pubkey JSON")
-        except json.JSONDecodeError:
-            print("Warning: Could not parse pubkey JSON")
-    else:
-        print("Warning: Could not find pubkey in output")
     
-    raise ValueError("Failed to extract pubkey from warm key creation output")
+    # Extract address
+    address_match = re.search(r"address:\s*([a-z0-9]+)", full_output)
+    if not address_match:
+        raise ValueError("Could not find address in warm key output")
+    address = address_match.group(1)
+    
+    # Extract pubkey
+    pubkey_match = re.search(r"pubkey: '(.+?)'", full_output)
+    if not pubkey_match:
+        raise ValueError("Could not find pubkey in warm key output")
+    
+    pubkey_json = pubkey_match.group(1)
+    try:
+        pubkey_data = json.loads(pubkey_json)
+        pubkey = pubkey_data.get("key", "")
+        if not pubkey:
+            raise ValueError("Could not extract key from pubkey JSON")
+    except json.JSONDecodeError:
+        raise ValueError("Could not parse pubkey JSON")
+    
+    # Extract name
+    name_match = re.search(r"name:\s*\"?([^\"]+)\"?", full_output)
+    name = name_match.group(1) if name_match else CONFIG_ENV["KEY_NAME"]
+    
+    print(f"Extracted warm key address: {address}")
+    print(f"Extracted warm key pubkey: {pubkey}")
+    print(f"Extracted warm key name: {name}")
+    
+    return AccountKey(address=address, pubkey=pubkey, name=name)
 
 
 def add_genesis_account(account_key: AccountKey):
@@ -550,6 +565,74 @@ def add_genesis_account(account_key: AccountKey):
     print("Genesis account added successfully!")
 
 
+def generate_gentx(account_key: AccountKey, consensus_key: str, node_id: str, warm_key_address: str):
+    """Generate genesis transaction using local inferenced binary"""
+    print("Generating genesis transaction (gentx)...")
+    
+    # Use the local inferenced binary
+    inferenced_binary = INFERENCED_BINARY.path
+    
+    if not inferenced_binary.exists():
+        raise FileNotFoundError(f"Inferenced binary not found at {inferenced_binary}")
+    
+    # Prepare the gentx command
+    gentx_cmd = [
+        str(inferenced_binary),
+        "genesis", "gentx",
+        "--keyring-backend", "file",
+        COLD_KEY_NAME, "1ngonka",
+        "--moniker", GENESIS_VAL_NAME,
+        "--pubkey", consensus_key,
+        "--ml-operational-address", warm_key_address,
+        "--url", CONFIG_ENV["PUBLIC_URL"],
+        "--chain-id", "gonka-mainnet",
+        "--node-id", node_id
+    ]
+    
+    print(f"Running gentx command: {' '.join(gentx_cmd)}")
+    
+    # Run the command with password input
+    password_input = f"{CONFIG_ENV['KEYRING_PASSWORD']}\n"
+    
+    process = subprocess.Popen(
+        gentx_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    
+    stdout, stderr = process.communicate(input=password_input)
+    
+    print("Gentx generation completed!")
+    print("Output:")
+    print("=" * 50)
+    if stdout:
+        print(stdout)
+    if stderr:
+        print("Errors/Warnings:")
+        print(stderr)
+    print("=" * 50)
+    
+    if process.returncode != 0:
+        print(f"Gentx generation failed with return code: {process.returncode}")
+        raise subprocess.CalledProcessError(process.returncode, gentx_cmd)
+    
+    # Extract the generated file paths from output
+    gentx_file_match = re.search(r'gentx-([a-f0-9]+)\.json', stdout)
+    genparticipant_file_match = re.search(r'genparticipant-([a-f0-9]+)\.json', stdout)
+    
+    if gentx_file_match and genparticipant_file_match:
+        gentx_file = f"gentx-{gentx_file_match.group(1)}.json"
+        genparticipant_file = f"genparticipant-{genparticipant_file_match.group(1)}.json"
+        print(f"Generated gentx file: {gentx_file}")
+        print(f"Generated genparticipant file: {genparticipant_file}")
+        return gentx_file, genparticipant_file
+    else:
+        print("Warning: Could not extract generated file names from output")
+        return None, None
+
+
 def main():
     if Path(os.getcwd()).absolute() != BASE_DIR:
         print(f"Changing directory to {BASE_DIR}")
@@ -575,9 +658,16 @@ def main():
     # Run the main processes
     pull_images()
     run_genesis_initialization()
-    extract_consensus_key()
-    get_or_create_warm_key()
+    consensus_key = extract_consensus_key()
+    warm_key = get_or_create_warm_key()
     add_genesis_account(account_key)
+    
+    # Generate gentx transaction
+    node_id = CONFIG_ENV.get("NODE_ID", "")
+    if not node_id:
+        raise ValueError("NODE_ID not found in CONFIG_ENV")
+    
+    generate_gentx(account_key, consensus_key, node_id, warm_key.address)
 
 
 """
