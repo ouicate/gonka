@@ -666,6 +666,118 @@ def generate_gentx(account_key: AccountKey, consensus_key: str, node_id: str, wa
         return None, None
 
 
+def collect_genesis_transactions():
+    """Collect genesis transactions using local inferenced binary"""
+    print("Collecting genesis transactions...")
+    
+    # Use the local inferenced binary
+    inferenced_binary = INFERENCED_BINARY.path
+    
+    if not inferenced_binary.exists():
+        raise FileNotFoundError(f"Inferenced binary not found at {inferenced_binary}")
+    
+    # Prepare the collect-gentxs command
+    collect_cmd = [
+        str(inferenced_binary),
+        "genesis", "collect-gentxs",
+        "--gentx-dir", "gentxs"
+    ]
+    
+    print(f"Running collect-gentxs command: {' '.join(collect_cmd)}")
+    
+    # Run the command
+    result = subprocess.run(
+        collect_cmd,
+        capture_output=True,
+        text=True
+    )
+    
+    print("Collect genesis transactions completed!")
+    print("Output:")
+    print("=" * 50)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("Errors/Warnings:")
+        print(result.stderr)
+    print("=" * 50)
+    
+    if result.returncode != 0:
+        print(f"Collect genesis transactions failed with return code: {result.returncode}")
+        raise subprocess.CalledProcessError(result.returncode, collect_cmd)
+    
+    print("Genesis transactions collected successfully!")
+
+
+def patch_genesis_participants():
+    """Process participant registrations using local inferenced binary"""
+    print("Processing participant registrations...")
+    
+    # Use the local inferenced binary
+    inferenced_binary = INFERENCED_BINARY.path
+    
+    if not inferenced_binary.exists():
+        raise FileNotFoundError(f"Inferenced binary not found at {inferenced_binary}")
+    
+    # Prepare the patch-genesis command
+    patch_cmd = [
+        str(inferenced_binary),
+        "genesis", "patch-genesis",
+        "--genparticipant-dir", "genparticipants"
+    ]
+    
+    print(f"Running patch-genesis command: {' '.join(patch_cmd)}")
+    
+    # Run the command
+    result = subprocess.run(
+        patch_cmd,
+        capture_output=True,
+        text=True
+    )
+    
+    print("Patch genesis participants completed!")
+    print("Output:")
+    print("=" * 50)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print("Errors/Warnings:")
+        print(result.stderr)
+    print("=" * 50)
+    
+    if result.returncode != 0:
+        print(f"Patch genesis participants failed with return code: {result.returncode}")
+        raise subprocess.CalledProcessError(result.returncode, patch_cmd)
+    
+    print("Genesis participants patched successfully!")
+
+
+def copy_genesis_back_to_docker():
+    """Copy the updated genesis.json back to Docker container directory"""
+    print("Copying updated genesis.json back to Docker container...")
+    
+    # Source and destination paths
+    source_genesis = INFERENCED_STATE_DIR / "config/genesis.json"
+    dest_genesis = DEPLOY_DIR / ".inference/config/genesis.json"
+    
+    if not source_genesis.exists():
+        raise FileNotFoundError(f"Source genesis.json not found at {source_genesis}")
+    
+    # Copy the updated genesis.json back using sudo cp
+    print(f"Copying {source_genesis} to {dest_genesis}")
+    copy_result = os.system(f"sudo cp {source_genesis} {dest_genesis}")
+    if copy_result != 0:
+        raise RuntimeError(f"Failed to copy updated genesis.json back to Docker (exit code: {copy_result})")
+    
+    # Set permissions on the copied file
+    print(f"Setting permissions on {dest_genesis}")
+    chmod_result = os.system(f"sudo chmod 777 {dest_genesis}")
+    if chmod_result != 0:
+        raise RuntimeError(f"Failed to set permissions on updated genesis.json (exit code: {chmod_result})")
+    
+    print("Genesis.json copied back to Docker container successfully!")
+
+
 def main():
     if Path(os.getcwd()).absolute() != BASE_DIR:
         print(f"Changing directory to {BASE_DIR}")
@@ -705,6 +817,11 @@ def main():
     if not node_id:
         raise ValueError("NODE_ID not found in CONFIG_ENV")
     generate_gentx(account_key, consensus_key, node_id, warm_key.address)
+    
+    # Phase 4. Genesis finalization
+    collect_genesis_transactions()
+    patch_genesis_participants()
+    copy_genesis_back_to_docker()
 
 
 """
