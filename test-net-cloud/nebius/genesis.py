@@ -114,6 +114,35 @@ def clone_repo():
         print(f"{GONKA_REPO_DIR} already exists")
 
 
+def clean_genesis_validators():
+    """Clean up genesis/validators directory, keeping only template and our validator"""
+    validators_dir = GONKA_REPO_DIR / "genesis/validators"
+    
+    if not validators_dir.exists():
+        print(f"Validators directory doesn't exist: {validators_dir}")
+        return
+    
+    print("Cleaning up genesis/validators directory...")
+    
+    # Get all subdirectories
+    for item in validators_dir.iterdir():
+        if item.is_dir():
+            # Keep template and our validator directory
+            if item.name == "template" or item.name == GENESIS_VAL_NAME:
+                print(f"Keeping directory: {item.name}")
+                continue
+            
+            # Remove other directories
+            print(f"Removing directory: {item.name}")
+            try:
+                shutil.rmtree(item)
+            except PermissionError:
+                print(f"Permission denied removing {item}, trying with sudo...")
+                os.system(f"sudo rm -rf {item}")
+    
+    print("Genesis validators cleanup completed!")
+
+
 def create_state_dirs():
     template_dir = GONKA_REPO_DIR / "genesis/validators/template"
     my_dir = GONKA_REPO_DIR / f"genesis/validators/{GENESIS_VAL_NAME}"
@@ -804,6 +833,35 @@ def copy_genesis_back_to_docker():
     print("Genesis.json copied back to Docker container successfully!")
 
 
+def copy_final_genesis_to_repo():
+    """Copy the finalized genesis.json to the genesis/ directory in the repo"""
+    print("Copying finalized genesis.json to repository genesis/ directory...")
+    
+    # Source and destination paths
+    source_genesis = INFERENCED_STATE_DIR / "config/genesis.json"
+    dest_genesis = GONKA_REPO_DIR / "genesis/genesis.json"
+    
+    if not source_genesis.exists():
+        raise FileNotFoundError(f"Source genesis.json not found at {source_genesis}")
+    
+    # Ensure the genesis directory exists
+    dest_genesis.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Copy the finalized genesis.json to the repo genesis/ directory
+    print(f"Copying {source_genesis} to {dest_genesis}")
+    copy_result = os.system(f"sudo cp {source_genesis} {dest_genesis}")
+    if copy_result != 0:
+        raise RuntimeError(f"Failed to copy finalized genesis.json to repo (exit code: {copy_result})")
+    
+    # Set permissions on the copied file
+    print(f"Setting permissions on {dest_genesis}")
+    chmod_result = os.system(f"sudo chmod 644 {dest_genesis}")
+    if chmod_result != 0:
+        raise RuntimeError(f"Failed to set permissions on repo genesis.json (exit code: {chmod_result})")
+    
+    print("Finalized genesis.json copied to repository successfully!")
+
+
 def start_docker_services():
     """Start all Docker services with runtime configuration"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
@@ -865,6 +923,7 @@ def main():
     
     # Set up fresh environment
     clone_repo()
+    clean_genesis_validators()
     create_state_dirs()
     install_inferenced()
 
@@ -898,6 +957,7 @@ def main():
     collect_genesis_transactions()
     patch_genesis_participants()
     copy_genesis_back_to_docker()
+    copy_final_genesis_to_repo()
     
     # Phase 5. Start services
     start_docker_services()
