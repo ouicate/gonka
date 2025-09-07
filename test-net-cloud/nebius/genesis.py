@@ -148,7 +148,7 @@ def create_state_dirs():
     my_dir = GONKA_REPO_DIR / f"genesis/validators/{GENESIS_VAL_NAME}"
     if not my_dir.exists():
         print(f"Creating {my_dir}")
-        os.system(f"cp -r {template_dir} {my_dir}")
+    os.system(f"cp -r {template_dir} {my_dir}")
     else:
         print(f"{my_dir} already exists, contents: {list(my_dir.iterdir())}")
 
@@ -338,6 +338,7 @@ def create_docker_compose_override(init_only=True, node_id=None):
     environment:
       - INIT_ONLY=true
       - IS_GENESIS=true
+      - COIN_DENOM=ngonka
 """
     else:
         override_file = working_dir / "docker-compose.runtime-override.yml"
@@ -364,6 +365,7 @@ def create_docker_compose_override(init_only=True, node_id=None):
       - INIT_ONLY=false
       - IS_GENESIS=true
       - GENESIS_SEEDS={genesis_seeds}
+      - COIN_DENOM=ngonka
 """
     
     with open(override_file, 'w') as f:
