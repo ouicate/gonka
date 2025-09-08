@@ -78,6 +78,10 @@ class ValidationTests : TestermintTest() {
     @Tag("unstable")
     @Order(Int.MAX_VALUE - 1)
     fun `test invalid gets removed`() {
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        cluster.allPairs.forEach { pair ->
+            pair.waitForMlNodesToLoad()
+        }
         genesis.waitForNextInferenceWindow()
 
         val dispatcher = Executors.newFixedThreadPool(10).asCoroutineDispatcher()
@@ -103,6 +107,10 @@ class ValidationTests : TestermintTest() {
     @Test
     @Tag("unstable")
     fun `test valid with invalid validator gets validated`() {
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        cluster.allPairs.forEach { pair ->
+            pair.waitForMlNodesToLoad()
+        }
         val oddPair = cluster.joinPairs.last()
         oddPair.mock?.setInferenceResponse(defaultInferenceResponseObject.withMissingLogit())
         logSection("Getting invalid invalidation")
@@ -122,6 +130,10 @@ class ValidationTests : TestermintTest() {
     }
     @Test
     fun `late validation of inference`() {
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        cluster.allPairs.forEach { pair ->
+            pair.waitForMlNodesToLoad()
+        }
         val helper = InferenceTestHelper(cluster, genesis)
         val lateValidator = cluster.joinPairs.first()
         lateValidator.mock?.setInferenceErrorResponse(500)
@@ -172,6 +184,11 @@ class ValidationTests : TestermintTest() {
 
     @Test
     fun `full inference with invalid response payload`() {
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        cluster.allPairs.forEach { pair ->
+            pair.waitForMlNodesToLoad()
+        }
+
         val helper = InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!")
         if (!genesis.getEpochData().safeForInference) {
             genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
@@ -185,33 +202,20 @@ class ValidationTests : TestermintTest() {
     }
 
     companion object {
-        @JvmStatic
-        @BeforeAll
-        fun getCluster(): Unit {
-            val alwaysValidate = spec {
-                this[AppState::inference] = spec<InferenceState> {
-                    this[InferenceState::params] = spec<InferenceParams> {
-                        this[InferenceParams::validationParams] = spec<ValidationParams> {
-                            this[ValidationParams::minValidationAverage] = Decimal.fromDouble(10.0)
-                            this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(10.0)
+        val alwaysValidate = spec {
+            this[AppState::inference] = spec<InferenceState> {
+                this[InferenceState::params] = spec<InferenceParams> {
+                    this[InferenceParams::validationParams] = spec<ValidationParams> {
+                        this[ValidationParams::minValidationAverage] = Decimal.fromDouble(10.0)
+                        this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(10.0)
 
-                        }
-                        this[InferenceParams::epochParams] = spec<EpochParams> {
-                            this[EpochParams::inferencePruningEpochThreshold] = 100L
-                        }
+                    }
+                    this[InferenceParams::epochParams] = spec<EpochParams> {
+                        this[EpochParams::inferencePruningEpochThreshold] = 100L
                     }
                 }
             }
-            val (clus, gen) = initCluster(mergeSpec = alwaysValidate)
-            clus.allPairs.forEach { pair ->
-                pair.waitForMlNodesToLoad()
-            }
-            cluster = clus
-            genesis = gen
         }
-
-        lateinit var cluster: LocalCluster
-        lateinit var genesis: LocalInferencePair
     }
 
 }
