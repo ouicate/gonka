@@ -942,12 +942,12 @@ def register_joining_participant():
     print("Registering joining participant...")
     
     # Get required configuration values
-    public_url = CONFIG_ENV.get("DAPI_API__PUBLIC_URL")
+    public_url = CONFIG_ENV.get("PUBLIC_URL")
     account_pubkey = CONFIG_ENV.get("ACCOUNT_PUBKEY")
     seed_api_url = CONFIG_ENV.get("DAPI_CHAIN_NODE__SEED_API_URL")
     
     if not public_url:
-        raise ValueError("DAPI_API__PUBLIC_URL not found in CONFIG_ENV")
+        raise ValueError("PUBLIC_URL not found in CONFIG_ENV")
     if not account_pubkey:
         raise ValueError("ACCOUNT_PUBKEY not found in CONFIG_ENV")
     if not seed_api_url:
