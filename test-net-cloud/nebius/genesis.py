@@ -58,6 +58,7 @@ def load_config_from_env():
         "PORT": "8080",
         "INFERENCE_PORT": "5050",
         "KEYRING_BACKEND": "file",
+        "SYNC_WITH_SNAPSHOTS": "true",
     }
     
     config = default_config.copy()
