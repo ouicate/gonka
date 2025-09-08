@@ -3,15 +3,20 @@ package keeper
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/productscience/inference/x/inference/training"
 	"github.com/productscience/inference/x/inference/types"
-	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 func (k msgServer) SetBarrier(goCtx context.Context, msg *types.MsgSetBarrier) (*types.MsgSetBarrierResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
 
 	if !strings.HasPrefix(msg.Req.NodeId, msg.Creator+"/") {
 		return nil, errors.New("nodeId must start with creator")

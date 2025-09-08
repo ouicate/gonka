@@ -3,14 +3,19 @@ package keeper
 import (
 	"context"
 	"errors"
+	"strings"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/training"
 	"github.com/productscience/inference/x/inference/types"
-	"strings"
 )
 
 func (k msgServer) JoinTraining(goCtx context.Context, msg *types.MsgJoinTraining) (*types.MsgJoinTrainingResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
 
 	if !strings.HasPrefix(msg.Req.NodeId, msg.Creator+"/") {
 		return nil, errors.New("nodeId must start with creator")

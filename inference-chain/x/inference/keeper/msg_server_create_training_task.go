@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+
 	"github.com/productscience/inference/x/inference/training"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -10,6 +11,10 @@ import (
 
 func (k msgServer) CreateTrainingTask(goCtx context.Context, msg *types.MsgCreateTrainingTask) (*types.MsgCreateTrainingTaskResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
 
 	taskId := k.GetNextTaskID(ctx)
 

@@ -10,6 +10,10 @@ import (
 func (k msgServer) SubmitTrainingKvRecord(goCtx context.Context, msg *types.MsgSubmitTrainingKvRecord) (*types.MsgSubmitTrainingKvRecordResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
+
 	// TODO: check participant and training task exists?
 	record := types.TrainingTaskKVRecord{
 		TaskId:      msg.TaskId,

@@ -39,6 +39,7 @@ var (
 	TopMinerPrefix                   = collections.NewPrefix(16)
 	PartialUpgradePrefix             = collections.NewPrefix(17)
 	EpochPerformanceSummaryPrefix    = collections.NewPrefix(18)
+	TrainingAllowListPrefix          = collections.NewPrefix(19)
 	ParamsKey                        = []byte("p_inference")
 )
 

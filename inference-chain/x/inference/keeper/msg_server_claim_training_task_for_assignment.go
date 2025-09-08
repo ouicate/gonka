@@ -15,6 +15,10 @@ const TrainingTaskAssignmentDeadline = 100
 func (k msgServer) ClaimTrainingTaskForAssignment(goCtx context.Context, msg *types.MsgClaimTrainingTaskForAssignment) (*types.MsgClaimTrainingTaskForAssignmentResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
+
 	task, found := k.GetTrainingTask(ctx, msg.TaskId)
 	if !found {
 		return nil, types.ErrTrainingTaskNotFound

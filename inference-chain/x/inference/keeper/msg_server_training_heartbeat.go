@@ -3,8 +3,9 @@ package keeper
 import (
 	"context"
 	"errors"
-	"github.com/productscience/inference/x/inference/training"
 	"strings"
+
+	"github.com/productscience/inference/x/inference/training"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
@@ -12,6 +13,10 @@ import (
 
 func (k msgServer) TrainingHeartbeat(goCtx context.Context, msg *types.MsgTrainingHeartbeat) (*types.MsgTrainingHeartbeatResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if err := k.CheckAllowList(ctx, msg); err != nil {
+		return nil, err
+	}
 
 	if !strings.HasPrefix(msg.Req.NodeId, msg.Creator+"/") {
 		return nil, errors.New("nodeId must start with creator")
