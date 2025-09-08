@@ -935,7 +935,30 @@ def copy_final_genesis_to_repo():
     print("Finalized genesis.json copied to repository successfully!")
 
 
-def start_docker_services():
+def register_joining_participant():
+    """
+    inferenced register-new-participant \
+    $DAPI_API__PUBLIC_URL \
+    $ACCOUNT_PUBKEY \
+    --node-address $DAPI_CHAIN_NODE__SEED_API_URL
+    """
+    pass
+
+
+def grant_key_permissions(cold_key: AccountKey, warm_key: AccountKey):
+    """
+    ./inferenced tx inference grant-ml-ops-permissions \
+    gonka-account-key \
+    <ml-operational-key-address-from-step-3.1> \
+    --from gonka-account-key \
+    --keyring-backend file \
+    --gas 2000000 \
+    --node <seed_api_url from server's config.env>/chain-rpc/
+    """
+    pass
+
+
+def start_docker_services(is_genesis: bool):
     """Start all Docker services with runtime configuration"""
     working_dir = GONKA_REPO_DIR / "deploy/join"
     config_file = working_dir / "config.env"
@@ -985,7 +1008,14 @@ def start_docker_services():
     print("All services are now running with the finalized genesis configuration.")
 
 
-def genesis_route(account_key: AccountKey, consensus_key: str, warm_key: AccountKey):
+def genesis_route(account_key: AccountKey):
+    print("\n=== GENESIS MODE: Initializing genesis node ===")
+    run_genesis_initialization()
+    add_genesis_account(account_key)
+
+    consensus_key = extract_consensus_key()
+    warm_key = get_or_create_warm_key()
+
     # Phase 3. GENTX and GENPARTICIPANT generation
     # Setup genesis.json file for local gentx generation
     setup_genesis_file()
@@ -1008,8 +1038,10 @@ def genesis_route(account_key: AccountKey, consensus_key: str, warm_key: Account
     copy_final_genesis_to_repo()
 
 
-def join_route():
-    pass
+def join_route(account_key: AccountKey):
+    print("\n=== JOIN MODE: Joining existing network ===")
+    register_joining_participant()
+    start_docker_services()
 
 
 def parse_arguments():
@@ -1085,26 +1117,13 @@ def main():
     # Run the main processes
     pull_images()
 
-    # Phase 2. Genesis preparation
     if is_genesis:
-        print("\n=== GENESIS MODE: Initializing genesis node ===")
-        run_genesis_initialization()
-        add_genesis_account(account_key)
+        genesis_route(account_key)
     else:
-        print("\n=== JOIN MODE: Preparing to join existing network ===")
+        join_route(account_key)
 
-    consensus_key = extract_consensus_key()
-    warm_key = get_or_create_warm_key()
-
-    if is_genesis:
-        print("\n=== GENESIS MODE: Finalizing genesis configuration ===")
-        genesis_route(account_key, consensus_key, warm_key)
-    else:
-        print("\n=== JOIN MODE: Joining existing network ===")
-        join_route()
-    
     # Phase 5. Start services
-    start_docker_services()
+    start_docker_services(is_genesis)
 
 if __name__ == "__main__":
     main()
