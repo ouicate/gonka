@@ -963,7 +963,8 @@ def register_joining_participant(service="api"):
     print(f"Registering joining participant using service: {service}")
     
     # Build the command to run inside the container
-    register_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T {service} sh -lc \"inferenced register-new-participant \\$PUBLIC_URL \\$ACCOUNT_PUBKEY --node-address \\$SEED_API_URL\"'"
+    # NOTE! variable are getting renamed inside the container
+    register_cmd = f"bash -c 'source {config_file} && docker compose -f docker-compose.yml -f docker-compose.mlnode.yml run --rm --no-deps -T {service} sh -lc \"inferenced register-new-participant \\$DAPI_API__PUBLIC_URL \\$ACCOUNT_PUBKEY --node-address \\$DAPI_CHAIN_NODE__SEED_API_URL\"'"
     
     print(f"Running command: {register_cmd}")
     
