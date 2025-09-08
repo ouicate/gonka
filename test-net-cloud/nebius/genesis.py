@@ -945,7 +945,7 @@ def register_joining_participant():
     pass
 
 
-def grant_key_permissions(cold_key: AccountKey, warm_key: AccountKey):
+def grant_key_permissions():
     """
     ./inferenced tx inference grant-ml-ops-permissions \
     gonka-account-key \
@@ -1080,6 +1080,8 @@ def join_route(account_key: AccountKey):
     print("Waiting 15 seconds for node to start...")
     time.sleep(15)
     register_joining_participant()
+    grant_key_permissions()
+
     start_docker_services()
 
 
