@@ -19,6 +19,7 @@ scipy = ">=1.15.1"
 pandas = ">=2.2.3"
 seaborn = ">=0.13.2"
 scikit-learn = ">=1.4.2"
+pyyaml = "^6.0.2"
 
 compressa-perf = {git = "https://github.com/product-science/compressa-perf.git", branch = "main"}
 mlnode-common = { path = "../common", develop = true }
