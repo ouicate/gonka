@@ -35,27 +35,58 @@ INFERENCED_BINARY = SimpleNamespace(
 
 INFERENCED_STATE_DIR = BASE_DIR / ".inference"
 
-CONFIG_ENV = {
-    "KEY_NAME": "genesis", # TODO: allow to customize
-    "KEYRING_PASSWORD": "12345678",
-    "API_PORT": "8000",
-    "PUBLIC_URL": "http://89.169.111.79:8000", # TODO: allow to customize
-    "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000", # TODO: allow to customize
-    "ACCOUNT_PUBKEY": "", # will be populated later
-    "NODE_CONFIG": "./node-config.json",
-    "HF_HOME": (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
-    "SEED_API_URL": "http://89.169.111.79:8000",
-    "SEED_NODE_RPC_URL": "http://89.169.111.79:26657",
-    "DAPI_API__POC_CALLBACK_URL": "http://api:9100",
-    "DAPI_CHAIN_NODE__URL": "http://node:26657",
-    "DAPI_CHAIN_NODE__P2P_URL": "http://node:26656",
-    "SEED_NODE_P2P_URL": "tcp://89.169.111.79:5000",
-    "RPC_SERVER_URL_1": "http://89.169.111.79:26657",
-    "RPC_SERVER_URL_2": "http://89.169.111.79:26657",
-    "PORT": "8080",
-    "INFERENCE_PORT": "5050",
-    "KEYRING_BACKEND": "file",
-}
+def load_config_from_env():
+    """Load configuration from environment variables, with defaults"""
+    default_config = {
+        "KEY_NAME": "genesis",
+        "KEYRING_PASSWORD": "12345678",
+        "API_PORT": "8000",
+        "PUBLIC_URL": "http://89.169.111.79:8000",
+        "P2P_EXTERNAL_ADDRESS": "tcp://89.169.111.79:5000",
+        "ACCOUNT_PUBKEY": "", # will be populated later
+        "NODE_CONFIG": "./node-config.json",
+        "HF_HOME": (Path(os.environ["HOME"]).absolute() / "hf-cache").__str__(),
+        "SEED_API_URL": "http://89.169.111.79:8000",
+        "SEED_NODE_RPC_URL": "http://89.169.111.79:26657",
+        "DAPI_API__POC_CALLBACK_URL": "http://api:9100",
+        "DAPI_CHAIN_NODE__URL": "http://node:26657",
+        "DAPI_CHAIN_NODE__P2P_URL": "http://node:26656",
+        "SEED_NODE_P2P_URL": "tcp://89.169.111.79:5000",
+        "RPC_SERVER_URL_1": "http://89.169.111.79:26657",
+        "RPC_SERVER_URL_2": "http://89.169.111.79:26657",
+        "PORT": "8080",
+        "INFERENCE_PORT": "5050",
+        "KEYRING_BACKEND": "file",
+    }
+    
+    config = default_config.copy()
+    overridden_vars = []
+    
+    print("Loading configuration from environment variables...")
+    
+    # Check each config key for environment variable override
+    for key, default_value in default_config.items():
+        env_value = os.environ.get(key)
+        if env_value is not None:
+            config[key] = env_value
+            overridden_vars.append(f"{key}={env_value}")
+            print(f"✓ Overridden {key}: {default_value} -> {env_value}")
+        else:
+            print(f"  Using default {key}: {default_value}")
+    
+    if overridden_vars:
+        print(f"\nEnvironment variables overridden: {len(overridden_vars)}")
+        for var in overridden_vars:
+            print(f"  - {var}")
+    else:
+        print("\nNo environment variables overridden, using all defaults")
+    
+    return config
+
+
+# Load configuration from environment
+CONFIG_ENV = load_config_from_env()
+
 
 def clean_state():
     if GONKA_REPO_DIR.exists():
