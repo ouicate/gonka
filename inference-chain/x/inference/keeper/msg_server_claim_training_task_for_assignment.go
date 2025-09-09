@@ -29,7 +29,7 @@ func (k msgServer) ClaimTrainingTaskForAssignment(goCtx context.Context, msg *ty
 	}
 
 	blockHeight := uint64(ctx.BlockHeight())
-	blocksSinceAssignment := task.ClaimedByAssignerAtBlockHeight - blockHeight
+	blocksSinceAssignment := blockHeight - task.ClaimedByAssignerAtBlockHeight
 	if task.Assigner != "" && blocksSinceAssignment < TrainingTaskAssignmentDeadline {
 		return nil, types.ErrTrainingTaskAlreadyAssigned
 	}
