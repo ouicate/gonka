@@ -8,7 +8,7 @@ The proposal introduces 3 new models:
 
 ## New values estimations
 
-The proccess of computing thresholds are described in [thresholds_sep2025.ipynb](./thresholds_sep2025.ipynb). The version of notebook to repeate experiments can be found in [mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb](mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb).
+The proccess of computing thresholds are described in [thresholds_sep2025.ipynb](./thresholds_sep2025.ipynb). The version of notebook to repeate experiments can be found in [/mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb](../../..//mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb).
 
 The data to reproduce experiment is available at [link](https://drive.google.com/drive/folders/1ehpcVC0pGw0XwrchXZUxTTRy1KdhBxrz?usp=drive_link) (but it's better to recompute for sure!).
 
