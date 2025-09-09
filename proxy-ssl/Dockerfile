@@ -31,8 +31,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o proxy-ssl ./cmd/proxy-ssl
-
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o proxy-ssl ./cmd/cert-issuer
 # Final stage
 FROM alpine:latest
 
@@ -51,11 +50,11 @@ COPY --from=builder /app/proxy-ssl .
 
 # Create directories for certificates and data
 RUN mkdir -p /app/certs /app/data && \
-    chown -R proxy-ssl:proxy-ssl /app
+    chown -R certissuer:proxy-ssl /app
 VOLUME ["/app/certs", "/app/data"]
 
 # Switch to non-root user
-USER proxy-ssl
+USER certissuer
 
 # Expose port
 EXPOSE 8080
