@@ -8,14 +8,13 @@ The proposal introduces 3 new models:
 
 ## New values estimations
 
-The proccess of computing thresholds are described in [thresholds_sep2025.ipynb](./thresholds_sep2025.ipynb). The version of notebook to repeate experiments can be found in [/mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb](../../..//mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb).
+The methodology for computing the thresholds is detailed in the [thresholds_sep2025.ipynb](./thresholds_sep2025.ipynb). A reproducible version of this notebook is available in the project repository at [/mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb](../../..//mlnode/packages/benchmarks/notebooks/thresholds_sep2025.ipynb).
 
-The data to reproduce experiment is available at [link](https://drive.google.com/drive/folders/1ehpcVC0pGw0XwrchXZUxTTRy1KdhBxrz?usp=drive_link) (but it's better to recompute for sure!).
+The data used for our experiments is available for verification [link](https://drive.google.com/drive/folders/1ehpcVC0pGw0XwrchXZUxTTRy1KdhBxrz?usp=drive_link). For maximum confidence, participants are encouraged to recompute the thresholds independently using the provided notebook.
 
 
-
-- The mlnode 3.0.9 (current version in main branch) was used during experiment.
-- `Qwen/Qwen3-235B-A22B-Instruct-2507-FP8` is proposed with `--max-model-len 240000`. That allows to deploy it on 320GB VRAM (=> 8xH100 would have 2 instances of deployement).
+- All experiments were conducted using MLNode `v3.0.9`, which is the current version in the main branch..
+- `Qwen/Qwen3-235B-A22B-Instruct-2507-FP8` is proposed with `--max-model-len 240000`.  This value is optimized for deployment on systems with 320GB of VRAM, allowing, for example, two instances of the model to run on a standard 8xH100 server.
 
 
 ## Release process
