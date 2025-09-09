@@ -21,6 +21,7 @@ func (k msgServer) AddUserToTrainingAllowList(goCtx context.Context, msg *types.
 	if err := k.TrainingAllowListSet.Set(ctx, addr); err != nil {
 		return nil, err
 	}
+	k.LogInfo("Added user to training allow list", types.Training, "address", addr)
 
 	return &types.MsgAddUserToTrainingAllowListResponse{}, nil
 }

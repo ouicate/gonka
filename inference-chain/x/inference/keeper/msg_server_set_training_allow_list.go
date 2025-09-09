@@ -24,6 +24,7 @@ func (k msgServer) SetTrainingAllowList(goCtx context.Context, msg *types.MsgSet
 	if err := k.TrainingAllowListSet.Clear(ctx, nil); err != nil {
 		return nil, err
 	}
+	k.LogInfo("Cleared training allow list", types.Training)
 
 	for _, a := range msg.Addresses {
 		addr, err := sdk.AccAddressFromBech32(a)
@@ -33,6 +34,7 @@ func (k msgServer) SetTrainingAllowList(goCtx context.Context, msg *types.MsgSet
 		if err := k.TrainingAllowListSet.Set(ctx, addr); err != nil {
 			return nil, err
 		}
+		k.LogInfo("Added user to training allow list", types.Training, "address", addr)
 	}
 
 	return &types.MsgSetTrainingAllowListResponse{}, nil
