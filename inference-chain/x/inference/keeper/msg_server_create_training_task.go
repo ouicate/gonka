@@ -9,6 +9,7 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
+// TODO: Once ready this needs to validate the message payload per specs (max number of hardware resources or string length.
 func (k msgServer) CreateTrainingTask(goCtx context.Context, msg *types.MsgCreateTrainingTask) (*types.MsgCreateTrainingTaskResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
