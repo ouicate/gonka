@@ -1,24 +1,22 @@
 FROM nginx:1.25-alpine
 
-# Install curl and gettext (for envsubst)
-RUN apk add --no-cache curl gettext
+# Install curl, gettext (for envsubst), and jq
+RUN apk add --no-cache curl gettext jq
 
-# Copy nginx configuration template
+# Copy nginx configuration templates
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
+COPY nginx.ssl.conf.template /etc/nginx/nginx.ssl.conf.template
 
-# Copy entrypoint script
+# Copy scripts
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY setup-ssl.sh /setup-ssl.sh
+RUN chmod +x /entrypoint.sh /setup-ssl.sh
 
-# Create directory for logs
-RUN mkdir -p /var/log/nginx
+# Create directories
+RUN mkdir -p /var/log/nginx /etc/nginx/ssl
 
-# Expose port 80
+# Expose ports
 EXPOSE 80
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
 
 # Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

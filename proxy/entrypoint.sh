@@ -12,6 +12,8 @@ export CHAIN_GRPC_PORT=${CHAIN_GRPC_PORT:-9090}
 export API_SERVICE_NAME=${API_SERVICE_NAME:-api}
 export NODE_SERVICE_NAME=${NODE_SERVICE_NAME:-node}
 export EXPLORER_SERVICE_NAME=${EXPLORER_SERVICE_NAME:-explorer}
+export PROXY_SSL_SERVICE_NAME=${PROXY_SSL_SERVICE_NAME:-proxy-ssl}
+export PROXY_SSL_PORT=${PROXY_SSL_PORT:-8080}
 
 # Set KEY_NAME_PREFIX based on PROXY_ADD_NODE_PREFIX flag and KEY_NAME being set
 if [ "${PROXY_ADD_NODE_PREFIX}" = "true" ] && [ -n "${KEY_NAME}" ] && [ "${KEY_NAME}" != "" ]; then
@@ -24,12 +26,25 @@ fi
 export FINAL_API_SERVICE="${KEY_NAME_PREFIX}${API_SERVICE_NAME}"
 export FINAL_NODE_SERVICE="${KEY_NAME_PREFIX}${NODE_SERVICE_NAME}"
 export FINAL_EXPLORER_SERVICE="${KEY_NAME_PREFIX}${EXPLORER_SERVICE_NAME}"
+export FINAL_PROXY_SSL_SERVICE="${KEY_NAME_PREFIX}${PROXY_SSL_SERVICE_NAME}"
 
 # Check if dashboard is enabled
 DASHBOARD_ENABLED="false"
 if [ -n "${DASHBOARD_PORT}" ] && [ "${DASHBOARD_PORT}" != "" ]; then
     DASHBOARD_ENABLED="true"
     export DASHBOARD_PORT=${DASHBOARD_PORT}
+fi
+
+# Check if SSL is enabled (explicit via NGINX_CONFIG or implicit via CERT_ISSUER_DOMAIN)
+SSL_ENABLED="false"
+if [ -n "${NGINX_CONFIG}" ] && [ "${NGINX_CONFIG}" = "ssl" ]; then
+    SSL_ENABLED="true"
+fi
+if [ "$SSL_ENABLED" != "true" ] && [ -n "${CERT_ISSUER_DOMAIN}" ] && [ "${CERT_ISSUER_DOMAIN}" != "" ]; then
+    SSL_ENABLED="true"
+fi
+if [ "$SSL_ENABLED" = "true" ]; then
+    export DOMAIN_NAME=${CERT_ISSUER_DOMAIN}
 fi
 
 # Log the configuration being used
@@ -39,6 +54,12 @@ echo "   PROXY_ADD_NODE_PREFIX: $PROXY_ADD_NODE_PREFIX"
 echo "   API Service: $FINAL_API_SERVICE:$API_PORT"
 echo "   Node Service: $FINAL_NODE_SERVICE (API:$CHAIN_API_PORT, RPC:$CHAIN_RPC_PORT, gRPC:$CHAIN_GRPC_PORT)"
 echo "   Explorer Service: $FINAL_EXPLORER_SERVICE:$DASHBOARD_PORT"
+echo "   Proxy-SSL Service: $FINAL_PROXY_SSL_SERVICE:$PROXY_SSL_PORT"
+if [ "$SSL_ENABLED" = "true" ]; then
+    echo "   SSL: Enabled for domain $DOMAIN_NAME"
+else
+    echo "   SSL: Disabled"
+fi
 
 if [ "$DASHBOARD_ENABLED" = "true" ]; then
     echo "   DASHBOARD_PORT: $DASHBOARD_PORT (enabled)"
@@ -104,29 +125,53 @@ else
         }"
 fi
 
-# Generate nginx configuration from template
-envsubst '$KEY_NAME,$KEY_NAME_PREFIX,$API_PORT,$CHAIN_RPC_PORT,$CHAIN_API_PORT,$CHAIN_GRPC_PORT,$DASHBOARD_PORT,$DASHBOARD_UPSTREAM,$ROOT_LOCATION,$FINAL_API_SERVICE,$FINAL_NODE_SERVICE,$FINAL_EXPLORER_SERVICE' < /etc/nginx/nginx.conf.template | sed 's/\$\$/$/g' > /etc/nginx/nginx.conf
-
-# Validate nginx configuration
-nginx -t
-
-if [ $? -eq 0 ]; then
-    echo "✅ Nginx configuration is valid"
-    echo "🌐 Available endpoints:"
-    if [ "$DASHBOARD_ENABLED" = "true" ]; then
-        echo "   / (root)       -> Explorer dashboard"
-    else
-        echo "   / (root)       -> Dashboard not configured page"
+# If SSL is intended, ensure certificates are present (attempt issuance if missing)
+if [ "$SSL_ENABLED" = "true" ]; then
+    if [ ! -f "/etc/nginx/ssl/cert.pem" ] || [ ! -f "/etc/nginx/ssl/private.key" ]; then
+        echo "🔎 SSL enabled but certificates not found; requesting via proxy-ssl"
+        /setup-ssl.sh || echo "⚠️ SSL setup failed; will attempt to continue"
     fi
-    echo "   /api/*         -> API backend"
-    echo "   /chain-rpc/*   -> Chain RPC"
-    echo "   /chain-api/*   -> Chain REST API"
-    echo "   /chain-grpc/*  -> Chain gRPC"
-    echo "   /health        -> Health check"
-else
-    echo "❌ Nginx configuration is invalid"
-    exit 1
 fi
+
+# Generate nginx configuration from template
+if [ "$SSL_ENABLED" = "true" ]; then
+    echo "🔐 Using SSL configuration template"
+    envsubst '$KEY_NAME,$KEY_NAME_PREFIX,$API_PORT,$CHAIN_RPC_PORT,$CHAIN_API_PORT,$CHAIN_GRPC_PORT,$DASHBOARD_PORT,$DASHBOARD_UPSTREAM,$ROOT_LOCATION,$FINAL_API_SERVICE,$FINAL_NODE_SERVICE,$FINAL_EXPLORER_SERVICE,$DOMAIN_NAME' < /etc/nginx/nginx.ssl.conf.template | sed 's/\$\$/$/g' > /etc/nginx/nginx.conf
+else
+    echo "🔓 Using standard configuration template"
+    envsubst '$KEY_NAME,$KEY_NAME_PREFIX,$API_PORT,$CHAIN_RPC_PORT,$CHAIN_API_PORT,$CHAIN_GRPC_PORT,$DASHBOARD_PORT,$DASHBOARD_UPSTREAM,$ROOT_LOCATION,$FINAL_API_SERVICE,$FINAL_NODE_SERVICE,$FINAL_EXPLORER_SERVICE' < /etc/nginx/nginx.conf.template | sed 's/\$\$/$/g' > /etc/nginx/nginx.conf
+fi
+
+# Validate nginx configuration (with fallback if SSL config fails)
+if nginx -t; then
+    echo "✅ Nginx configuration is valid"
+else
+    if [ "$SSL_ENABLED" = "true" ]; then
+        echo "⚠️ SSL configuration invalid; falling back to non-SSL"
+        SSL_ENABLED="false"
+        envsubst '$KEY_NAME,$KEY_NAME_PREFIX,$API_PORT,$CHAIN_RPC_PORT,$CHAIN_API_PORT,$CHAIN_GRPC_PORT,$DASHBOARD_PORT,$DASHBOARD_UPSTREAM,$ROOT_LOCATION,$FINAL_API_SERVICE,$FINAL_NODE_SERVICE,$FINAL_EXPLORER_SERVICE' < /etc/nginx/nginx.conf.template | sed 's/\$\$/$/g' > /etc/nginx/nginx.conf
+        if ! nginx -t; then
+            echo "❌ Nginx configuration is invalid after fallback"
+            exit 1
+        fi
+        echo "✅ Nginx configuration is valid (non-SSL fallback)"
+    else
+        echo "❌ Nginx configuration is invalid"
+        exit 1
+    fi
+fi
+
+echo "🌐 Available endpoints:"
+if [ "$DASHBOARD_ENABLED" = "true" ]; then
+    echo "   / (root)       -> Explorer dashboard"
+else
+    echo "   / (root)       -> Dashboard not configured page"
+fi
+echo "   /api/*         -> API backend"
+echo "   /chain-rpc/*   -> Chain RPC"
+echo "   /chain-api/*   -> Chain REST API"
+echo "   /chain-grpc/*  -> Chain gRPC"
+echo "   /health        -> Health check"
 
 # Execute the command passed to the container
 exec "$@" 

@@ -1,0 +1,157 @@
+events {
+    worker_connections 4096;
+}
+
+http {
+    upstream api_backend {
+        server ${FINAL_API_SERVICE}:${API_PORT};
+    }
+
+    upstream chain_rpc_backend {
+        server ${FINAL_NODE_SERVICE}:${CHAIN_RPC_PORT};
+    }
+
+    upstream chain_api_backend {
+        server ${FINAL_NODE_SERVICE}:${CHAIN_API_PORT};
+    }
+
+    upstream chain_grpc_backend {
+        server ${FINAL_NODE_SERVICE}:${CHAIN_GRPC_PORT};
+    }
+
+    # Dashboard upstream - only included if DASHBOARD_PORT is set
+    ${DASHBOARD_UPSTREAM}
+
+    # Enable gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+
+    # Single HTTPS server bound to port 80 (TLS on 80 for single-port exposure)
+    server {
+        listen 80 ssl http2;
+        server_name ${DOMAIN_NAME};
+
+        # SSL Configuration
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/private.key;
+        
+        # SSL Security Settings
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+        ssl_prefer_server_ciphers off;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_timeout 10m;
+
+        # Increase client body size for large requests
+        client_max_body_size 10M;
+
+        # Health check endpoint
+        location = /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+
+        # API routes - restricted to v1 only
+        location /api/v1/ {
+            proxy_pass http://api_backend/v1/;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            
+            # Handle WebSocket connections if needed
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            
+            # Extended timeouts for inference API (20 minutes)
+            proxy_connect_timeout 120s;
+            proxy_send_timeout 1200s;
+            proxy_read_timeout 1200s;
+        }
+
+        # Direct API v1 routes - bypasses /api/ prefix
+        location /v1/ {
+            proxy_pass http://api_backend/v1/;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            
+            # Handle WebSocket connections if needed
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            
+            # Extended timeouts for inference API (20 minutes)
+            proxy_connect_timeout 120s;
+            proxy_send_timeout 1200s;
+            proxy_read_timeout 1200s;
+        }
+
+        # Chain RPC endpoint
+        location /chain-rpc/ {
+            proxy_pass http://chain_rpc_backend/;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            
+            # WebSocket support for RPC connections
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection "upgrade";
+            
+            # Standard timeouts for chain API (2 minutes)
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 120s;
+            proxy_read_timeout 120s;
+        }
+
+        # Chain API endpoint (REST API)
+        location /chain-api/ {
+            proxy_pass http://chain_api_backend/;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            
+            # Standard timeouts for chain API (2 minutes)
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 120s;
+            proxy_read_timeout 120s;
+        }
+
+        # Chain gRPC endpoint (if needed)
+        location /chain-grpc/ {
+            grpc_pass grpc://chain_grpc_backend;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            
+            # Standard timeouts for chain gRPC (2 minutes)
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 120s;
+            proxy_read_timeout 120s;
+        }
+
+        # Root location - either dashboard or not configured page
+        ${ROOT_LOCATION}
+
+        # Default error pages
+        error_page 404 /404.html;
+        
+        location = /404.html {
+            internal;
+            return 404 "Not Found\n";
+            add_header Content-Type text/plain;
+        }
+    }
+}
