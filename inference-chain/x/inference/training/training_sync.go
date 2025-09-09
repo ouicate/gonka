@@ -588,6 +588,10 @@ func (rm *RunManager) rerankIfSomeNodesLeft(ctx context.Context, epoch int32, bl
 				es.Activity[nodeID].Rank = -1
 			}
 		}
+		err = rm.store.SaveEpochState(ctx, es.toActivityArray())
+		if err != nil {
+			return err
+		}
 		return rm.store.SaveEpochState(ctx, activeEs.toActivityArray())
 	}
 
