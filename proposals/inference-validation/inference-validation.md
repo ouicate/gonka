@@ -14,7 +14,7 @@ Details of the current implementation can be found [here](https://github.com/gon
 
 ### Executer
 
-1. Generates a token sequence $[t_1,\, t_2,\, \dots,\, t_N]$ for the given prompt.
+1. Generates a token sequence $[t_1 \, t_2 \, \dots \, t_N]$ for the given prompt.
 
 2. For each position $i \in \lbrace 1,\dots,N \rbrace$, records the top-k (e.g. `k=5`) candidate tokens and their probabilities:
 
