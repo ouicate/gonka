@@ -10,15 +10,15 @@ The core challenge: **How do we verify that a specific token sequence for the pr
 
 Currently, inference validation compares whether two token–probability distributions are close enough **at every position**.
 
+Details of the current implementation can be found [here](https://github.com/gonka-ai/vllm/tree/gonka/vllm-0.9.1).
+
 ### Executer
 
-1. Generates a token sequence $[\,t_1,\, t_2,\, \dots,\, t_N\,]$ for the given prompt.
+1. Generates a token sequence $[t_1,\, t_2,\, \dots,\, t_N]$ for the given prompt.
 
-2. For each position $i \in \{1,\dots,N\}$, records the top-k (e.g. `k=5`) candidate tokens and their probabilities:
+2. For each position $i \in \lbrace 1,\dots,N \rbrace$, records the top-k (e.g. `k=5`) candidate tokens and their probabilities:
 
-$$
-   A_i = \{ t^i_1: p^i_1, t^i_2: p^i_2,\dots t^i_k: p^i_k \}
-$$
+$$ A_i = \lbrace t^i_1: p^i_1, t^i_2: p^i_2,\dots t^i_k: p^i_k \rbrace $$
 
 Collecting this for every position $i$ forms an **inference artifact** $A = [ A_1, \dots, A_N ] $.
 
@@ -29,7 +29,7 @@ Collecting this for every position $i$ forms an **inference artifact** $A = [ A_
 2. Computes probabilities for the same top-k candidates:
 
 $$
-   \tilde{A}_i = \{ t^i_1: \tilde{p}^i_1, t^i_2: \tilde{p}^i_2,\dots t^i_k: \tilde{p}^i_k \}
+   \tilde{A}_i = \lbrace t^i_1: \tilde{p}^i_1, t^i_2: \tilde{p}^i_2,\dots t^i_k: \tilde{p}^i_k \rbrace
 $$
 
 The new artifact becomes: $\tilde{A} = [ \tilde{A}_1, \dots, \tilde{A}_N ] $.
@@ -38,7 +38,7 @@ The new artifact becomes: $\tilde{A} = [ \tilde{A}_1, \dots, \tilde{A}_N ] $.
 
 $$
    \frac{1}{N}\sum_{i=1}^{N}
-   dist(A_i, \tilde{A}_i).
+   \text{dist}(A_i, \tilde{A}_i).
 $$
 
 Note: The described function is quite noisy for short outputs. In practice, the following aggregation is used:
