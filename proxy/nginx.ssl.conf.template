@@ -24,7 +24,7 @@ http {
 
     # Enable gzip compression
     gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    gzip_types text/plain text/css application/json application/javascript text_xml application_xml application_xml+rss text/javascript;
 
     # Security headers
     add_header X-Frame-Options DENY;
@@ -33,8 +33,9 @@ http {
 
     # Single HTTPS server bound to port 80 (TLS on 80 for single-port exposure)
     server {
-        listen 80 ssl http2;
-        server_name ${DOMAIN_NAME};
+        listen 80 ssl;
+        server_name ${CERT_ISSUER_DOMAIN};
+        http2 on;
 
         # SSL Configuration
         ssl_certificate /etc/nginx/ssl/cert.pem;
@@ -46,6 +47,9 @@ http {
         ssl_prefer_server_ciphers off;
         ssl_session_cache shared:SSL:10m;
         ssl_session_timeout 10m;
+
+        # Redirect plain HTTP (sent to HTTPS port) to HTTPS on the same port, preserving original Host
+        error_page 497 =308 https://$$http_host$$request_uri;
 
         # Increase client body size for large requests
         client_max_body_size 10M;

@@ -1,7 +1,7 @@
 FROM nginx:1.25-alpine
 
-# Install curl, gettext (for envsubst), and jq
-RUN apk add --no-cache curl gettext jq
+# Install curl, gettext (for envsubst), jq, and bash (for setup-ssl.sh)
+RUN apk add --no-cache curl gettext jq bash
 
 # Copy nginx configuration templates
 COPY nginx.conf.template /etc/nginx/nginx.conf.template

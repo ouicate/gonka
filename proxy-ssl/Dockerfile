@@ -35,8 +35,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o proxy-ssl ./cmd/c
 # Final stage
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates tzdata curl
+# Install runtime dependencies and su-exec for dropping privileges
+RUN apk --no-cache add ca-certificates tzdata curl su-exec
 
 # Create non-root user
 RUN addgroup -g 1001 -S proxy-ssl && \
@@ -53,8 +53,10 @@ RUN mkdir -p /app/certs /app/data && \
     chown -R certissuer:proxy-ssl /app
 VOLUME ["/app/certs", "/app/data"]
 
-# Switch to non-root user
-USER certissuer
+# Add entrypoint that fixes volume ownership then drops privileges
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Expose port
 EXPOSE 8080
@@ -63,5 +65,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
+# Default command (run as non-root via entrypoint)
 CMD ["./proxy-ssl"]
