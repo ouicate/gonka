@@ -167,7 +167,7 @@ For complete protection, we propose a **two-stage validation system** that defin
 ### Stage 1: Sequence Check (Cheap)
 
 Verify that the claimed token sequence was actually sampled from the provided artifact.
-- **Purpose**: Bind tokens to RNG to catch pre-fill attacks
+- **Purpose**: Bind tokens to RNG and artifact to make sampling fully verifiable to catch pre-fill attacks
 - **Cost**: Minimal (RNG operations only)
 
 ### Stage 2: Distribution Check (Expensive)
@@ -198,10 +198,10 @@ Input: Token sequence + Artifact → Sequence Check (if not pass) → Reject
    - Initiate RNG from `run_seed`
    - Generate token sequence: $[t_1, t_2, \dots, t_N\,]$ one by one using RNG:
 
-   At each inference step $i$, the model produces a full probability distribution over the vocabulary:
+   At each inference step $i$, the model produces a full probability distribution over the vocabulary (sometimes it is limited to distribution over $top_N$ tokens with highest probs):
       $A_{full} = \lbrace t^i_1: p^i_1, t^i_2: p^i_2,\dots t^i_k: p^i_k, t^i_{k+1}: p^i_{k+1}, \dots \rbrace$
 
-   A token t_i is sampled from this distribution using the RNG.
+   A token $t_i$ is sampled from this distribution using the RNG.
    The top-k tokens from $A_{full}$ and their probabilities are recorded in the artifact $A_i$. The final artifact also includes the `run_seed`.
 
 
@@ -212,7 +212,7 @@ Input: Token sequence + Artifact → Sequence Check (if not pass) → Reject
 2. For each position i:
    - Use RNG to sample a token from artifact's $A_i$ top-k list (i.e., `artifact.positions[i].top_k`), obtaining its index `sampled_index`.
    - Verify: `artifact.positions[i].chosen == artifact.positions[i].top_k[sampled_index]`
-   - **Any mismatch → reject immediately**
+   - **Any mismatch leads to reject immediately**
 
 **Stage 2: Distribution Check**
 Exactly the same process we have implemented now.
