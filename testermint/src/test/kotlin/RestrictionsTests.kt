@@ -250,7 +250,7 @@ class RestrictionsTests : TestermintTest() {
         val exemptions = genesis.node.queryRestrictionsExemptions()
         assertThat(exemptions.getExemptionsSafe().any { it.exemptionId == exemptionId }).isTrue()
         // Make sure our numbers aren't messed up by rewards
-        genesis.waitForNextInferenceWindow()
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
         // Step 3: Execute emergency transfer
         logSection("Step 3: Executing emergency transfer")
         
