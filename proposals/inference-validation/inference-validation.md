@@ -28,18 +28,18 @@ Collecting this for every position $i$ forms an **inference artifact** $A = [ A_
 
 2. Computes probabilities for the same top-$k$ candidates:
 
-   $$
-      \tilde{A}_i = \{ t^i_1: \tilde{p}^i_1, t^i_2: \tilde{p}^i_2,\dots t^i_k: \tilde{p}^i_k \}
-   $$
+$$
+   \tilde{A}_i = \{ t^i_1: \tilde{p}^i_1, t^i_2: \tilde{p}^i_2,\dots t^i_k: \tilde{p}^i_k \}
+$$
 
 The new artifact becomes: $\tilde{A} = [ \tilde{A}_1, \dots, \tilde{A}_N ] $.
 
 3. Compares the two distributions using the average distance:
 
-   $$
-     \frac{1}{N}\sum_{i=1}^{N}
-     \operatorname{dist}(A_i, \tilde{A}_i).
-   $$
+$$
+   \frac{1}{N}\sum_{i=1}^{N}
+   \operatorname{dist}(A_i, \tilde{A}_i).
+$$
 
 Note: The described function is quite noisy for short outputs. In practice, the following aggregation is used:
 ```
