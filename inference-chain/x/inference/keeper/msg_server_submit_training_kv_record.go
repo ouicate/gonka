@@ -32,7 +32,7 @@ func (k msgServer) SubmitTrainingKvRecord(goCtx context.Context, msg *types.MsgS
 	}
 
 	if !creatorIsAssigned {
-		return nil, types.ErrTrainingTaskAlreadyAssigned
+		return nil, types.ErrTrainingTaskNotAssigned
 	}
 
 	record := types.TrainingTaskKVRecord{

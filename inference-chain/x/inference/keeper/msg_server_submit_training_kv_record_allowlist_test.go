@@ -18,8 +18,22 @@ func TestSubmitTrainingKvRecord_AllowListEnforced(t *testing.T) {
 
 	creator := "gonka1hgt9lxxxwpsnc3yn2nheqqy9a8vlcjwvgzpve2"
 
+	err := k.Participants.Set(wctx, sdk.MustAccAddressFromBech32(creator), types.Participant{
+		Index:   creator,
+		Address: creator,
+	})
+	require.NoError(t, err)
+
+	k.SetTrainingTask(ctx, &types.TrainingTask{
+		Id: 1,
+		Assignees: []*types.TrainingTaskAssignee{
+			{
+				Participant: creator,
+			},
+		},
+	})
 	// not allowed
-	_, err := ms.SubmitTrainingKvRecord(wctx, &types.MsgSubmitTrainingKvRecord{
+	_, err = ms.SubmitTrainingKvRecord(wctx, &types.MsgSubmitTrainingKvRecord{
 		Creator: creator,
 		TaskId:  1,
 		Key:     "k",
