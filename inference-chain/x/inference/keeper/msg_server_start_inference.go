@@ -162,6 +162,11 @@ func (k msgServer) GetAccountPubKey(ctx context.Context, address string) (string
 		k.LogError("getAccountPubKey: Account not found", types.Participants, "address", address)
 		return "", sdkerrors.Wrap(types.ErrParticipantNotFound, address)
 	}
+	// Not all accounts are guaranteed to have a pubkey
+	if acc.GetPubKey() == nil {
+		k.LogError("getAccountPubKey: Account has no pubkey", types.Participants, "address", address)
+		return "", types.ErrPubKeyUnavailable
+	}
 	return base64.StdEncoding.EncodeToString(acc.GetPubKey().Bytes()), nil
 }
 
