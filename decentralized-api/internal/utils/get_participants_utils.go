@@ -145,6 +145,24 @@ func QueryActiveParticipants(rpcClient *rpcclient.HTTP, queryClient types.QueryC
 
 		for i, participant := range activeParticipants.Participants {
 			addresses[i], err = common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
+
+			mlNodes := make([]*contracts.ModelMLNodes, len(participant.MlNodes))
+			for i, node := range participant.MlNodes {
+				mlNodesData := make([]*contracts.MLNodeInfo, len(node.MlNodes))
+
+				for j, data := range node.MlNodes {
+					mlNodesData[j] = &contracts.MLNodeInfo{
+						NodeId:             data.NodeId,
+						Throughput:         data.Throughput,
+						PocWeight:          data.PocWeight,
+						TimeslotAllocation: data.TimeslotAllocation,
+					}
+				}
+				mlNodes[i] = &contracts.ModelMLNodes{
+					MlNodes: mlNodesData,
+				}
+			}
+
 			var seed *contracts.RandomSeed
 			if participant.Seed != nil {
 				seed = &contracts.RandomSeed{
@@ -160,6 +178,7 @@ func QueryActiveParticipants(rpcClient *rpcclient.HTTP, queryClient types.QueryC
 				InferenceUrl: participant.InferenceUrl,
 				Models:       participant.Models,
 				Seed:         seed,
+				MlNodes:      mlNodes,
 			}
 			if err != nil {
 				logging.Error("Failed to convert public key to address", types.Participants, "error", err)

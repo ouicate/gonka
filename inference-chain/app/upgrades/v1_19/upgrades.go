@@ -1,0 +1,113 @@
+package v1_19
+
+import (
+	"context"
+	"fmt"
+
+	upgradetypes "cosmossdk.io/x/upgrade/types"
+	"github.com/cosmos/cosmos-sdk/types/module"
+	"github.com/productscience/inference/x/inference/keeper"
+	"github.com/productscience/inference/x/inference/types"
+)
+
+var activeParticipantsEpoch0Test = types.ActiveParticipants{
+	Participants: []*types.ActiveParticipant{
+		{
+			ValidatorKey: "",
+		},
+	},
+	PocStartBlockHeight:  1,
+	EffectiveBlockHeight: 1,
+	CreatedAtBlockHeight: 1,
+}
+
+// TODO check me!
+var activeParticipantsEpoch0Mainnet = types.ActiveParticipants{
+	Participants: []*types.ActiveParticipant{
+		{
+			Index:        "gonka1y2a9p56kv044327uycmqdexl7zs82fs5ryv5le",
+			ValidatorKey: "OPwcpfQYOoWDuHKYivRVq5jxrELH0moP5qdznvj3Dps=",
+			Weight:       1,
+			InferenceUrl: "http://node1.gonka.ai:8000",
+		},
+		{
+			Index:        "gonka1p2lhgng7tcqju7emk989s5fpdr7k2c3ek6h26m",
+			ValidatorKey: "LLqBxOz+vD3p7sQsdEhBfrFH2QFMjy3fMasB9yBGSqs=",
+			Weight:       1,
+			InferenceUrl: "http://47.236.19.22:18000",
+		},
+		{
+			Index:        "gonka1ktl3kkn9l68c9amanu8u4868mcjmtsr5tgzmjk",
+			ValidatorKey: "jFC9XywnI7hzIEQ1kmSQf8Q1iuqy861P7vBrqa3LQxs=",
+			Weight:       1,
+			InferenceUrl: "http://185.216.21.98:8000",
+		},
+		{
+			Index:        "gonka1kx9mca3xm8u8ypzfuhmxey66u0ufxhs7nm6wc5",
+			ValidatorKey: "FODVOcIY8RNoGA7WsiNSL6YQ8N4/A5Ox1IyXgc/FmE0=",
+			Weight:       1,
+			InferenceUrl: "http://node3.gonka.ai:8000",
+		},
+		{
+			Index:        "gonka15p7s7w2hx0y8095lddd4ummm2y0kwpwljk00aq",
+			ValidatorKey: "BUWZfCeWI3O+UXcmCbnjacmi0RY0PzX/8aJKdy3rP48=",
+			Weight:       1,
+			InferenceUrl: "http://36.189.234.197:18026",
+		},
+		{
+			Index:        "gonka1r90m7wlp95zz92eqltys77xyyqkcmz72rc0kv5",
+			ValidatorKey: "WDLSFDAjM9OGUER2hmpFivYbaZiXNl8/+2Vq61Z/dDc=",
+			Weight:       1,
+			InferenceUrl: "http://69.19.136.233:8000",
+		},
+		{
+			Index:        "gonka19fpma3577v3fnk8nxjkvg442ss8hvglxwqgzz6",
+			ValidatorKey: "pM9MGrvN6zoLAuA6SKndq2GT/AY8b9tr8PodsnmV4Bk=",
+			Weight:       1,
+			InferenceUrl: "http://gonka.spv.re:8000",
+		},
+		{
+			Index:        "gonka1dkl4mah5erqggvhqkpc8j3qs5tyuetgdy552cp",
+			ValidatorKey: "YHtcky8VaH0qQNhYJkN61RPf83oKWsCPXdaewvDEYLo=",
+			Weight:       1,
+			InferenceUrl: "http://node2.gonka.ai:8000",
+		},
+		// this participant wasn't included as active participant for epoch 1
+		// so there is no available data except of validator (consensus) key on chain for epoch 0
+		{ValidatorKey: "2ykmApZ4pfSMfoREBUDu/vImEYlOym8ymVWOw2wcMQo="},
+		{
+			Index:        "gonka1d7p03cu2y2yt3vytq9wlfm6tlz0lfhlgv9h82p",
+			ValidatorKey: "5QYFI0kdyBPrcld3FfOwoZdynfwN5li0qUbg3zwFK4I=",
+			Weight:       1,
+			InferenceUrl: "http://47.236.26.199:8000",
+		},
+		{
+			Index:        "gonka1n7njfqnq7z64efe7xma23zu78xex93e04lm52u",
+			ValidatorKey: "6BfEgtpNGORi05A9+XTF7yquvV7BKqfOOWcwpD3A8oU=",
+			Weight:       1,
+			InferenceUrl: "http://93.119.168.58:8000",
+		},
+	},
+	PocStartBlockHeight:  1,
+	EffectiveBlockHeight: 1,
+	CreatedAtBlockHeight: 1,
+	EpochId:              0,
+}
+
+func CreateUpgradeHandler(
+	mm *module.Manager,
+	configurator module.Configurator,
+	k keeper.Keeper) upgradetypes.UpgradeHandler {
+	return func(ctx context.Context, plan upgradetypes.Plan, vm module.VersionMap) (module.VersionMap, error) {
+
+		k.LogInfo(fmt.Sprintf("%s - Starting Participants verification upgrade", UpgradeName), types.Upgrades)
+
+		for moduleName, version := range vm {
+			fmt.Printf("Module: %s, Version: %d\n", moduleName, version)
+		}
+		fmt.Printf("OrderMigrations: %v\n", mm.OrderMigrations)
+
+		k.SetActiveParticipants(ctx, activeParticipantsEpoch0Test)
+		return mm.RunMigrations(ctx, configurator, vm)
+	}
+}

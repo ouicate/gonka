@@ -306,7 +306,7 @@ func (d *OnNewBlockDispatcher) verifyParticipantsChain(ctx context.Context, curH
 			return
 		}
 
-		err = externalutils.VerifyParticipants(ctx, d.lastVerifiedAppHashHex, utils.QueryActiveParticipants(rpcClient, d.transactionRecorder.NewInferenceQueryClient()))
+		err = externalutils.VerifyParticipants(ctx, d.lastVerifiedAppHashHex, utils.QueryActiveParticipants(rpcClient, d.transactionRecorder.NewInferenceQueryClient()), "current")
 		if err != nil {
 			panic(err)
 		}

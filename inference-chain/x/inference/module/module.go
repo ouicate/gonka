@@ -542,8 +542,13 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		CreatedAtBlockHeight: blockHeight,
 	})
 
-	am.keeper.SetPendingProof(ctx, blockHeight, upcomingEpoch.Index)
-	am.LogInfo("set pending proof on height", types.EpochGroup, "blockHeight", blockHeight)
+	// TODO uncomment me
+	/*if err := am.keeper.SetPendingProof(ctx, blockHeight, upcomingEpoch.Index); err != nil {
+		am.LogError("errors setting pendgin proof", types.Stages, "err", err, "blockHeight", blockHeight)
+	} else {
+		am.LogInfo("set pending proof on height", types.EpochGroup, "blockHeight", blockHeight)
+	}
+	*/
 
 	upcomingEg, err := am.keeper.GetEpochGroupForEpoch(ctx, *upcomingEpoch)
 	if err != nil {
