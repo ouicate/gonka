@@ -141,7 +141,7 @@ func (s *InferenceValidator) getNodeModelsAtEpoch(epochIndex uint64, address str
 	return supportedModels, nil
 }
 
-func (s *InferenceValidator) getCurrentlyAvailableModels() (map[string]bool, error) {
+func (s *InferenceValidator) getCurrentSupportedModels() (map[string]bool, error) {
 	supportedModels := make(map[string]bool)
 	nodes, err := s.nodeBroker.GetNodes()
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *InferenceValidator) getCurrentlyAvailableModels() (map[string]bool, err
 			supportedModels[model] = true
 		}
 	}
-	logging.Info("Available models", types.ValidationRecovery, "supportedModels", supportedModels)
+	logging.Debug("Supported models", types.ValidationRecovery, "supportedModels", supportedModels)
 	return supportedModels, nil
 }
 
@@ -304,7 +304,7 @@ func (s *InferenceValidator) DetectMissedValidations(epochIndex uint64, seed int
 // It waits for all validations to complete before returning
 func (s *InferenceValidator) ExecuteRecoveryValidations(missedInferences []types.Inference) (int, error) {
 
-	availableModels, err := s.getCurrentlyAvailableModels()
+	availableModels, err := s.getCurrentSupportedModels()
 	if err != nil {
 		logging.Error("Failed to get currently available models", types.ValidationRecovery, "error", err)
 		return 0, fmt.Errorf("failed to get currently available models: %w", err)
@@ -392,6 +392,12 @@ func (s *InferenceValidator) SampleInferenceToValidate(ids []string, transaction
 		return
 	}
 
+	supportedModels, err := s.getCurrentSupportedModels()
+	if err != nil {
+		logging.Error("Failed to get currently available models", types.Validation, "error", err)
+		return
+	}
+
 	logInferencesToSample(r.Details)
 
 	address := transactionRecorder.GetAddress()
@@ -399,6 +405,10 @@ func (s *InferenceValidator) SampleInferenceToValidate(ids []string, transaction
 	var toValidateIds []string
 
 	for _, inferenceWithExecutor := range r.Details {
+		if !supportedModels[inferenceWithExecutor.Model] {
+			logging.Debug("Skipping inference by not supported model", types.Validation, "inferenceId", inferenceWithExecutor.InferenceId, "model", inferenceWithExecutor.Model)
+			continue
+		}
 		// Use the extracted validation decision logic
 		shouldValidate, message := s.shouldValidateInference(
 			inferenceWithExecutor,
