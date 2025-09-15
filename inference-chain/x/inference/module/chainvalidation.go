@@ -91,6 +91,7 @@ func (am AppModule) GetPreviousEpochMLNodesWithInferenceAllocation(ctx context.C
 		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Current epoch group does not match upcoming epoch", types.PoC,
 			"currentEpochGroup.EpochIndex", currentEpochGroup.GroupData.EpochIndex,
 			"upcomingEpoch.Index", upcomingEpoch.Index)
+		return nil
 	}
 
 	am.LogInfo("GetPreviousEpochMLNodesWithInferenceAllocation: Processing current epoch group (about to end)", types.PoC,
