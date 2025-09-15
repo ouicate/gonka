@@ -42,4 +42,5 @@ var (
 	ErrEpochNotFound                         = sdkerrors.Register(ModuleName, 1136, "epoch not found")
 	ErrIllegalState                          = sdkerrors.Register(ModuleName, 1137, "illegal state for the operation requested")
 	ErrPubKeyUnavailable                     = sdkerrors.Register(ModuleName, 1139, "account has no public key")
+	ErrPubKeyDoesNotMatchAddress             = sdkerrors.Register(ModuleName, 1140, "public key does not match address")
 )

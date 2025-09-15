@@ -25,6 +25,11 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 		return nil, err
 	}
 	actualKey := secp256k1.PubKey{Key: pubKeyBytes}
+	expectedAddress := sdk.AccAddress(actualKey.Address())
+	if msg.Address != expectedAddress.String() {
+		k.LogError("Pubkey does not match address", types.Participants, "address", msg.Address, "expected", expectedAddress.String())
+		return nil, types.ErrPubKeyDoesNotMatchAddress
+	}
 	err = newAccount.SetPubKey(&actualKey)
 	if err != nil {
 		k.LogError("Error setting pubkey", types.Participants, "error", err)
