@@ -201,7 +201,7 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 	am.LogInfo("Inference expired, not finished. Issuing refund", types.Inferences, "inferenceId", inference.InferenceId, "executor", inference.AssignedTo)
 	inference.Status = types.InferenceStatus_EXPIRED
 	inference.ActualCost = 0
-	err := am.keeper.IssueRefund(ctx, uint64(inference.EscrowAmount), inference.RequestedBy, "expired_inference:"+inference.InferenceId)
+	err := am.keeper.IssueRefund(ctx, inference.EscrowAmount, inference.RequestedBy, "expired_inference:"+inference.InferenceId)
 	if err != nil {
 		am.LogError("Error issuing refund", types.Inferences, "error", err)
 	}
@@ -255,12 +255,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	// and allow time for api nodes to load models on ml nodes.
 
 	if epochContext.IsEndOfPoCValidationStage(blockHeight) {
-		am.LogInfo("onEndOfPoCValidationStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onEndOfPoCValidationStage", types.Stages, "blockHeight", blockHeight)
 		am.onEndOfPoCValidationStage(ctx, blockHeight, blockTime)
 	}
 
 	if epochContext.IsSetNewValidatorsStage(blockHeight) {
-		am.LogInfo("onSetNewValidatorsStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onSetNewValidatorsStage", types.Stages, "blockHeight", blockHeight)
 		am.onSetNewValidatorsStage(ctx, blockHeight, blockTime)
 		am.keeper.SetEffectiveEpochIndex(ctx, getNextEpochIndex(*currentEpoch))
 	}
@@ -269,7 +269,7 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		upcomingEpoch := createNewEpoch(*currentEpoch, blockHeight)
 		am.keeper.SetEpoch(ctx, upcomingEpoch)
 
-		am.LogInfo("NewPocStart", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:PocStart", types.Stages, "blockHeight", blockHeight)
 		newGroup, err := am.keeper.CreateEpochGroup(ctx, uint64(blockHeight), upcomingEpoch.Index)
 		if err != nil {
 			am.LogError("Unable to create epoch group", types.EpochGroup, "error", err.Error())

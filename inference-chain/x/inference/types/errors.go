@@ -50,4 +50,6 @@ var (
 	ErrTrainingNotAllowed                      = sdkerrors.Register(ModuleName, 1139, "training not allowed for this address")
 	ErrDuplicateNodeId                         = sdkerrors.Register(ModuleName, 1140, "duplicate node id")
 	ErrTrainingTaskNotAssigned                 = sdkerrors.Register(ModuleName, 1141, "training task not assigned to message creator")
+	ErrNegativeRewardAmount                    = sdkerrors.Register(ModuleName, 1142, "negative reward amount")
+	ErrDuplicateValidation                     = sdkerrors.Register(ModuleName, 1143, "participant has already validated this inference")
 )
