@@ -46,6 +46,9 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 			WorkerKey:    msg.GetWorkerKey(),
 		})
 	k.LogDebug("Adding new participant", types.Participants, "participant", newParticipant)
-	k.SetParticipant(ctx, newParticipant)
+	err = k.SetParticipant(ctx, newParticipant)
+	if err != nil {
+		return nil, err
+	}
 	return &types.MsgSubmitNewUnfundedParticipantResponse{}, nil
 }

@@ -14,7 +14,11 @@ const (
 
 // PruneInferences removes old inference records based on threshold and status
 func (k Keeper) PruneInferences(ctx context.Context, upcomingEpochIndex uint64, pruningThreshold uint64) error {
-	inferences := k.GetAllInference(ctx)
+	inferences, err := k.GetAllInference(ctx)
+	if err != nil {
+		k.LogError("Failed to get all inferences", types.Pruning, "error", err)
+		return err
+	}
 	prunedCount := 0
 
 	k.LogInfo("Starting inference pruning iteration", types.Pruning,

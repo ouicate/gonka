@@ -50,17 +50,17 @@ func (k Keeper) RemoveInference(
 }
 
 // GetAllInference returns all inference
-func (k Keeper) GetAllInference(ctx context.Context) (list []types.Inference) {
+func (k Keeper) GetAllInference(ctx context.Context) (list []types.Inference, err error) {
 	iter, err := k.Inferences.Iterate(ctx, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer iter.Close()
 	vals, err := iter.Values()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return vals
+	return vals, nil
 }
 
 func (k Keeper) GetInferences(ctx context.Context, ids []string) ([]types.Inference, bool) {

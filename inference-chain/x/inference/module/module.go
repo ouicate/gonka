@@ -205,7 +205,10 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 	}
 	am.keeper.SetInference(ctx, inference)
 	executor.CurrentEpochStats.MissedRequests++
-	am.keeper.SetParticipant(ctx, executor)
+	err = am.keeper.SetParticipant(ctx, executor)
+	if err != nil {
+		am.LogError("Error updating participant for expired inference", types.Participants, "error", err)
+	}
 }
 
 // EndBlock contains the logic that is automatically triggered at the end of each block.
@@ -213,13 +216,22 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	blockHeight := sdkCtx.BlockHeight()
 	blockTime := sdkCtx.BlockTime().Unix()
-	epochParams := am.keeper.GetParams(ctx).EpochParams
+	params, err := am.keeper.GetParamsSafe(ctx)
+	if err != nil {
+		am.LogError("Unable to get parameters", types.Settle, "error", err.Error())
+		return err
+	}
+	epochParams := params.EpochParams
 	currentEpoch, found := am.keeper.GetEffectiveEpoch(ctx)
 	if !found || currentEpoch == nil {
 		am.LogError("Unable to get effective epoch", types.EpochGroup, "blockHeight", blockHeight)
 		return nil
 	}
-	epochContext := types.NewEpochContextFromEffectiveEpoch(*currentEpoch, *epochParams, blockHeight)
+	epochContext, err := types.NewEpochContextFromEffectiveEpoch(*currentEpoch, *epochParams, blockHeight)
+	if err != nil {
+		am.LogError("Unable to create epoch context", types.EpochGroup, "error", err.Error())
+		return nil
+	}
 
 	currentEpochGroup, err := am.keeper.GetEpochGroupForEpoch(ctx, *currentEpoch)
 	if err != nil {
@@ -263,7 +275,11 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 
 	if epochContext.IsStartOfPocStage(blockHeight) {
 		upcomingEpoch := createNewEpoch(*currentEpoch, blockHeight)
-		am.keeper.SetEpoch(ctx, upcomingEpoch)
+		err = am.keeper.SetEpoch(ctx, upcomingEpoch)
+		if err != nil {
+			am.LogError("Unable to set upcoming epoch", types.EpochGroup, "error", err.Error())
+			return err
+		}
 
 		am.LogInfo("NewPocStart", types.Stages, "blockHeight", blockHeight)
 		newGroup, err := am.keeper.CreateEpochGroup(ctx, uint64(blockHeight), upcomingEpoch.Index)
@@ -415,7 +431,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		"PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight,
 		"len(activeParticipants)", len(activeParticipants))
 
-	am.keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
+	err = am.keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
 		Participants:        activeParticipants,
 		EpochGroupId:        upcomingEpoch.Index,
 		EpochId:             upcomingEpoch.Index,
@@ -424,6 +440,10 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		EffectiveBlockHeight: blockHeight + 2, // FIXME: verify it's +2, I'm not sure
 		CreatedAtBlockHeight: blockHeight,
 	})
+	if err != nil {
+		am.LogError("onEndOfPoCValidationStage: Unable to set active participants", types.EpochGroup, "error", err.Error())
+		return
+	}
 
 	upcomingEg, err := am.keeper.GetEpochGroupForEpoch(ctx, *upcomingEpoch)
 	if err != nil {

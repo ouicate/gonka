@@ -845,9 +845,10 @@ func (mr *MockParticipantKeeperMockRecorder) RemoveParticipant(ctx, index any) *
 }
 
 // SetParticipant mocks base method.
-func (m *MockParticipantKeeper) SetParticipant(ctx context.Context, participant types2.Participant) {
+func (m *MockParticipantKeeper) SetParticipant(ctx context.Context, participant types2.Participant) error {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetParticipant", ctx, participant)
+	return nil
 }
 
 // SetParticipant indicates an expected call of SetParticipant.

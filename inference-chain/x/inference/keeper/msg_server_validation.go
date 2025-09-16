@@ -106,7 +106,11 @@ func (k msgServer) Validation(goCtx context.Context, msg *types.MsgValidation) (
 				if adjustment.WorkAdjustment < 0 {
 					k.BankKeeper.LogSubAccountTransaction(ctx, msg.Creator, adjustment.ParticipantId, types.OwedSubAccount, types.GetCoin(-adjustment.WorkAdjustment), "share_validation_executor:"+inference.InferenceId)
 				}
-				k.SetParticipant(ctx, worker)
+				err = k.SetParticipant(ctx, worker)
+				if err != nil {
+					k.LogError("Failed to set worker", types.Validation, "worker", worker.Address, "error", err)
+					continue
+				}
 			}
 		}
 
@@ -130,7 +134,11 @@ func (k msgServer) Validation(goCtx context.Context, msg *types.MsgValidation) (
 	// Check for a status transition and slash if necessary.
 	k.CheckAndSlashForInvalidStatus(goCtx, originalStatus, &executor)
 
-	k.SetParticipant(ctx, executor)
+	err = k.SetParticipant(ctx, executor)
+	if err != nil {
+		k.LogError("Failed to set executor", types.Validation, "executor", executor.Address, "error", err)
+		return nil, err
+	}
 
 	k.LogInfo("Saving inference", types.Validation, "inferenceId", inference.InferenceId, "status", inference.Status, "proposalDetails", inference.ProposalDetails)
 	k.SetInference(ctx, inference)

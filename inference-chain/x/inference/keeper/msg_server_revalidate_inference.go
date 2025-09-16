@@ -38,7 +38,10 @@ func (k msgServer) RevalidateInference(goCtx context.Context, msg *types.MsgReva
 	executor.CurrentEpochStats.ValidatedInferences++
 
 	executor.Status = calculateStatus(k.Keeper.GetParams(goCtx).ValidationParams, executor)
-	k.SetParticipant(ctx, executor)
+	err := k.SetParticipant(ctx, executor)
+	if err != nil {
+		return nil, err
+	}
 
 	k.LogInfo("Saving inference", types.Validation, "inferenceId", inference.InferenceId, "status", inference.Status, "authority", inference.ProposalDetails.PolicyAddress)
 	k.SetInference(ctx, inference)
