@@ -24,7 +24,7 @@ import (
 )
 
 // Default MLNode version used as fallback
-const DefaultMLNodeVersion = "v3.0.8"
+const DefaultMLNodeVersion = "v3.0.9"
 
 type ConfigManager struct {
 	currentConfig  Config
@@ -147,6 +147,7 @@ func (cm *ConfigManager) SyncVersionFromChain(cosmosClient CosmosQueryClient) er
 
 	chainVersion := resp.MlnodeVersion.CurrentVersion
 	if chainVersion == "" {
+		logging.Warn("Chain version is empty, using default", types.Config, "defaultVersion", DefaultMLNodeVersion)
 		chainVersion = DefaultMLNodeVersion
 	}
 

@@ -17,8 +17,7 @@ func (k Keeper) MLNodeVersion(goCtx context.Context, req *types.QueryGetMLNodeVe
 
 	val, found := k.GetMLNodeVersion(ctx)
 	if !found {
-		// Return default version if not found
-		val = types.MLNodeVersion{CurrentVersion: "v3.0.8"}
+		k.LogWarn("MLNode version not found", types.Nodes)
 	}
 
 	return &types.QueryGetMLNodeVersionResponse{MlnodeVersion: val}, nil

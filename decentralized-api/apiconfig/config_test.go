@@ -34,7 +34,7 @@ func TestNodeVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that default version is returned correctly
-	require.Equal(t, testManager.GetCurrentNodeVersion(), "v3.0.8")
+	require.Equal(t, testManager.GetCurrentNodeVersion(), "v3.0.9")
 }
 
 func TestConfigLoadEnvOverride(t *testing.T) {
@@ -109,7 +109,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	require.Equal(t, "join1", testManager2.GetChainNodeConfig().SignerKeyName)
 	require.Equal(t, "test", testManager2.GetChainNodeConfig().KeyringBackend)
 	require.Equal(t, "/root/.inference", testManager2.GetChainNodeConfig().KeyringDir)
-	require.Equal(t, "v3.0.8", testManager2.GetCurrentNodeVersion())
+	require.Equal(t, "v3.0.9", testManager2.GetCurrentNodeVersion())
 }
 
 func loadManager(t *testing.T, err error) error {
