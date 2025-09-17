@@ -85,7 +85,7 @@ data class NodeConfig(
     val models: Map<String, ApiModelConfig>,
     val pocPort: Int,
     val pocSegment: String,
-    val version: String
+    val version: String? = null
 )
 
 data class ApiModelConfig(
