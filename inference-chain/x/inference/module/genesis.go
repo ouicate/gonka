@@ -43,7 +43,7 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) 
 		k.SetMLNodeVersion(ctx, *genState.MlnodeVersion)
 	} else {
 		// Set default MLNode version
-		k.SetMLNodeVersion(ctx, types.MLNodeVersion{CurrentVersion: "v3.0.9"})
+		k.SetMLNodeVersion(ctx, types.MLNodeVersion{CurrentVersion: "v3.0.8"})
 	}
 
 	k.SetContractsParams(ctx, genState.CosmWasmParams)

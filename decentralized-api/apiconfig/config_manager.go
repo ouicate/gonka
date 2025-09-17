@@ -23,9 +23,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Default MLNode version used as fallback
-const DefaultMLNodeVersion = "v3.0.9"
-
 type ConfigManager struct {
 	currentConfig  Config
 	KoanProvider   koanf.Provider
@@ -147,8 +144,7 @@ func (cm *ConfigManager) SyncVersionFromChain(cosmosClient CosmosQueryClient) er
 
 	chainVersion := resp.MlnodeVersion.CurrentVersion
 	if chainVersion == "" {
-		logging.Warn("Chain version is empty, using default", types.Config, "defaultVersion", DefaultMLNodeVersion)
-		chainVersion = DefaultMLNodeVersion
+		logging.Warn("Chain version is empty", types.Config)
 	}
 
 	currentVersion := cm.GetCurrentNodeVersion()
@@ -345,10 +341,6 @@ func readConfig(provider koanf.Provider) (Config, error) {
 
 	if err := loadNodeConfig(&config); err != nil {
 		log.Fatalf("error loading node config: %v", err)
-	}
-
-	if config.CurrentNodeVersion == "" {
-		config.CurrentNodeVersion = DefaultMLNodeVersion
 	}
 
 	return config, nil

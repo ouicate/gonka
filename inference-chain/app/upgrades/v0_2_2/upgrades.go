@@ -24,7 +24,7 @@ func CreateUpgradeHandler(
 
 		k.Logger().Info("setting MLNodeVersion in inference module state")
 
-		initialVersion := types.MLNodeVersion{CurrentVersion: "v3.0.9"}
+		initialVersion := types.MLNodeVersion{CurrentVersion: "v3.0.8"}
 		k.SetMLNodeVersion(ctx, initialVersion)
 		k.Logger().Info("successfully set MLNodeVersion")
 

@@ -435,8 +435,8 @@ func TestVersionedUrls(t *testing.T) {
 	assert.Equal(t, expectedInferenceUrl, actualInferenceUrlEmpty)
 
 	// Test InferenceUrlWithVersion with version
-	expectedVersionedInferenceUrl := "http://example.com:8080/v3.0.9/api/v1"
-	actualVersionedInferenceUrl := node.InferenceUrlWithVersion("v3.0.9")
+	expectedVersionedInferenceUrl := "http://example.com:8080/v3.0.8/api/v1"
+	actualVersionedInferenceUrl := node.InferenceUrlWithVersion("v3.0.8")
 	assert.Equal(t, expectedVersionedInferenceUrl, actualVersionedInferenceUrl)
 
 	// Test PoCUrl without version (backward compatibility)
@@ -449,8 +449,8 @@ func TestVersionedUrls(t *testing.T) {
 	assert.Equal(t, expectedPocUrl, actualPocUrlEmpty)
 
 	// Test PoCUrlWithVersion with version
-	expectedVersionedPocUrl := "http://example.com:9090/v3.0.9/api/v1"
-	actualVersionedPocUrl := node.PoCUrlWithVersion("v3.0.9")
+	expectedVersionedPocUrl := "http://example.com:9090/v3.0.8/api/v1"
+	actualVersionedPocUrl := node.PoCUrlWithVersion("v3.0.8")
 	assert.Equal(t, expectedVersionedPocUrl, actualVersionedPocUrl)
 }
 
@@ -491,7 +491,7 @@ func TestImmediateClientRefreshLogic(t *testing.T) {
 	initialStopCalled := mockClient.StopCalled
 
 	// Test the immediate refresh directly - this should call stop on the old client immediately
-	worker.RefreshClientImmediate("v3.0.9", "v3.1.0")
+	worker.RefreshClientImmediate("v3.0.8", "v3.1.0")
 
 	// Give some time for the async stop call to complete
 	time.Sleep(50 * time.Millisecond)
