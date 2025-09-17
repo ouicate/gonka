@@ -798,6 +798,50 @@ func (b *Broker) reconcilerLoop() {
 	}
 }
 
+type VersionHealthReport struct {
+	IsAlive bool   `json:"is_alive"`
+	Error   string `json:"error,omitempty"`
+}
+
+func (b *Broker) CheckVersionHealth(version string) map[string]VersionHealthReport {
+	b.mu.RLock()
+	nodeIds := make([]string, 0, len(b.nodes))
+	for nodeId := range b.nodes {
+		nodeIds = append(nodeIds, nodeId)
+	}
+	b.mu.RUnlock()
+
+	reports := make(map[string]VersionHealthReport)
+	var wg sync.WaitGroup
+	var reportsMu sync.Mutex
+
+	for _, nodeId := range nodeIds {
+		wg.Add(1)
+		go func(nodeId string) {
+			defer wg.Done()
+			worker, exists := b.nodeWorkGroup.GetWorker(nodeId)
+			report := VersionHealthReport{}
+
+			if !exists {
+				report.Error = "worker not found"
+			} else {
+				alive, err := worker.CheckClientVersionAlive(version, b.mlNodeClientFactory)
+				report.IsAlive = alive
+				if err != nil {
+					report.Error = err.Error()
+				}
+			}
+
+			reportsMu.Lock()
+			reports[nodeId] = report
+			reportsMu.Unlock()
+		}(nodeId)
+	}
+
+	wg.Wait()
+	return reports
+}
+
 // checkAndRefreshClientsIfNeeded checks if the MLNode version has changed and refreshes all clients if needed
 func (b *Broker) checkAndRefreshClientsIfNeeded() {
 	if b.configManager.ShouldRefreshClients() {
@@ -840,6 +884,19 @@ func (b *Broker) checkAndRefreshClientsIfNeeded() {
 				if err := b.configManager.SetLastUsedVersion(currentVersion); err != nil {
 					logging.Warn("Failed to initialize last used version", types.Config, "error", err)
 				}
+			}
+		}
+	}
+	upgradeVersion := b.configManager.GetUpgradePlan().NodeVersion
+	if upgradeVersion != "" {
+		reports := b.CheckVersionHealth(upgradeVersion)
+		for nodeId, report := range reports {
+			if report.Error != "" {
+				logging.Warn("Failed to check MLNode version in upgrade plan", types.Nodes, "node_id", nodeId, "error", report.Error)
+			} else if !report.IsAlive {
+				logging.Warn("MLNode version in upgrade plan is not alive", types.Nodes, "node_id", nodeId)
+			} else {
+				logging.Debug("MLNode version in upgrade plan is alive", types.Nodes, "node_id", nodeId)
 			}
 		}
 	}
