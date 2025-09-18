@@ -103,6 +103,7 @@ func (w *NodeWorker) RefreshClientImmediate(oldVersion, newVersion string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		// TODO: should be /kill, not /stop
 		if err := oldClient.Stop(ctx); err != nil {
 			logging.Warn("Failed to stop old MLNode client during immediate version transition", types.Nodes,
 				"node_id", w.nodeId, "oldVersion", oldVersion, "newVersion", newVersion, "error", err)
