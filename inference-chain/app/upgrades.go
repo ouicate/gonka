@@ -7,8 +7,10 @@ import (
 	"fmt"
 
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	v0_2_2 "github.com/productscience/inference/app/upgrades/v0_2_2"
+	inferencetypes "github.com/productscience/inference/x/inference/types"
 )
 
 func CreateEmptyUpgradeHandler(
@@ -40,4 +42,10 @@ func (app *App) setupUpgradeHandlers() {
 	app.Logger().Info("Applying upgrade", "upgradeInfo", upgradeInfo)
 
 	app.UpgradeKeeper.SetUpgradeHandler(v0_2_2.UpgradeName, v0_2_2.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
+}
+
+func (app *App) registerMigrations() {
+	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 4, func(ctx sdk.Context) error {
+		return nil
+	})
 }
