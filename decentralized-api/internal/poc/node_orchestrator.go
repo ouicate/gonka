@@ -169,12 +169,12 @@ func (o *NodePoCOrchestratorImpl) ValidateReceivedBatches(startOfValStageHeight 
 			BlockHeight: startOfPoCBlockHeight,
 		}
 
-		unique := make(map[int64]struct{})
+		uniqueNonces := make(map[int64]struct{})
 
 		for _, b := range batch.PocBatch {
 			for i, nonce := range b.Nonces {
-				if _, exists := unique[nonce]; !exists {
-					unique[nonce] = struct{}{}
+				if _, exists := uniqueNonces[nonce]; !exists {
+					uniqueNonces[nonce] = struct{}{}
 
 					joinedBatch.Nonces = append(joinedBatch.Nonces, nonce)
 					joinedBatch.Dist = append(joinedBatch.Dist, b.Dist[i])
