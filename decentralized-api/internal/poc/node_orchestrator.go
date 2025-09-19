@@ -161,6 +161,12 @@ func (o *NodePoCOrchestratorImpl) ValidateReceivedBatches(startOfValStageHeight 
 	successfulValidations := 0
 	failedValidations := 0
 
+	type DistAndNonce struct {
+		Dist  float64
+		Nonce int64
+	}
+
+	// Iterating over participants
 	for _, batch := range batches.PocBatch {
 		joinedBatch := mlnodeclient.ProofBatch{
 			PublicKey:   batch.HexPubKey,
@@ -168,9 +174,17 @@ func (o *NodePoCOrchestratorImpl) ValidateReceivedBatches(startOfValStageHeight 
 			BlockHeight: startOfPoCBlockHeight,
 		}
 
+		unique := make(map[int64]struct{})
+
 		for _, b := range batch.PocBatch {
-			joinedBatch.Dist = append(joinedBatch.Dist, b.Dist...)
-			joinedBatch.Nonces = append(joinedBatch.Nonces, b.Nonces...)
+			for i, nonce := range b.Nonces {
+				if _, exists := unique[nonce]; !exists {
+					unique[nonce] = struct{}{}
+
+					joinedBatch.Nonces = append(joinedBatch.Nonces, nonce)
+					joinedBatch.Dist = append(joinedBatch.Dist, b.Dist[i])
+				}
+			}
 		}
 
 		batchToValidate := joinedBatch.SampleNoncesToValidate(o.pubKey, samplesPerBatch)
