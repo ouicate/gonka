@@ -371,7 +371,7 @@ message MsgSubmitParticipantsProof {
   string creator = 1;
   uint64 block_height = 2;
   ValidatorsProof validators_proof = 3;
-  ProofOps  proof_opts = 4;
+  ProofOps  merkle_proof = 4;
 }
 
 message MsgSubmitParticipantsProofResponse {}

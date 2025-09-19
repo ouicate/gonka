@@ -3,9 +3,8 @@ package keeper
 import (
 	"context"
 	"errors"
-	"time"
-
 	"github.com/productscience/inference/x/inference/types"
+	"time"
 )
 
 var (

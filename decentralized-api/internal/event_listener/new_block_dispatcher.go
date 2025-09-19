@@ -495,7 +495,7 @@ func (el *OnNewBlockDispatcher) collectBlockProofs(block chainevents.FinalizedBl
 		&types.MsgSubmitParticipantsProof{
 			BlockHeight:     uint64(height),
 			ValidatorsProof: proof,
-			ProofOpts:       proofOps,
+			MerkleProof:     proofOps,
 		}); err != nil {
 		logging.Error("Failed to set validators proof", types.ParticipantsVerification, "error", err)
 	}

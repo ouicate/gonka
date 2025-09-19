@@ -273,7 +273,7 @@ func TestSubmitMissingParticipantsProofData(t *testing.T) {
 			BlockProof:                  &validHeaderEpoch1,
 			ProofOpts:                   &validProofOpsEpoch1,
 		})
-		assert.ErrorContains(t, err, "participants for previous epoch not found")
+		assert.ErrorContains(t, err, "participants not found")
 	})
 
 	t.Run("fail: wrong header", func(t *testing.T) {

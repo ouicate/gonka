@@ -50,8 +50,8 @@ func (k Keeper) SetActiveParticipants(ctx context.Context, participants types.Ac
 	store.Set(key, b)
 }
 
-func (k Keeper) SetActiveParticipantsProof(ctx context.Context, proof types.ProofOps, blockHeight uint64) error {
-	exists, err := k.ActiveParticipantsProofs.Has(ctx, blockHeight)
+func (k Keeper) SetActiveParticipantsMerkleProof(ctx context.Context, proof types.ProofOps, blockHeight uint64) error {
+	exists, err := k.ActiveParticipantsMerkleProofs.Has(ctx, blockHeight)
 	if err != nil {
 		return err
 	}
@@ -88,11 +88,11 @@ func (k Keeper) SetActiveParticipantsProof(ctx context.Context, proof types.Proo
 		return err
 	}
 
-	return k.ActiveParticipantsProofs.Set(ctx, blockHeight, proof)
+	return k.ActiveParticipantsMerkleProofs.Set(ctx, blockHeight, proof)
 }
 
 func (k Keeper) GetActiveParticipantsProof(ctx context.Context, blockHeight int64) (types.ProofOps, bool) {
-	v, err := k.ActiveParticipantsProofs.Get(ctx, uint64(blockHeight))
+	v, err := k.ActiveParticipantsMerkleProofs.Get(ctx, uint64(blockHeight))
 	if err != nil {
 		return types.ProofOps{}, false
 	}

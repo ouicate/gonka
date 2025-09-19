@@ -58,10 +58,10 @@ type (
 		EpochPerformanceSummaries collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
 
 		// Proofs
-		ActiveParticipantsProofs collections.Map[uint64, types.ProofOps]
-		BlockProofs              collections.Map[uint64, types.BlockProof]
-		PendingProofs            collections.Map[uint64, uint64]
-		ValidatorsProofs         collections.Map[uint64, types.ValidatorsProof]
+		ActiveParticipantsMerkleProofs collections.Map[uint64, types.ProofOps]
+		BlockProofs                    collections.Map[uint64, types.BlockProof]
+		PendingProofs                  collections.Map[uint64, uint64]
+		ValidatorsProofs               collections.Map[uint64, types.ValidatorsProof]
 	}
 )
 
@@ -242,10 +242,10 @@ func NewKeeper(
 			collections.PairKeyCodec(sdk.AccAddressKey, collections.Uint64Key),
 			codec.CollValue[types.EpochPerformanceSummary](cdc),
 		),
-		ActiveParticipantsProofs: collections.NewMap(
+		ActiveParticipantsMerkleProofs: collections.NewMap(
 			sb,
-			types.ActiveParticipantsProofPrefix,
-			"active_participants_proofs",
+			types.ActiveParticipantsMerkleProofPrefix,
+			"active_participants_merkle_proofs",
 			collections.Uint64Key,
 			codec.CollValue[types.ProofOps](cdc),
 		),

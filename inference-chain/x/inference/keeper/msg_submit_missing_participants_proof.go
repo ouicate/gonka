@@ -33,8 +33,8 @@ func (s msgServer) SubmitParticipantsProof(goCtx context.Context, msg *types.Msg
 		}
 	}
 
-	if msg.ProofOpts != nil {
-		if err := s.Keeper.SetActiveParticipantsProof(ctx, *msg.ProofOpts, msg.BlockHeight); err != nil {
+	if msg.MerkleProof != nil {
+		if err := s.Keeper.SetActiveParticipantsMerkleProof(ctx, *msg.MerkleProof, msg.BlockHeight); err != nil {
 			return nil, err
 		}
 	}
@@ -134,7 +134,7 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	}
 
 	if msg.ProofOpts != nil {
-		if err := s.Keeper.SetActiveParticipantsProof(ctx, *msg.ProofOpts, msg.BlockHeight); err != nil {
+		if err := s.Keeper.SetActiveParticipantsMerkleProof(ctx, *msg.ProofOpts, msg.BlockHeight); err != nil {
 			s.logger.Error("error setting merkle root proof", "block height", int64(msg.BlockHeight), "err", err)
 			return nil, err
 		}

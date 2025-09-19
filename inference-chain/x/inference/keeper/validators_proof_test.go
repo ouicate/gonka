@@ -25,9 +25,9 @@ func TestSetValidatorsProof(t *testing.T) {
 	blockHash := "0B902548DF9480890973D4F085AED92D7A5D64E132BE4FCFD76EB472973170C2"
 	partHash := "78AAB0B9F08B50C5E7AE70C0376137A195F4AC1B08208E8B7F152779D25AB491"
 
-	const validProofEpoch2BlockHeight = int64(17665)
+	const validProofEpochBlockHeight = int64(17665)
 	validProofEpoch2 := types.ValidatorsProof{
-		BlockHeight: validProofEpoch2BlockHeight,
+		BlockHeight: validProofEpochBlockHeight,
 		Round:       0,
 		BlockId: &types.BlockID{
 			Hash:               blockHash,
@@ -53,8 +53,20 @@ func TestSetValidatorsProof(t *testing.T) {
 	assert.ErrorContains(t, err, "block proof not found")
 
 	// 2. Try to set invalid validators proof, but store valid block proof before -> fail
+	keeper.SetActiveParticipants(ctx2, types.ActiveParticipants{
+		Participants: []*types.ActiveParticipant{
+			{
+				ValidatorKey: "LLqBxOz+vD3p7sQsdEhBfrFH2QFMjy3fMasB9yBGSqs=",
+			},
+			{
+				ValidatorKey: "5QYFI0kdyBPrcld3FfOwoZdynfwN5li0qUbg3zwFK4I=",
+			},
+		},
+		CreatedAtBlockHeight: validProofEpochBlockHeight,
+		EpochId:              0,
+	})
 	err = keeper.SetBlockProof(ctx2, types.BlockProof{
-		CreatedAtBlockHeight: validProofEpoch2BlockHeight,
+		CreatedAtBlockHeight: validProofEpochBlockHeight,
 		AppHashHex:           "29213E6A386DE8F6BA3882A87490347B91D8C9B3D63FBBEB2400A2967B5F6939",
 		Commits: []*types.CommitInfo{
 			{
@@ -69,7 +81,7 @@ func TestSetValidatorsProof(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	invalidProof := types.ValidatorsProof{
-		BlockHeight: validProofEpoch2BlockHeight,
+		BlockHeight: validProofEpochBlockHeight,
 		Round:       0,
 		BlockId: &types.BlockID{
 			Hash:               blockHash,
@@ -93,25 +105,25 @@ func TestSetValidatorsProof(t *testing.T) {
 	err = keeper.SetValidatorsProof(ctx2, invalidProof)
 	assert.ErrorContains(t, err, "failed to verify signature")
 
-	_, found := keeper.GetValidatorsProof(ctx2, validProofEpoch2BlockHeight)
+	_, found := keeper.GetValidatorsProof(ctx2, validProofEpochBlockHeight)
 	assert.False(t, found)
 
 	// 3. Set correct proof
 	err = keeper.SetValidatorsProof(ctx2, validProofEpoch2)
 	assert.NoError(t, err)
 
-	actualProof, found := keeper.GetValidatorsProof(ctx2, validProofEpoch2BlockHeight)
+	actualProof, found := keeper.GetValidatorsProof(ctx2, validProofEpochBlockHeight)
 	assert.True(t, found)
 	assert.Equal(t, validProofEpoch2, actualProof)
 
 	// 4. Try to re-write proof with same height -> data still same
 	err = keeper.SetValidatorsProof(ctx2, types.ValidatorsProof{
-		BlockHeight: validProofEpoch2BlockHeight,
+		BlockHeight: validProofEpochBlockHeight,
 		Round:       2,
 	})
 	assert.NoError(t, err)
 
-	actualProof, found = keeper.GetValidatorsProof(ctx2, validProofEpoch2BlockHeight)
+	actualProof, found = keeper.GetValidatorsProof(ctx2, validProofEpochBlockHeight)
 	assert.True(t, found)
 	assert.Equal(t, validProofEpoch2, actualProof)
 }
