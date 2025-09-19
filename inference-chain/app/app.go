@@ -320,6 +320,8 @@ func New(
 
 	app.setAnteHandler(app.txConfig, wasmConfig, app.GetKey(wasmtypes.StoreKey))
 
+	app.registerMigrations()
+
 	// Setup upgrade handlers if needed
 	app.setupUpgradeHandlers()
 

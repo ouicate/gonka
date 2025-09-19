@@ -162,7 +162,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.Raw
 
 // ConsensusVersion is a sequence number for state-breaking change of the module.
 // It should be incremented on each consensus-breaking change introduced by the module.
-func (AppModule) ConsensusVersion() uint64 { return 4 }
+func (AppModule) ConsensusVersion() uint64 { return 5 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 func (am AppModule) BeginBlock(ctx context.Context) error {
@@ -199,7 +199,7 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 	am.LogInfo("Inference expired, not finished. Issuing refund", types.Inferences, "inferenceId", inference.InferenceId, "executor", inference.AssignedTo)
 	inference.Status = types.InferenceStatus_EXPIRED
 	inference.ActualCost = 0
-	err := am.keeper.IssueRefund(ctx, uint64(inference.EscrowAmount), inference.RequestedBy, "expired_inference:"+inference.InferenceId)
+	err := am.keeper.IssueRefund(ctx, inference.EscrowAmount, inference.RequestedBy, "expired_inference:"+inference.InferenceId)
 	if err != nil {
 		am.LogError("Error issuing refund", types.Inferences, "error", err)
 	}
@@ -238,7 +238,15 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 
 	partialUpgrades := am.keeper.GetAllPartialUpgrade(ctx)
 	for _, pu := range partialUpgrades {
-		if pu.Height < uint64(blockHeight) {
+		if pu.Height == uint64(blockHeight) {
+			if pu.NodeVersion != "" {
+				am.LogInfo("PartialUpgradeActive - updating current MLNode version", types.Upgrades,
+					"partialUpgradeHeight", pu.Height, "blockHeight", blockHeight, "nodeVersion", pu.NodeVersion)
+				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
+					CurrentVersion: pu.NodeVersion,
+				})
+			}
+		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
 			am.keeper.RemovePartialUpgrade(ctx, pu.Height)
 		}
@@ -251,12 +259,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	// and allow time for api nodes to load models on ml nodes.
 
 	if epochContext.IsEndOfPoCValidationStage(blockHeight) {
-		am.LogInfo("onEndOfPoCValidationStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onEndOfPoCValidationStage", types.Stages, "blockHeight", blockHeight)
 		am.onEndOfPoCValidationStage(ctx, blockHeight, blockTime)
 	}
 
 	if epochContext.IsSetNewValidatorsStage(blockHeight) {
-		am.LogInfo("onSetNewValidatorsStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onSetNewValidatorsStage", types.Stages, "blockHeight", blockHeight)
 		am.onSetNewValidatorsStage(ctx, blockHeight, blockTime)
 		am.keeper.SetEffectiveEpochIndex(ctx, getNextEpochIndex(*currentEpoch))
 	}
@@ -265,7 +273,7 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		upcomingEpoch := createNewEpoch(*currentEpoch, blockHeight)
 		am.keeper.SetEpoch(ctx, upcomingEpoch)
 
-		am.LogInfo("NewPocStart", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:PocStart", types.Stages, "blockHeight", blockHeight)
 		newGroup, err := am.keeper.CreateEpochGroup(ctx, uint64(blockHeight), upcomingEpoch.Index)
 		if err != nil {
 			am.LogError("Unable to create epoch group", types.EpochGroup, "error", err.Error())
