@@ -223,7 +223,6 @@ func addParticipantToGenesis(cdc codec.Codec, genesisState map[string]json.RawMe
 		ModelList         json.RawMessage              `json:"model_list"`
 		CosmWasmParams    json.RawMessage              `json:"cosm_wasm_params"`
 		ParticipantList   []inferencetypes.Participant `json:"participant_list"`
-		MlnodeVersion     string                       `json:"mlnode_version"`
 	}
 
 	// Fetch existing module state
