@@ -5340,7 +5340,9 @@
           "current_epoch_stats": {}
         }
       ],
-      "mlnode_version": "v3.0.9"
+      "mlnode_version": {
+        "current_version": "v3.0.9"
+      }
     },
     "interchainaccounts": {
       "controller_genesis_state": {
