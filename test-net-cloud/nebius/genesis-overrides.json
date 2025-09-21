@@ -62,7 +62,7 @@
     },
     "inference": {
       "mlnode_version": {
-        "current_version": "v3.0.9"
+        "current_version": "v3.0.8"
       },
       "params": {
         "epoch_params": {
