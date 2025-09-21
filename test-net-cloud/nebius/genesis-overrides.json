@@ -61,6 +61,9 @@
       }
     },
     "inference": {
+      "mlnode_version": {
+        "current_version": "v3.0.9"
+      },
       "params": {
         "epoch_params": {
         "epoch_length": "220",
