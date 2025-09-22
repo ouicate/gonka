@@ -57,7 +57,7 @@ def load_config_from_env():
         "RPC_SERVER_URL_2": "http://89.169.111.79:26657",
         "PORT": "8080",
         "INFERENCE_PORT": "5050",
-        "KEYRING_BACKEND": "file",
+        "KEYRING_BACKEND": "test",
         "SYNC_WITH_SNAPSHOTS": "true",
     }
     
