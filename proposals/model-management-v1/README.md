@@ -77,9 +77,9 @@ The broker populates epoch-specific data in `NodeState.EpochModels` and `NodeSta
 
 **Persistence**: Node disabling is recorded both locally in broker state and persistently on-chain through hardware node status updates, ensuring consistent exclusion from network operations.
 
-## Current System Behavior: Inference Execution and Punishment
+### 4. Inference Execution with Inaccessible APIs
 
-### Inference Execution with Inaccessible APIs
+**Question**: What if executor APIs are not accessible? Do we still publish inference requests with unavailable APIs?
 
 **Current Behavior**: The system publishes inference start requests regardless of executor API accessibility:
 
@@ -89,25 +89,42 @@ The broker populates epoch-specific data in `NodeState.EpochModels` and `NodeSta
 - Failed requests result in inference expiration through `handleExpiredInference()`, which issues refunds and increments the executor's `MissedRequests` counter
 - No fallback mechanism exists - each inference request is bound to a single selected executor
 
-### Participant Punishment for Missed Inferences
+### 5. Participant Punishment for Missed Inferences
 
-**Current Behavior**: The system tracks missed inferences and applies financial penalties:
+**Question**: If a participant misses many inferences, how do we punish them?
+
+**Current Behavior**: The system tracks missed inferences and applies financial penalties, but does NOT change participant status to `INVALID`:
 
 - **Tracking**: Each expired inference increments `executor.CurrentEpochStats.MissedRequests` in `handleExpiredInference()`
 - **Downtime Slashing**: At epoch end, `CheckAndSlashForDowntime()` calculates missed request percentage and slashes collateral if it exceeds `DowntimeMissedPercentageThreshold` (default 5%)
 - **Slash Amount**: Participants lose `SlashFractionDowntime` (default 10%) of their total collateral for excessive downtime
-- **Validation Penalties**: Participants with invalid inference results have their `InvalidatedInferences` count increased and face potential status changes to `INVALID`
-- **Status Calculation**: The `calculateStatus()` function uses z-score analysis and consecutive failure probability to determine if participants should be marked as `INVALID`
+- **No Status Change**: Missed inferences result in financial penalties but do NOT cause participants to be marked as `INVALID` - they remain `ACTIVE` and can continue participating in epochs
+- **Separate System**: Invalid inference results (quality issues) are handled separately through validation and can lead to `INVALID` status via `calculateStatus()` function
 
-### Jailing and Exclusion Mechanisms
+### 6. Jailing and Exclusion Mechanisms
 
-**Current Behavior**: The system implements a jailing mechanism through the collateral module:
+**Question**: If a participant misses many inferences sequentially, what are the consequences? Are they excluded from rewards and work?
 
-- **Jailing Status**: Participants can be marked as jailed through `SetJailed()` in the collateral keeper, with status checked via `IsJailed()`
-- **Reward Exclusion**: In `CalculateParticipantBitcoinRewards()`, participants with `ParticipantStatus_INVALID` are explicitly excluded from PoC weight calculations and receive zero `RewardCoins`
-- **Work Exclusion**: Invalid participants are excluded from epoch formation and cannot receive inference assignments
-- **Recovery**: Jailed participants can be released through `RemoveJailed()`, but the specific recovery conditions and processes are not automatically defined
-- **Persistence**: Jailed status is stored on-chain and persists across epochs until explicitly removed
+**Current Behavior**: The system does NOT jail participants for missing inferences. Missing inferences only results in financial penalties:
+
+- **No Inference Jailing**: Missing many inferences does NOT trigger jailing - participants face only financial penalties through collateral slashing
+- **Validator Jailing Only**: `SetJailed()` is only called through staking hooks when validators are jailed for standard Cosmos issues (e.g., downtime, double-signing)
+- **INVALID Status Instead**: Participants with quality issues (invalid inference results) are marked as `ParticipantStatus_INVALID`, which excludes them from rewards and work
+- **Reward Exclusion**: `INVALID` participants are excluded from PoC weight calculations in `CalculateParticipantBitcoinRewards()` and receive zero rewards
+- **No Automatic Recovery**: `INVALID` status persists until manually changed through governance or other mechanisms
+
+### 7. On-Chain StartInference Without HTTP Request
+
+**Question**: What happens if a transfer node posts StartInference on-chain but doesn't send the actual HTTP request to the executor? Will the executor listen for that event and react?
+
+**Current Behavior**: Executors do NOT listen for StartInference events on-chain and only respond to HTTP requests:
+
+- **No Event Listening**: Executors have no event handlers for StartInference events - they only listen for `inference_finished`, BLS events, and training events
+- **HTTP-Only Execution**: Executors only process inferences when they receive HTTP requests at their `/v1/chat/completions` endpoint
+- **Dual Publishing**: Transfer nodes publish both on-chain (`StartInference` message) and HTTP request simultaneously in `post_chat_handler.go`
+- **Orphaned Requests**: If a transfer node posts StartInference but fails to send the HTTP request, the on-chain request will remain `STARTED` status but never be processed
+- **Automatic Expiration**: Orphaned requests eventually expire through `handleExpiredInference()` after `ExpirationBlocks`, resulting in refunds and incrementing the assigned executor's `MissedRequests` counter
+- **No Executor Penalty**: The executor is not at fault and receives a missed request penalty despite never receiving the actual work
 
 ## Implementation References
 
@@ -264,3 +281,129 @@ The broker populates epoch-specific data in `NodeState.EpochModels` and `NodeSta
 - All changes must maintain backward compatibility during transition periods
 - Model alternative chains must prevent circular references
 - Disabled node exclusion must be atomic across all network operations
+
+### 4. Enhanced Punishment for Missing Inferences
+
+**Problem**: Participants who miss inferences still receive full rewards during claim settlement. The current reward distribution in `GetSettleAmounts()` doesn't account for missed inference performance, allowing participants to collect full rewards despite poor service availability.
+
+**Solution**: Implement statistical analysis for missed inferences during reward settlement and add sequential tracking with jailing for persistent failures.
+
+**Changes Required**:
+
+**File**: `inference-chain/x/inference/keeper/accountsettle.go`
+- **Function**: `GetSettleAmounts()`
+- **Current Logic**: Calculates rewards without considering missed inference statistics
+- **New Logic**: 
+  1. Before reward calculation, calculate participant's missed inference percentage
+  2. Apply graduated penalties based on three-tier threshold system:
+     - Minor (2.0%): Warning only, no penalty
+     - Moderate (3.5%): 25% reward reduction
+     - Major (5.0%): Full collateral slashing (existing) + zero rewards
+  3. Log penalties applied based on threshold exceeded
+- **Add Parameters**: Three-tier threshold system:
+  - `MissedInferenceMinorThreshold` (default: 2.0% - warning level)
+  - `MissedInferenceModeratethreshold` (default: 3.5% - partial penalty)  
+  - `MissedInferenceMajorThreshold` (default: 5.0% - matches current collateral slashing threshold)
+
+**File**: `inference-chain/proto/inference/inference/participant.proto`
+- **Message**: `Participant`
+- **Addition**: Add fields for sequential missed inference tracking:
+  - `int64 last_missed_inference_block = 15;` - Block height of last missed inference
+  - `int64 sequential_missed_inferences = 16;` - Counter for consecutive missed inferences
+- **Regeneration**: Run `make proto-gen` to update participant structures
+
+**File**: `inference-chain/x/inference/module/module.go`
+- **Function**: `handleExpiredInference()`
+- **Current Logic**: Only increments `MissedRequests` counter
+- **New Logic**: 
+  1. After incrementing `MissedRequests`, check if current block height differs from `LastMissedInferenceBlock`
+  2. If different block, increment `SequentialMissedInferences` and update `LastMissedInferenceBlock`
+  3. If `SequentialMissedInferences >= SequentialMissedInferenceThreshold` (default: 50), call staking module to jail the participant's validator
+  4. Reset counter on successful inference completion
+
+### 5. Exclude PoC Weight from Jailed Participants
+
+**Problem**: Jailed participants continue to receive PoC weight and participate in consensus despite being penalized by the staking module.
+
+**Solution**: Add jailed status checks during PoC weight calculations and epoch formation.
+
+**Changes Required**:
+
+**File**: `inference-chain/x/inference/keeper/bitcoin_rewards.go`
+- **Function**: `GetParticipantPoCWeight()`
+- **Current Logic**: Calculates PoC weight without checking jailed status
+- **New Logic**: 
+  1. Before calculating PoC weight, check if participant is jailed using `collateralKeeper.IsJailed(ctx, participantAddress)`
+  2. Return 0 weight if participant is jailed
+  3. Log exclusions: `k.LogInfo("Excluding jailed participant from PoC weight", "participant", participant)`
+
+**File**: `inference-chain/x/inference/module/model_assignment.go`
+- **Function**: `setModelsForParticipants()`
+- **Current Logic**: Processes all active participants without jailed status checks
+- **New Logic**: 
+  1. After retrieving active participants, filter out jailed participants
+  2. Use `collateralKeeper.IsJailed()` to check each participant's jailed status
+  3. Exclude jailed participants from all epoch formation processes
+
+### 6. Punishment for Missing Validations During Reward Claims
+
+**Problem**: The current system already prevents participants from claiming rewards if they miss validations, but uses different thresholds than inference penalties and doesn't provide graduated consequences.
+
+**Solution**: Implement separate validation penalty system using the same three-tier thresholds as inference penalties, since missed inference stats are cleared after epoch settlement and cannot be compared.
+
+**Changes Required**:
+
+**File**: `inference-chain/x/inference/keeper/msg_server_claim_rewards.go`
+- **Function**: `ClaimRewards()`
+- **Current Logic**: Binary reward exclusion for missed validations
+- **New Logic**: 
+  1. Calculate participant's missed validation percentage for the current epoch
+  2. Apply graduated penalties using same three-tier threshold system as inference penalties
+  3. Apply penalties to current reward claim: Minor (warning), Moderate (25% reduction), Major (50% reduction)
+  4. This operates independently from inference penalties since inference stats are cleared after settlement
+- **Add Parameters**: Use same three-tier threshold system as inference penalties
+
+### 7. API Node StartInference Event Listening and Orphaned Request Handling
+
+**Problem**: Executors can be unfairly penalized when transfer nodes post StartInference on-chain but fail to send HTTP requests, creating orphaned requests that expire without executor knowledge.
+
+**Solution**: Implement StartInference event listening in API nodes to detect orphaned requests and automatically process them.
+
+**Changes Required**:
+
+**File**: `decentralized-api/internal/event_listener/event_listener.go`
+- **Function**: `NewEventListener()`
+- **Addition**: Add new event handler for StartInference events
+- **New Handler**: `StartInferenceEventHandler` to process on-chain inference requests
+
+**File**: `decentralized-api/internal/event_listener/event_listener.go`
+- **Add Handler**: `StartInferenceEventHandler`
+- **Implementation**: Create new event handler that tracks on-chain requests and compares with received HTTP requests, automatically processing inferences if no HTTP request received within timeout
+
+**File**: `decentralized-api/internal/event_listener/inference_tracker.go`
+- **New File**: Create in-memory tracking system for inference requests
+- **Structure**: Track both on-chain requests and HTTP requests with timestamps
+- **Functions**:
+  - `TrackOnChainRequest()` - Record StartInference events
+  - `TrackHTTPRequest()` - Record received HTTP requests
+  - `CheckOrphanedRequests()` - Identify requests without corresponding HTTP calls
+  - `ProcessOrphanedRequest()` - Automatically handle orphaned inferences
+
+**File**: `decentralized-api/internal/server/public/post_chat_handler.go`
+- **Function**: `handleTransferRequest()`
+- **Addition**: After processing HTTP request, mark it as received in `InferenceRequestTracker`
+- **New Logic**: Call `tracker.TrackHTTPRequest(inferenceUUID)` to record HTTP request receipt
+
+**Implementation Priority**:
+1. **Sequential Missed Inference Tracking** - Critical for preventing persistent bad actors
+2. **Statistical Punishment Systems** - Important for fair resource allocation
+3. **Jailed Participant Exclusion** - Consistency with Cosmos staking principles
+4. **StartInference Event Listening** - Fairness improvement for executors
+
+**New Parameters Required**:
+- **Three-Tier Threshold System** (applies to both inferences and validations):
+  - `MinorThreshold` (default: 2.0% - warning level)
+  - `ModerateThreshold` (default: 3.5% - partial penalty)
+  - `MajorThreshold` (default: 5.0% - matches current collateral slashing, full penalty)
+- `SequentialMissedInferenceThreshold` (default: 50)
+- `OrphanedRequestTimeout` (default: 30 seconds)
