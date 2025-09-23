@@ -155,13 +155,13 @@ func (k msgServer) validateClaim(ctx sdk.Context, msg *types.MsgClaimRewards, se
 	}
 
 	// Check for missed validations
-	if validationMissedSignificanct, err := k.checkMissedValidationsSignificance(ctx, msg); err != nil {
+	if validationMissedSignificance, err := k.checkMissedValidationsSignificance(ctx, msg); err != nil {
 		k.LogError("Failed to check for missed validations", types.Claims, "error", err)
 		return &types.MsgClaimRewardsResponse{
 			Amount: 0,
 			Result: "Failed to check for missed validations",
 		}, err
-	} else if validationMissedSignificanct {
+	} else if validationMissedSignificance {
 		k.LogError("Inference validation missed significantly", types.Claims, "account", msg.Creator)
 		// TODO: Report that validator has missed validations
 		return &types.MsgClaimRewardsResponse{

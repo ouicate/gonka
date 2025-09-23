@@ -121,6 +121,9 @@ var criticalValueTable = []Threshold{
 // MissedStatTest performs a deterministic, on-chain safe check using a pre-computed lookup table.
 // It returns 'true' if the number of misses is acceptable (test passes).
 func MissedStatTest(nMissed, nTotal int) (bool, error) {
+	if nTotal == 0 {
+		return true, nil
+	}
 	if nMissed < 0 || nTotal <= 0 || nMissed > nTotal {
 		return false, errors.New("invalid input: requires 0 <= nMissed <= nTotal and nTotal > 0")
 	}
