@@ -75,6 +75,9 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		var newMLNodeArrays []*types.ModelMLNodes
 
 		supportedModelsByNode := supportedModelsByNode(hardwareNodes, governanceModels)
+		for nodeId, supportedModels := range supportedModelsByNode {
+			ma.LogInfo("Supported models by node", types.EpochGroup, "flow_context", flowContext, "step", "supported_models_by_node", "node_id", nodeId, "supported_models", supportedModels)
+		}
 
 		// For each governance model, pick the available MLNodes that have the model as first supported model
 		for _, model := range governanceModels {
