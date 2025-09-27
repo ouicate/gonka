@@ -3,7 +3,9 @@ package event_listener
 import (
 	"context"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -147,6 +149,8 @@ func TestProcessBlock_ParsesEvents(t *testing.T) {
 	}
 
 	// Expect 3 messages (one per tx)
+	eventTypeToAttrCount := make(map[string]int)
+	eventTypeToAttrNames := make(map[string]map[string]int)
 	for i := 0; i < 3; i++ {
 		select {
 		case <-time.After(1 * time.Second):
@@ -165,7 +169,39 @@ func TestProcessBlock_ParsesEvents(t *testing.T) {
 			if len(ev.Result.Events["inference_finished.inference_id"]) == 0 {
 				t.Fatalf("expected inference_finished.inference_id in events")
 			}
+
+			// accumulate stats by event type
+			for k, vals := range ev.Result.Events {
+				parts := strings.SplitN(k, ".", 2)
+				etype := parts[0]
+				eventTypeToAttrCount[etype] += len(vals)
+				if _, ok := eventTypeToAttrNames[etype]; !ok {
+					eventTypeToAttrNames[etype] = make(map[string]int)
+				}
+				aname := ""
+				if len(parts) > 1 {
+					aname = parts[1]
+				}
+				eventTypeToAttrNames[etype][aname] += len(vals)
+			}
 		}
+	}
+
+	// Log stats for mock
+	types := make([]string, 0, len(eventTypeToAttrCount))
+	for k := range eventTypeToAttrCount {
+		types = append(types, k)
+	}
+	sort.Strings(types)
+	for _, et := range types {
+		attrMap := eventTypeToAttrNames[et]
+		attrNames := make([]string, 0, len(attrMap))
+		for n := range attrMap {
+			attrNames = append(attrNames, n)
+		}
+		sort.Strings(attrNames)
+		// print top-level count and a compact attribute list
+		t.Logf("mock stats: type=%s total_attrs=%d distinct_attrs=%d", et, eventTypeToAttrCount[et], len(attrNames))
 	}
 }
 
@@ -206,6 +242,8 @@ func TestProcessBlock_RealNodeParse(t *testing.T) {
 	}
 
 	received := 0
+	eventTypeToAttrCount := make(map[string]int)
+	eventTypeToAttrNames := make(map[string]map[string]int)
 	deadline := time.After(5 * time.Second)
 	for received < expected {
 		select {
@@ -218,6 +256,44 @@ func TestProcessBlock_RealNodeParse(t *testing.T) {
 			received++
 			// Log parsed event keys for manual inspection
 			t.Logf("event %d: id=%s keys=%d", received, ev.ID, len(ev.Result.Events))
+
+			// accumulate stats by event type
+			for k, vals := range ev.Result.Events {
+				parts := strings.SplitN(k, ".", 2)
+				etype := parts[0]
+				eventTypeToAttrCount[etype] += len(vals)
+				if _, ok := eventTypeToAttrNames[etype]; !ok {
+					eventTypeToAttrNames[etype] = make(map[string]int)
+				}
+				aname := ""
+				if len(parts) > 1 {
+					aname = parts[1]
+				}
+				eventTypeToAttrNames[etype][aname] += len(vals)
+			}
+		}
+	}
+
+	// Print statistics by event type
+	types := make([]string, 0, len(eventTypeToAttrCount))
+	for k := range eventTypeToAttrCount {
+		types = append(types, k)
+	}
+	sort.Strings(types)
+	for _, et := range types {
+		attrMap := eventTypeToAttrNames[et]
+		attrNames := make([]string, 0, len(attrMap))
+		for n := range attrMap {
+			attrNames = append(attrNames, n)
+		}
+		sort.Strings(attrNames)
+		t.Logf("stats: type=%s total_attrs=%d distinct_attrs=%d", et, eventTypeToAttrCount[et], len(attrNames))
+		// Optionally list a few attributes
+		for i, n := range attrNames {
+			if i >= 10 {
+				break
+			}
+			t.Logf("  attr=%s count=%d", n, attrMap[n])
 		}
 	}
 }
