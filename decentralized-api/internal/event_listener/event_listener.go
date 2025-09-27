@@ -32,8 +32,9 @@ const (
 	blsGroupPublicKeyGeneratedEvent   = "inference.bls.EventGroupPublicKeyGenerated"
 	blsThresholdSigningRequestedEvent = "inference.bls.EventThresholdSigningRequested"
 
-	newBlockEventType = "tendermint/event/NewBlock"
-	txEventType       = "tendermint/event/Tx"
+	newBlockEventType      = "tendermint/event/NewBlock"
+	txEventType            = "tendermint/event/Tx"
+	systemBarrierEventType = "decentralized-api/event/Barrier"
 )
 
 // TODO: write tests properly
@@ -315,6 +316,16 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 	case txEventType:
 		if el.hasHandler(event) {
 			el.handleMessage(event, workerName)
+		}
+	case systemBarrierEventType:
+		heights := event.Result.Events["barrier.height"]
+		if len(heights) > 0 {
+			height, err := strconv.ParseInt(heights[0], 10, 64)
+			if err == nil {
+				el.blockObserver.signalAllEventsRead(height)
+			} else {
+				logging.Warn("Invalid barrier height", types.EventProcessing, "value", heights[0], "error", err)
+			}
 		}
 	default:
 		logging.Warn("Unexpected event type received", types.EventProcessing, "type", event.Result.Data.Type)

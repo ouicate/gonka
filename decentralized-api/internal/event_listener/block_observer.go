@@ -120,12 +120,7 @@ func (bo *BlockObserver) Process(ctx context.Context) {
 				if nextHeight > bo.currentBlockHeight.Load() || nextHeight <= 0 {
 					break
 				}
-				if bo.processBlock(ctx, nextHeight) {
-					bo.lastProcessedBlockHeight.Store(nextHeight)
-					if err := bo.ConfigManager.SetLastProcessedHeight(nextHeight); err != nil {
-						logging.Warn("Failed to persist last processed height", types.Config, "error", err)
-					}
-				} else {
+				if !bo.processBlock(ctx, nextHeight) {
 					// stop on fetch error; next status change will retry
 					break
 				}
@@ -172,5 +167,37 @@ func (bo *BlockObserver) processBlock(ctx context.Context, height int64) bool {
 		// Enqueue for processing
 		bo.Queue.In <- msg
 	}
+	// Enqueue a barrier event to signal block completion when consumed
+	barrier := &chainevents.JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      "block-" + strconv.FormatInt(height, 10) + "-barrier",
+		Result: chainevents.Result{
+			Query:  "block_monitor/Barrier",
+			Data:   chainevents.Data{Type: systemBarrierEventType, Value: map[string]interface{}{}},
+			Events: map[string][]string{"barrier.height": {strconv.FormatInt(height, 10)}},
+		},
+	}
+	bo.Queue.In <- barrier
 	return true
+}
+
+// signalAllEventsRead is called once the barrier event for a block
+// has been consumed by a worker, meaning all prior events for that block
+// were dequeued. We can now safely advance lastProcessed height.
+func (bo *BlockObserver) signalAllEventsRead(height int64) {
+	// Only advance if this is the next contiguous height
+	for {
+		expected := bo.lastProcessedBlockHeight.Load() + 1
+		if height != expected {
+			return
+		}
+		if bo.lastProcessedBlockHeight.CompareAndSwap(expected-1, height) {
+			// Persist after advancing
+			if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
+				logging.Warn("Failed to persist last processed height", types.Config, "error", err)
+			}
+			return
+		}
+		// CAS failed due to race; retry loop
+	}
 }
