@@ -3,6 +3,7 @@ package startup
 import (
 	"context"
 	"decentralized-api/apiconfig"
+	"decentralized-api/chainphase"
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/validation"
 	"decentralized-api/logging"
@@ -12,8 +13,20 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
+type RewardRecoveryChecker struct {
+	launchBlockHeight       uint64
+	lastRecoveryBlockHeight uint64
+	phaseTracker            *chainphase.ChainPhaseTracker
+}
+
+func RecoverIfNeeded(
+	currentBlockHeight uint64,
+) {
+	// WIP
+}
+
 // AutoRewardRecovery checks for unclaimed settle amounts and attempts to recover rewards on startup
-func AutoRewardRecovery(
+func (c *RewardRecoveryChecker) AutoRewardRecovery(
 	recorder *cosmosclient.InferenceCosmosClient,
 	validator *validation.InferenceValidator,
 	configManager *apiconfig.ConfigManager,
