@@ -57,6 +57,27 @@ func NewBlockObserver(manager *apiconfig.ConfigManager) *BlockObserver {
 	return bo
 }
 
+// NewBlockObserverWithClient allows injecting a custom Tendermint RPC client (used in tests)
+func NewBlockObserverWithClient(manager *apiconfig.ConfigManager, client TmHTTPClient) *BlockObserver {
+	queue := NewUnboundedQueue[*chainevents.JSONRPCResponse]()
+
+	bo := &BlockObserver{
+		ConfigManager: manager,
+		Queue:         queue,
+		tmClient:      client,
+		notify:        make(chan struct{}, 1),
+	}
+
+	bo.lastProcessedBlockHeight.Store(manager.GetLastProcessedHeight())
+	bo.currentBlockHeight.Store(manager.GetHeight())
+	bo.caughtUp.Store(false)
+
+	if bo.lastProcessedBlockHeight.Load() == 0 && bo.currentBlockHeight.Load() > 0 {
+		bo.lastProcessedBlockHeight.Store(bo.currentBlockHeight.Load() - 1)
+	}
+	return bo
+}
+
 // UpdateStatus sets both height and caughtUp atomically and signals processing only if changed
 func (bo *BlockObserver) updateStatus(newHeight int64, caughtUp bool) {
 	prevHeight := bo.currentBlockHeight.Load()
