@@ -192,31 +192,32 @@ func (bo *BlockObserver) processBlock(ctx context.Context, height int64) bool {
 // were dequeued. We can now safely advance lastProcessed height.
 func (bo *BlockObserver) signalAllEventsRead(height int64) {
 	// Only advance if this is the next contiguous height
-	for {
-		// TODO: check contiguity?
-		if height < bo.lastProcessedBlockHeight.Load() {
-			logging.Warn("BlockObserver: signalAllEventsRead called for out-of-order block", types.EventProcessing, "height", height)
-		} else if height == bo.lastProcessedBlockHeight.Load() {
-			// Already processed
-			logging.Warn("BlockObserver: signalAllEventsRead called for already processed block", types.EventProcessing, "height", height)
-		} else {
-			bo.lastProcessedBlockHeight.Store(height)
-			if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
-				logging.Warn("BlockObserver: Failed to persist last processed height", types.Config, "error", err)
-			}
+	// TODO: check contiguity?
+	if height < bo.lastProcessedBlockHeight.Load() {
+		logging.Warn("BlockObserver: signalAllEventsRead called for out-of-order block", types.EventProcessing, "height", height)
+	} else if height == bo.lastProcessedBlockHeight.Load() {
+		// Already processed
+		logging.Warn("BlockObserver: signalAllEventsRead called for already processed block", types.EventProcessing, "height", height)
+	} else {
+		bo.lastProcessedBlockHeight.Store(height)
+		if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
+			logging.Warn("BlockObserver: Failed to persist last processed height", types.Config, "error", err)
 		}
-
-		/*		expected := bo.lastProcessedBlockHeight.Load() + 1
-				if height != expected {
-					return
-				}
-				if bo.lastProcessedBlockHeight.CompareAndSwap(expected-1, height) {
-					// Persist after advancing
-					if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
-						logging.Warn("Failed to persist last processed height", types.Config, "error", err)
-					}
-					return
-				}*/
-		// CAS failed due to race; retry loop
 	}
+	/*
+			for {
+				expected := bo.lastProcessedBlockHeight.Load() + 1
+					if height != expected {
+						return
+					}
+					if bo.lastProcessedBlockHeight.CompareAndSwap(expected-1, height) {
+						// Persist after advancing
+						if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
+							logging.Warn("Failed to persist last processed height", types.Config, "error", err)
+						}
+						return
+					}
+			// CAS failed due to race; retry loop
+		}
+	*/
 }
