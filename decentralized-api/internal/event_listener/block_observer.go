@@ -118,6 +118,17 @@ func (bo *BlockObserver) Process(ctx context.Context) {
 			if !bo.caughtUp.Load() {
 				continue
 			}
+
+			if bo.lastQueriedBlockHeight.Load() == 0 {
+				currentHeight := bo.currentBlockHeight.Load()
+				if currentHeight <= 0 {
+					continue
+				} else {
+					bo.lastQueriedBlockHeight.Store(currentHeight - 1)
+					bo.updateLastProcessed(currentHeight - 1)
+				}
+			}
+
 			// Process as many contiguous blocks as available (based on lastQueried)
 			for {
 				nextHeight := bo.lastQueriedBlockHeight.Load() + 1
@@ -199,9 +210,13 @@ func (bo *BlockObserver) signalAllEventsRead(height int64) {
 		// Already processed
 		logging.Warn("BlockObserver: signalAllEventsRead called for already processed block", types.EventProcessing, "height", height)
 	} else {
-		bo.lastProcessedBlockHeight.Store(height)
-		if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
-			logging.Warn("BlockObserver: Failed to persist last processed height", types.Config, "error", err)
-		}
+		bo.updateLastProcessed(height)
+	}
+}
+
+func (bo *BlockObserver) updateLastProcessed(height int64) {
+	bo.lastProcessedBlockHeight.Store(height)
+	if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
+		logging.Warn("BlockObserver: Failed to persist last processed height", types.Config, "error", err)
 	}
 }
