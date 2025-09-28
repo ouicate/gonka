@@ -90,26 +90,41 @@ class ModelWrapper(torch.nn.Module):
             init_time = time.time() - start_time
             logger.info(f"Model initialized in {init_time:.2f}s | {count_params(model)} params")
 
-            try:
-                max_memory = {}
-                for device in devices:
-                    device_id = device.index
-                    max_memory[device_id] = f"{get_total_GPU_memory(device_id)}MB"
-                max_memory = get_balanced_memory(model, max_memory=max_memory)
-                device_map = infer_auto_device_map(
-                    model,
-                    max_memory=max_memory,
-                    no_split_module_classes=["TransformerBlock"],
-                    dtype=dtype
-                )
-                logger.info(f"Inferred device map: {device_map}")
-                model = dispatch_model(model, device_map=device_map)
-                logger.info("Multi-GPU distribution successful")
-            except Exception as e:
-                logger.error(f"Multi-GPU distribution failed: {e}")
-                logger.error("Falling back to single GPU")
-                raise e
-            
+            if len(devices) > 1:
+                try:
+                    max_memory = {}
+                    for device in devices:
+                        device_id = device.index
+                        max_memory[device_id] = f"{get_total_GPU_memory(device_id)}MB"
+                    max_memory = get_balanced_memory(model, max_memory=max_memory)
+                    device_map = infer_auto_device_map(
+                        model,
+                        max_memory=max_memory,
+                        no_split_module_classes=["TransformerBlock"],
+                        dtype=dtype
+                    )
+                    if "cpu" in device_map.values():
+                        raise MemoryError("Model does not fit in available GPU VRAM and CPU fallback is disabled.")
+                    logger.info(f"Inferred device map: {device_map}")
+                    model = dispatch_model(model, device_map=device_map)
+                    logger.info("Multi-GPU distribution successful")
+                except Exception as e:
+                    logger.error(f"Multi-GPU distribution failed: {e}")
+                    logger.error("Cannot initialize model on multiple GPUs.")
+                    raise e
+            else:
+                logger.info(f"Moving model to single device: {devices[0]}")
+                if devices[0].type != "cuda":
+                    raise RuntimeError(f"Expected CUDA device, got {devices[0]}")
+                try:
+                    model.to(devices[0])
+                except torch.cuda.OutOfMemoryError as e:
+                    logger.error("Single-GPU placement OOM; model does not fit in GPU VRAM.")
+                    raise MemoryError("Model does not fit in available GPU VRAM.") from e
+                except RuntimeError as e:
+                    logger.error(f"Failed to move model to device {devices[0]}: {e}")
+                    raise
+
             model.eval()
             model.requires_grad_(False)
 

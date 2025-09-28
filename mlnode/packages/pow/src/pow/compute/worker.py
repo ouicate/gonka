@@ -58,17 +58,23 @@ class Worker(multiprocessing.Process):
         self.last_report_time = 0  # Track last time debug was printed
 
     def run(self):
-        self.compute = Compute(
-            params=self.params,
-            block_hash=self.block_hash,
-            block_height=self.block_height,
-            public_key=self.public_key,
-            r_target=self.r_target,
-            devices=self.devices,
-            node_id=self.node_id,
-        )
-        self.model_init_event.set()
-        logger.info(f"[{self.id}] Worker initiated and models are created")
+        try:
+            time.sleep(self.id * 1)
+            self.compute = Compute(
+                params=self.params,
+                block_hash=self.block_hash,
+                block_height=self.block_height,
+                public_key=self.public_key,
+                r_target=self.r_target,
+                devices=self.devices,
+                node_id=self.node_id,
+            )
+            self.model_init_event.set()
+            logger.info(f"[{self.id}] Worker initiated and models are created")
+        except Exception as e:
+            logger.critical(f"[{self.id}] Worker failed to initialize and will be terminated. Error: {e}")
+            self.cleanup()
+            return
 
         while True:
             current_phase = self.phase.value

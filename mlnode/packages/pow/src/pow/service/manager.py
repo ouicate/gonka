@@ -117,6 +117,13 @@ class PowManager(IManager):
         if self.pow_sender.is_alive():
             logger.warning("Sender process did not stop within the timeout period")
 
+        # Ensure any leftover worker processes are force-terminated
+        try:
+            if self.pow_controller is not None:
+                self.pow_controller.terminate()
+        except Exception as e:
+            logger.warning(f"Failed to terminate PoW controller processes: {e}")
+
         self.pow_controller = None
         self.pow_sender = None
         self.init_request = None
