@@ -54,13 +54,15 @@ func (m *mockTmHTTPClient) BlockResults(ctx context.Context, height *int64) (*co
 func TestBlockObserver_StressBackpressure(t *testing.T) {
 	// Arrange
 	manager := &apiconfig.ConfigManager{}
-	bo := NewBlockObserverWithClient(manager, newMockTmHTTPClient(10))
 	// Inject mock RPC client
 	const (
 		totalBlocks = 200
-		txsPerBlock = 10
+		txsPerBlock = 1000
 	)
-	bo.tmClient = newMockTmHTTPClient(txsPerBlock)
+	mock := newMockTmHTTPClient(txsPerBlock)
+	bo := NewBlockObserverWithClient(manager, mock)
+	// Ensure the mock is used
+	bo.tmClient = mock
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,8 +74,9 @@ func TestBlockObserver_StressBackpressure(t *testing.T) {
 	// Simulate slow consumer: delay before starting reads
 	time.Sleep(100 * time.Millisecond)
 
-	// Consume events slowly but ensure we eventually read them all (including barrier per block)
-	expectedTotal := totalBlocks * (txsPerBlock + 1)
+	// With new semantics, we only process the latest block (totalBlocks),
+	// so expect txs for that block plus one barrier
+	expectedTotal := (txsPerBlock + 1)
 	received := 0
 	deadline := time.After(5 * time.Second)
 	for received < expectedTotal {
@@ -98,6 +101,17 @@ func TestBlockObserver_StressBackpressure(t *testing.T) {
 	// Assert: queried up to the target height
 	if got := bo.lastQueriedBlockHeight.Load(); got != totalBlocks {
 		t.Fatalf("lastQueriedBlockHeight=%d, want %d", got, totalBlocks)
+	}
+
+	// And only fetched exactly one block: the latest height
+	mock.mu.Lock()
+	calls := append([]int64(nil), mock.calls...)
+	mock.mu.Unlock()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly 1 BlockResults call, got %d: %v", len(calls), calls)
+	}
+	if calls[0] != totalBlocks {
+		t.Fatalf("expected fetch at height %d, got %d", totalBlocks, calls[0])
 	}
 }
 
