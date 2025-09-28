@@ -29,6 +29,8 @@ wget https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.3-manual
 echo "9239001463b4aa0bb664779fbd28f62c914b059124b51e9387ad915276223a3c decentralized-api-amd64.zip" | sha256sum -c --status - && echo SUCCESS || echo FAILED
 
 # Install and symlink
+sudo rm -rf .dapi/data/upgrade-info.json
+
 sudo rm -rf .dapi/cosmovisor/upgrades/v0.2.3-patch/bin/
 sudo mkdir -p .dapi/cosmovisor/upgrades/v0.2.3-patch/bin/
 unzip decentralized-api-amd64.zip -d temp-api/
