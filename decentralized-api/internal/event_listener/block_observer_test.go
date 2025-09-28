@@ -232,9 +232,7 @@ func TestProcessBlock_RealNodeParse(t *testing.T) {
 	url := os.Getenv("DAPI_TEST_RPC_URL")
 	heightStr := os.Getenv("DAPI_TEST_BLOCK_HEIGHT")
 	if url == "" || heightStr == "" {
-		url = "http://node2.gonka.ai:26657"
-		heightStr = "530005"
-		// t.Skip("set DAPI_TEST_RPC_URL and DAPI_TEST_BLOCK_HEIGHT to run this test")
+		t.Skip("set DAPI_TEST_RPC_URL and DAPI_TEST_BLOCK_HEIGHT to run this test")
 	}
 
 	h, err := strconv.ParseInt(heightStr, 10, 64)
