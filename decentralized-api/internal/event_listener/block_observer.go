@@ -191,8 +191,8 @@ func (bo *BlockObserver) processBlock(ctx context.Context, height int64) bool {
 // has been consumed by a worker, meaning all prior events for that block
 // were dequeued. We can now safely advance lastProcessed height.
 func (bo *BlockObserver) signalAllEventsRead(height int64) {
-	// Only advance if this is the next contiguous height
-	// TODO: check contiguity?
+	// Future improvement: check contiguity here
+	//  and roll back the lastQueried if some timeout/block difference is exceeded
 	if height < bo.lastProcessedBlockHeight.Load() {
 		logging.Warn("BlockObserver: signalAllEventsRead called for out-of-order block", types.EventProcessing, "height", height)
 	} else if height == bo.lastProcessedBlockHeight.Load() {
@@ -204,20 +204,4 @@ func (bo *BlockObserver) signalAllEventsRead(height int64) {
 			logging.Warn("BlockObserver: Failed to persist last processed height", types.Config, "error", err)
 		}
 	}
-	/*
-			for {
-				expected := bo.lastProcessedBlockHeight.Load() + 1
-					if height != expected {
-						return
-					}
-					if bo.lastProcessedBlockHeight.CompareAndSwap(expected-1, height) {
-						// Persist after advancing
-						if err := bo.ConfigManager.SetLastProcessedHeight(height); err != nil {
-							logging.Warn("Failed to persist last processed height", types.Config, "error", err)
-						}
-						return
-					}
-			// CAS failed due to race; retry loop
-		}
-	*/
 }
