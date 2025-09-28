@@ -13,9 +13,10 @@ import (
 
 type RandomSeedManager interface {
 	GenerateSeedInfo(epochIndex uint64)
-	CreateNewSeed(epoch uint64) (*apiconfig.SeedInfo, error)
+	GetSeedForEpoch(epochIndex uint64) apiconfig.SeedInfo
+	CreateNewSeed(epochIndex uint64) (*apiconfig.SeedInfo, error)
 	ChangeCurrentSeed()
-	RequestMoney()
+	RequestMoney(epochIndex uint64)
 }
 
 type RandomSeedManagerImpl struct {
@@ -75,11 +76,25 @@ func (rsm *RandomSeedManagerImpl) ChangeCurrentSeed() {
 	}
 }
 
-func (rsm *RandomSeedManagerImpl) RequestMoney() {
+func (rsm *RandomSeedManagerImpl) GetSeedForEpoch(epochIndex uint64) apiconfig.SeedInfo {
+	previousSeed := rsm.configManager.GetPreviousSeed()
+	if previousSeed.EpochIndex == epochIndex && previousSeed.Seed != 0 {
+		return previousSeed
+	}
+
+	seed, err := rsm.CreateNewSeed(epochIndex)
+	if err != nil {
+		logging.Error("Failed to create new seed", types.Claims, "error", err)
+		return apiconfig.SeedInfo{}
+	}
+	return *seed
+}
+
+func (rsm *RandomSeedManagerImpl) RequestMoney(epochIndex uint64) {
 	// FIXME: we can also imagine a scenario where we weren't updating the seed for a few epochs
 	//  e.g. generation fails a few times in a row for some reason
 	//  Solution: query seed here?
-	seed := rsm.configManager.GetPreviousSeed()
+	seed := rsm.GetSeedForEpoch(epochIndex)
 
 	logging.Info("IsSetNewValidatorsStage: sending ClaimRewards transaction", types.Claims, "seed", seed)
 	err := rsm.transactionRecorder.ClaimRewards(&inference.MsgClaimRewards{
@@ -91,8 +106,8 @@ func (rsm *RandomSeedManagerImpl) RequestMoney() {
 	}
 }
 
-func (rsm *RandomSeedManagerImpl) CreateNewSeed(epoch uint64) (*apiconfig.SeedInfo, error) {
-	newSeed, err := rsm.createSeedForEpoch(epoch)
+func (rsm *RandomSeedManagerImpl) CreateNewSeed(epochIndex uint64) (*apiconfig.SeedInfo, error) {
+	newSeed, err := rsm.createSeedForEpoch(epochIndex)
 	if err != nil {
 		logging.Error("Failed to get seedBytes", types.Claims, "error", err)
 		return nil, err
@@ -110,7 +125,7 @@ func (rsm *RandomSeedManagerImpl) CreateNewSeed(epoch uint64) (*apiconfig.SeedIn
 
 	return &apiconfig.SeedInfo{
 		Seed:       newSeed,
-		EpochIndex: epoch,
+		EpochIndex: epochIndex,
 		Signature:  hex.EncodeToString(signature),
 	}, nil
 }

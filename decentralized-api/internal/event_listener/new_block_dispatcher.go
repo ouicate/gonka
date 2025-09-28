@@ -352,11 +352,10 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	if epochContext.IsClaimMoneyStage(blockHeight) {
 		logging.Info("DapiStage:IsClaimMoneyStage", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash)
 
-		// Get the previous epoch seed for validation recovery
-		previousSeed := d.configManager.GetPreviousSeed()
-
 		// Calculate previous epoch index
 		expectedPreviousEpochIndex := epochContext.EpochIndex - 1
+		// Get the previous epoch seed for validation recovery
+		previousSeed := d.randomSeedManager.GetSeedForEpoch(expectedPreviousEpochIndex)
 
 		// Verify the seed is from the correct epoch
 		if previousSeed.EpochIndex != expectedPreviousEpochIndex {
@@ -372,7 +371,7 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 			d.executeMissedValidationRecoveryWithSeed(expectedPreviousEpochIndex, previousSeed)
 
 			// Then, claim rewards (this ensures we've validated everything before claiming)
-			d.randomSeedManager.RequestMoney()
+			d.randomSeedManager.RequestMoney(expectedPreviousEpochIndex)
 
 			// Mark the seed as claimed to prevent duplicate claims
 			err := d.configManager.MarkPreviousSeedClaimed()

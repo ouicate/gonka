@@ -142,11 +142,11 @@ func (m *MockRandomSeedManager) ChangeCurrentSeed() {
 	m.Called()
 }
 
-func (m *MockRandomSeedManager) RequestMoney() {
+func (m *MockRandomSeedManager) RequestMoney(epochIndex uint64) {
 	m.Called()
 }
 
-func (m *MockRandomSeedManager) CreateNewSeed(epoch uint64) (*apiconfig.SeedInfo, error) {
+func (m *MockRandomSeedManager) CreateNewSeed(epochIndex uint64) (*apiconfig.SeedInfo, error) {
 	m.Called()
 	return nil, nil
 }
