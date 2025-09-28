@@ -150,6 +150,15 @@ func (m *MockRandomSeedManager) RequestMoney() {
 	m.Called()
 }
 
+func (m *MockRandomSeedManager) CreateNewSeed(epoch uint64) (*apiconfig.SeedInfo, error) {
+	m.Called()
+	return nil, nil
+}
+
+func (m *MockRandomSeedManager) GenerateSeedInfo(epochIndex uint64) {
+	m.Called(epochIndex)
+}
+
 type MockQueryClient struct {
 	mock.Mock
 }
@@ -283,6 +292,8 @@ func createIntegrationTestSetup(reconcilialtionConfig *MlNodeReconciliationConfi
 	mockSeedManager.On("GenerateSeed", mock.AnythingOfType("uint64")).Return()
 	mockSeedManager.On("ChangeCurrentSeed").Return()
 	mockSeedManager.On("RequestMoney").Return()
+	mockSeedManager.On("GenerateSeedInfo", mock.AnythingOfType("uint64")).Return()
+	mockSeedManager.On("CreateNewSeed", mock.AnythingOfType("uint64")).Return()
 
 	var finalReconciliationConfig MlNodeReconciliationConfig
 	if reconcilialtionConfig == nil {
