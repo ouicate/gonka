@@ -33,8 +33,9 @@ const (
 	blsGroupPublicKeyGeneratedEvent   = "inference.bls.EventGroupPublicKeyGenerated"
 	blsThresholdSigningRequestedEvent = "inference.bls.EventThresholdSigningRequested"
 
-	newBlockEventType = "tendermint/event/NewBlock"
-	txEventType       = "tendermint/event/Tx"
+	newBlockEventType      = "tendermint/event/NewBlock"
+	txEventType            = "tendermint/event/Tx"
+	systemBarrierEventType = "decentralized-api/event/Barrier"
 )
 
 // TODO: write tests properly
@@ -53,7 +54,8 @@ type EventListener struct {
 
 	eventHandlers []EventHandler
 
-	ws *websocket.Conn
+	ws            *websocket.Conn
+	blockObserver *BlockObserver
 }
 
 func NewEventListener(
@@ -86,6 +88,8 @@ func NewEventListener(
 		&TrainingTaskAssignedEventHandler{},
 	}
 
+	bo := NewBlockObserver(configManager)
+
 	return &EventListener{
 		nodeBroker:            nodeBroker,
 		transactionRecorder:   transactionRecorder,
@@ -97,6 +101,7 @@ func NewEventListener(
 		cancelFunc:            cancelFunc,
 		blsManager:            blsManager,
 		eventHandlers:         eventHandlers,
+		blockObserver:         bo,
 		rewardRecoveryChecker: startup.NewRewardRecoveryChecker(phaseTracker, &transactionRecorder, validator, configManager),
 	}
 }
@@ -112,17 +117,10 @@ func (el *EventListener) openWsConnAndSubscribe() {
 	}
 	el.ws = ws
 
-	// WARNING: It looks like Tendermint can't support more than 5 subscriptions per websocket
-	// If we want to add more subscription we should subscribe to all TX and filter on our side
+	// Subscribe only to NewBlock events; all Tx events will be polled via BlockObserver
 	subscribeToEvents(el.ws, 1, "tm.event='NewBlock'")
-	// All transactions originating from the inference module
-	subscribeToEvents(el.ws, 2, "tm.event='Tx' AND message.module='inference'")
-	// All transactions originating from the BLS module
-	subscribeToEvents(el.ws, 3, "tm.event='Tx' AND message.module='bls'")
-	// authz transactions
-	subscribeToEvents(el.ws, 4, "tm.event='Tx' AND message.action='/cosmos.authz.v1beta1.MsgExec'")
 
-	logging.Info("All subscription calls in openWsConnAndSubscribe have been made with new combined queries.", types.EventProcessing)
+	logging.Info("Subscribed to NewBlock only; Tx will be polled by BlockObserver.", types.EventProcessing)
 }
 
 func (el *EventListener) Start(ctx context.Context) {
@@ -131,15 +129,17 @@ func (el *EventListener) Start(ctx context.Context) {
 
 	go el.startSyncStatusChecker()
 
-	mainEventQueue := NewUnboundedQueue[*chainevents.JSONRPCResponse]()
-	defer mainEventQueue.Close()
-	el.processEvents(ctx, mainEventQueue)
+	// Start processing of Tx events sourced by BlockObserver
+	el.processEvents(ctx, el.blockObserver.Queue)
 
 	blockEventQueue := NewUnboundedQueue[*chainevents.JSONRPCResponse]()
 	defer blockEventQueue.Close()
 	el.processBlockEvents(ctx, blockEventQueue)
 
-	el.listen(ctx, blockEventQueue, mainEventQueue)
+	// Start BlockObserver
+	go el.blockObserver.Process(ctx)
+
+	el.listen(ctx, blockEventQueue, el.blockObserver.Queue)
 }
 
 func worker(
@@ -236,13 +236,8 @@ func (el *EventListener) listen(ctx context.Context, blockQueue, mainQueue *Unbo
 				continue
 			}
 
-			logging.Info("Adding event to the main event queue (classified as non-NewBlock)", types.EventProcessing, "type", event.Result.Data.Type, "id", event.ID, "subscription_query", event.Result.Query)
-			select {
-			case mainQueue.In <- &event:
-				logging.Debug("Event successfully queued", types.EventProcessing, "type", event.Result.Data.Type, "id", event.ID)
-			default:
-				logging.Error("Event channel full, dropping event", types.EventProcessing, "type", event.Result.Data.Type, "id", event.ID)
-			}
+			// We no longer subscribe to Tx over WS; ignore other event types
+			logging.Debug("Ignoring non-NewBlock WS event", types.EventProcessing, "type", event.Result.Data.Type)
 		}
 	}
 }
@@ -308,6 +303,9 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 			return
 		}
 
+		// Update BlockObserver with latest height and sync status
+		el.blockObserver.updateStatus(blockInfo.Height, el.isNodeSynced())
+
 		// Process using the new dispatcher
 		ctx := context.Background() // We could pass this from caller if needed
 		err = el.dispatcher.ProcessNewBlock(ctx, *blockInfo)
@@ -324,6 +322,16 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 	case txEventType:
 		if el.hasHandler(event) {
 			el.handleMessage(event, workerName)
+		}
+	case systemBarrierEventType:
+		heights := event.Result.Events["barrier.height"]
+		if len(heights) > 0 {
+			height, err := strconv.ParseInt(heights[0], 10, 64)
+			if err == nil {
+				el.blockObserver.signalAllEventsRead(height)
+			} else {
+				logging.Warn("Invalid barrier height", types.EventProcessing, "value", heights[0], "error", err)
+			}
 		}
 	default:
 		logging.Warn("Unexpected event type received", types.EventProcessing, "type", event.Result.Data.Type)
