@@ -104,7 +104,9 @@ class ModelWrapper(torch.nn.Module):
                         dtype=dtype
                     )
                     if "cpu" in device_map.values():
-                        raise MemoryError("Model does not fit in available GPU VRAM and CPU fallback is disabled.")
+                        raise MemoryError("Model does not fit in available GPU and CPU fallback is disabled.")
+                    if "disk" in device_map.values():
+                        raise MemoryError("Model does not fit in available GPU and disk fallback is disabled.")
                     logger.info(f"Inferred device map: {device_map}")
                     model = dispatch_model(model, device_map=device_map)
                     logger.info("Multi-GPU distribution successful")
