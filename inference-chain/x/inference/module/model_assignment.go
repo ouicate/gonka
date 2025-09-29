@@ -48,7 +48,6 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 	}
 	ma.LogInfo("Retrieved governance models", types.EpochGroup, "flow_context", FlowContext, "step", "get_governance_models", "num_models", len(governanceModels))
 
-	preservedNodes := ma.getPreservedNodes(ctx, upcomingEpoch.Index)
 	for _, p := range participants {
 		ma.LogInfo("Processing participant", types.EpochGroup, "flow_context", FlowContext, "step", "participant_loop_start", "participant_index", p.Index)
 		hardwareNodes, found := ma.keeper.GetHardwareNodes(ctx, p.Index)
@@ -65,11 +64,7 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		if len(p.MlNodes) > 0 && p.MlNodes[0] != nil {
 			originalMLNodes = p.MlNodes[0].MlNodes
 		}
-		ma.LogInfo("Original ML nodes before legacy weight distribution", types.EpochGroup, "flow_context", FlowContext, "step", "pre_legacy_distribution", "participant_index", p.Index, "ml_nodes", originalMLNodes)
-
-		// Handle legacy PoC weight distribution for batches without NodeId
-		originalMLNodes = ma.distributeLegacyWeight(originalMLNodes, hardwareNodes, preservedNodes[p.Index])
-		ma.LogInfo("ML nodes after legacy weight distribution", types.EpochGroup, "flow_context", FlowContext, "step", "post_legacy_distribution", "participant_index", p.Index, "ml_nodes", originalMLNodes)
+		ma.LogInfo("Original MLNodes", types.EpochGroup, "flow_context", FlowContext, "step", "pre_legacy_distribution", "participant_index", p.Index, "ml_nodes", originalMLNodes)
 
 		// Set PRE_POC_SLOT to true and POC_SLOT to false for all MLNodes (default to mining PoC)
 		for _, mlNode := range originalMLNodes {
@@ -84,6 +79,9 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		var newMLNodeArrays []*types.ModelMLNodes
 
 		supportedModelsByNode := supportedModelsByNode(hardwareNodes, governanceModels)
+		for nodeId, supportedModels := range supportedModelsByNode {
+			ma.LogInfo("Supported models by node", types.EpochGroup, "flow_context", FlowContext, "step", "supported_models_by_node", "node_id", nodeId, "supported_models", supportedModels)
+		}
 
 		// For each governance model, pick the available MLNodes that have the model as first supported model
 		for _, model := range governanceModels {
@@ -122,14 +120,12 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 				unassignedMLNodes = append(unassignedMLNodes, mlNode)
 			}
 		}
-		if len(unassignedMLNodes) > 0 {
-			newMLNodeArrays = append(newMLNodeArrays, &types.ModelMLNodes{MlNodes: unassignedMLNodes})
-			ma.LogInfo("Added unassigned ML nodes to overflow array", types.EpochGroup, "flow_context", FlowContext, "step", "overflow_nodes", "participant_index", p.Index, "unassigned_nodes", unassignedMLNodes)
-		}
+		ma.LogInfo("Unassigned MLNodes", types.EpochGroup, "flow_context", FlowContext, "step", "unassigned_nodes", "participant_index", p.Index, "unassigned_nodes", unassignedMLNodes)
 
 		// Update participant with reorganized MLNode arrays and supported models
 		p.MlNodes = newMLNodeArrays
 		p.Models = supportedModels
+		p.Weight = RecalculateWeight(p)
 		ma.LogInfo("Participant models and ML nodes updated before 50% allocation", types.EpochGroup, "flow_context", FlowContext, "step", "pre_50_percent_alloc", "participant_index", p.Index, "supported_models", p.Models, "ml_nodes", p.MlNodes)
 
 		ma.apply50PercentWeightAllocation(upcomingEpoch, p, supportedModels)
@@ -208,187 +204,6 @@ func (ma *ModelAssigner) apply50PercentWeightAllocation(upcomingEpoch types.Epoc
 			"pocOnlyNodeIds", pocOnlyNodeIds)
 	}
 	ma.LogInfo("Finished 50% node allocation for participant", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "end", "participant_index", participant.Index)
-}
-
-// distributeLegacyWeight handles legacy PoC batches by distributing weight from
-// MLNodes with empty NodeId among actual hardware nodes
-func (ma *ModelAssigner) distributeLegacyWeight(originalMLNodes []*types.MLNodeInfo, hardwareNodes *types.HardwareNodes, preservedNodes map[string]*types.MLNodeInfo) []*types.MLNodeInfo {
-	ma.LogInfo("Starting legacy weight distribution", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start")
-
-	if len(originalMLNodes) == 0 || hardwareNodes == nil || len(hardwareNodes.HardwareNodes) == 0 {
-		ma.LogInfo("Empty inputs, returning original list.", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "empty_inputs")
-		return originalMLNodes
-	}
-
-	// Find MLNode with empty NodeId (legacy batches)
-	var legacyMLNode *types.MLNodeInfo
-	var legacyIndex int = -1
-
-	for i, mlNode := range originalMLNodes {
-		if mlNode.NodeId == "" {
-			legacyMLNode = mlNode
-			legacyIndex = i
-			break
-		}
-	}
-
-	// If no legacy MLNode found, return original list unchanged
-	if legacyMLNode == nil {
-		ma.LogInfo("No legacy ML Node with empty NodeId found, returning original list.", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "no_legacy_node")
-		return originalMLNodes
-	}
-	ma.LogInfo("Found legacy ML node to distribute weight from", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "found_legacy_node", "legacy_node", legacyMLNode)
-
-	// Remove the legacy MLNode from the list
-	newMLNodes := make([]*types.MLNodeInfo, 0, len(originalMLNodes)-1)
-	newMLNodes = append(newMLNodes, originalMLNodes[:legacyIndex]...)
-	newMLNodes = append(newMLNodes, originalMLNodes[legacyIndex+1:]...)
-
-	hardwareNodesIds := make(map[string]bool)
-	for _, hwNode := range hardwareNodes.HardwareNodes {
-		hardwareNodesIds[hwNode.LocalId] = true
-	}
-	var numPreservedNodes int64
-	for _, preservedNode := range preservedNodes {
-		if _, ok := hardwareNodesIds[preservedNode.NodeId]; ok {
-			numPreservedNodes++
-		}
-	}
-
-	// Calculate weight per hardware node
-	totalLegacyWeight := legacyMLNode.PocWeight
-	numHardwareNodes := int64(len(hardwareNodes.HardwareNodes))
-	numNodesToDistributeWeight := numHardwareNodes - numPreservedNodes
-	if numNodesToDistributeWeight <= 0 {
-		ma.LogInfo("No hardware nodes to distribute weight to, returning original list.", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "no_hardware_nodes")
-		return originalMLNodes
-	}
-	weightPerNode := totalLegacyWeight / numNodesToDistributeWeight
-	remainderWeight := totalLegacyWeight % numNodesToDistributeWeight
-	ma.LogInfo("Calculated weight distribution", types.PoC,
-		"flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_distribution",
-		"total_legacy_weight", totalLegacyWeight,
-		"num_hardware_nodes", numHardwareNodes,
-		"numPreservedNodes", numPreservedNodes,
-		"numNodesToDistributeWeight", numNodesToDistributeWeight,
-		"weight_per_node", weightPerNode,
-		"remainder_weight", remainderWeight)
-
-	newMlNodesMap := make(map[string]*types.MLNodeInfo)
-	for _, mlNode := range newMLNodes {
-		newMlNodesMap[mlNode.NodeId] = mlNode
-	}
-	remainder := &Remainder{RemainderWeightRemaining: remainderWeight}
-	// Distribute weight among hardware nodes
-	// Give weightPerNode to each, then distribute remainder by giving +1 to first nodes until remainder is over
-	for _, hwNode := range hardwareNodes.HardwareNodes {
-		preservedNode, _ := preservedNodes[hwNode.LocalId]
-		nodeId := hwNode.LocalId
-		distributedWeight := weightPerNode
-
-		if distributedWeight <= 0 && !remainder.RemainderLeft() {
-			continue
-		}
-		ma.LogInfo("Distributing weight to hardware node", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "distribute_to_node", "node_id", nodeId, "distributed_weight", distributedWeight)
-
-		// Find existing MLNode for this hardware node
-		existingMLNode := newMlNodesMap[nodeId]
-		if existingMLNode != nil {
-			if preservedNode == nil {
-				distributedWeight += remainder.GetRemainder()
-				existingMLNode.PocWeight += distributedWeight
-			} else {
-				// If preserved node, just set the weight without adding
-				existingMLNode.PocWeight = preservedNode.PocWeight
-			}
-
-			ma.LogInfo("Added weight to existing ML node", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "add_to_existing_node", "node_id", existingMLNode.NodeId, "added_weight", distributedWeight, "new_total_weight", existingMLNode.PocWeight)
-		}
-
-		// If no existing MLNode found, create new one
-		if existingMLNode == nil {
-			var newMLNode *types.MLNodeInfo
-			if preservedNode != nil {
-				newMLNode = preservedNode
-				newMLNode.TimeslotAllocation = []bool{true, false} // Ensure preserved nodes are set to PRE_POC_SLOT=true, POC_SLOT=false
-				ma.LogInfo("Created new ML node from PRESERVED hardware node", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "create_new_ml_node", "node_id", newMLNode.NodeId, "weight", newMLNode.PocWeight)
-			} else {
-				distributedWeight += remainder.GetRemainder()
-				newMLNode = &types.MLNodeInfo{
-					NodeId:     nodeId,
-					PocWeight:  distributedWeight,
-					Throughput: 0, // Will be populated later if needed
-				}
-				ma.LogInfo("Created new ML node for hardware node", types.PoC, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "create_new_ml_node", "node_id", newMLNode.NodeId, "weight", newMLNode.PocWeight)
-			}
-
-			newMLNodes = append(newMLNodes, newMLNode)
-		}
-	}
-
-	ma.LogInfo("Finished distributing legacy PoC weight", types.PoC,
-		"flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "end",
-		"legacyWeight", totalLegacyWeight,
-		"numHardwareNodes", numHardwareNodes,
-		"final_ml_nodes", newMLNodes)
-
-	return newMLNodes
-}
-
-type Remainder struct {
-	RemainderWeightRemaining int64
-}
-
-func (r *Remainder) GetRemainder() int64 {
-	if r.RemainderWeightRemaining > 0 {
-		r.RemainderWeightRemaining--
-		return 1
-	} else {
-		return 0
-	}
-}
-
-func (r *Remainder) RemainderLeft() bool {
-	return r.RemainderWeightRemaining > 0
-}
-
-func (ma *ModelAssigner) getPreservedNodes(ctx context.Context, upcomingEpoch uint64) map[string]map[string]*types.MLNodeInfo {
-	if upcomingEpoch == 1 {
-		ma.LogInfo("ModelAssigner.getPreservedNodes: No preserved nodes for epoch 0", types.EpochGroup, "upcoming_epoch", upcomingEpoch)
-		return nil
-	}
-
-	activeParticipants, found := ma.keeper.GetActiveParticipants(ctx, upcomingEpoch-1)
-	if !found {
-		ma.LogError("ModelAssigner.getPreservedNodes: No active participants found for previous epoch", types.EpochGroup, "upcoming_epoch", upcomingEpoch)
-		return nil
-	}
-
-	result := make(map[string]map[string]*types.MLNodeInfo)
-	for _, p := range activeParticipants.Participants {
-		preservedNodes := make(map[string]*types.MLNodeInfo)
-		for _, nodeArray := range p.MlNodes {
-			for _, n := range nodeArray.MlNodes {
-				if len(n.TimeslotAllocation) > 1 && n.TimeslotAllocation[1] {
-					preservedNodes[n.NodeId] = n
-				}
-			}
-		}
-
-		if len(preservedNodes) > 0 {
-			ma.LogInfo("ModelAssigner.getPreservedNodes. Found preserved nodes for participant", types.EpochGroup,
-				"participant_address", p.Index,
-				"upcoming_epoch", upcomingEpoch,
-				"len(preservedNodes)", len(preservedNodes))
-			result[p.Index] = preservedNodes
-		}
-	}
-
-	ma.LogInfo("ModelAssigner.getPreservedNodes: Completed collecting preserved nodes", types.EpochGroup,
-		"upcoming_epoch", upcomingEpoch,
-		"number_of_participants_with_preserved_nodes", len(result))
-
-	return result
 }
 
 // Helper function to create a map of modelId to supported models
