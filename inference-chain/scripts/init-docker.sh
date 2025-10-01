@@ -193,6 +193,11 @@ if $FIRST_RUN; then
       run "$APP_NAME" set-statesync-trusted-block "$STATE_DIR/config/config.toml" \
           "$SEED_NODE_RPC_URL" "$TRUSTED_BLOCK_PERIOD"
     fi
+
+    if [ "${ARCHIVE_NODE:-false}" = "true" ]; then
+        echo "ARCHIVE_NODE=true → disable state pruning"
+        sed -i -E 's|^[[:space:]]*pruning *=.*|pruning = "nothing"|' "$STATE_DIR/config/app.toml"
+    fi
   else
     cp /root/genesis.json "$GENESIS_FILE"
     
