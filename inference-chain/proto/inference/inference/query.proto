@@ -929,7 +929,9 @@ message QueryGranteesByMessageTypeResponse {
   repeated Grantee grantees = 1;
 }
 
-message QueryTrainingAllowListRequest {}
+message QueryTrainingAllowListRequest {
+  int32 role = 1;
+}
 
 message QueryTrainingAllowListResponse {
   repeated string addresses = 1;

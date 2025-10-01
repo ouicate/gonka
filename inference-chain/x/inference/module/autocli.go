@@ -101,9 +101,9 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "TrainingAllowList",
-					Use:            "training-allow-list",
+					Use:            "training-allow-list [role]",
 					Short:          "Query the current training allow list",
-					PositionalArgs: []*autocliv1.PositionalArgDescriptor{},
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "role"}},
 				},
 				{
 					RpcMethod: "TokenomicsData",
@@ -307,14 +307,6 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Short:          "Get cached capacity for a specific model",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "model_id"}},
 				},
-
-				{
-					RpcMethod:      "TrainingAllowList",
-					Use:            "training-allow-list",
-					Short:          "Query trainingAllowList",
-					PositionalArgs: []*autocliv1.PositionalArgDescriptor{},
-				},
-
 				// this line is used by ignite scaffolding # autocli/query
 			},
 		},

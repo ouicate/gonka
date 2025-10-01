@@ -25,6 +25,8 @@ data class LockTrainingNodesDto(
     val nodeIds: List<String>
 )
 
+
+
 data class MsgAssignTrainingTask(
     override val type: String = "/inference.inference.MsgAssignTrainingTask",
     val creator: String = "",

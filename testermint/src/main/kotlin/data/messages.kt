@@ -56,6 +56,7 @@ data class UpdateRestrictionsParams(
 data class MsgAddUserToTrainingAllowList(
     val authority: String = "",
     val address: String,
+    val role: Int
 ) : GovernanceMessage {
     override val type: String = "/inference.inference.MsgAddUserToTrainingAllowList"
     override fun withAuthority(authority: String): GovernanceMessage {
@@ -66,6 +67,7 @@ data class MsgAddUserToTrainingAllowList(
 data class MsgRemoveUserFromTrainingAllowList(
     val authority: String = "",
     val address: String,
+    val role: Int
 ) : GovernanceMessage {
     override val type: String = "/inference.inference.MsgRemoveUserFromTrainingAllowList"
     override fun withAuthority(authority: String): GovernanceMessage {
@@ -73,9 +75,13 @@ data class MsgRemoveUserFromTrainingAllowList(
     }
 }
 
+const val ROLE_EXEC = 0;
+const val ROLE_START = 1;
+
 data class MsgSetTrainingAllowList(
     val authority: String = "",
     val addresses: List<String>,
+    val role: Int
 ) : GovernanceMessage {
     override val type: String = "/inference.inference.MsgSetTrainingAllowList"
     override fun withAuthority(authority: String): GovernanceMessage {

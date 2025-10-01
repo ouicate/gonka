@@ -31,6 +31,7 @@ func TestMsgSetTrainingAllowList(t *testing.T) {
 	_, err = ms.SetTrainingAllowList(wctx, &types.MsgSetTrainingAllowList{
 		Authority: k.GetAuthority(),
 		Addresses: []string{a2, a1, a2, a3},
+		Role:      types.TrainingRole_ROLE_EXEC,
 	})
 	require.NoError(t, err)
 
@@ -42,13 +43,41 @@ func TestMsgSetTrainingAllowList(t *testing.T) {
 	acc3, e := sdk.AccAddressFromBech32(a3)
 	require.NoError(t, e)
 
-	ok, e := k.TrainingAllowListSet.Has(wctx, acc1)
+	ok, e := k.TrainingExecAllowListSet.Has(wctx, acc1)
 	require.NoError(t, e)
 	require.True(t, ok)
-	ok, e = k.TrainingAllowListSet.Has(wctx, acc2)
+	ok, e = k.TrainingExecAllowListSet.Has(wctx, acc2)
 	require.NoError(t, e)
 	require.True(t, ok)
-	ok, e = k.TrainingAllowListSet.Has(wctx, acc3)
+	ok, e = k.TrainingExecAllowListSet.Has(wctx, acc3)
 	require.NoError(t, e)
 	require.True(t, ok)
+
+	// unauthorized should fail for ROLE_START
+	_, err = ms.SetTrainingAllowList(wctx, &types.MsgSetTrainingAllowList{
+		Authority: "invalid",
+		Addresses: []string{"gonka1hgt9lxxxwpsnc3yn2nheqqy9a8vlcjwvgzpve2"},
+		Role:      types.TrainingRole_ROLE_START,
+	})
+	require.Error(t, err)
+
+	// valid: set with duplicates and unsorted for ROLE_START
+	_, err = ms.SetTrainingAllowList(wctx, &types.MsgSetTrainingAllowList{
+		Authority: k.GetAuthority(),
+		Addresses: []string{a2, a1, a2, a3},
+		Role:      types.TrainingRole_ROLE_START,
+	})
+	require.NoError(t, err)
+
+	// verify store contents equals {a1, a2, a3} for ROLE_START
+	ok, e = k.TrainingStartAllowListSet.Has(wctx, acc1)
+	require.NoError(t, e)
+	require.True(t, ok)
+	ok, e = k.TrainingStartAllowListSet.Has(wctx, acc2)
+	require.NoError(t, e)
+	require.True(t, ok)
+	ok, e = k.TrainingStartAllowListSet.Has(wctx, acc3)
+	require.NoError(t, e)
+	require.True(t, ok)
+
 }

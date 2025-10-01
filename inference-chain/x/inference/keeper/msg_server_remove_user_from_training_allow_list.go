@@ -18,10 +18,17 @@ func (k msgServer) RemoveUserFromTrainingAllowList(goCtx context.Context, msg *t
 	if err != nil {
 		return nil, err
 	}
-	if err := k.TrainingAllowListSet.Remove(ctx, addr); err != nil {
-		return nil, err
+	switch msg.Role {
+	case types.TrainingRole_ROLE_EXEC:
+		if err := k.TrainingExecAllowListSet.Remove(ctx, addr); err != nil {
+			return nil, err
+		}
+	case types.TrainingRole_ROLE_START:
+		if err := k.TrainingStartAllowListSet.Remove(ctx, addr); err != nil {
+			return nil, err
+		}
 	}
-	k.LogInfo("Removed user from training allow list", types.Training, "address", addr)
+	k.LogInfo("Removed user from training allow list", types.Training, "address", addr, "role", msg.Role)
 
 	return &types.MsgRemoveUserFromTrainingAllowListResponse{}, nil
 }
