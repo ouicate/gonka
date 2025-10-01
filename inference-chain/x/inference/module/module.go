@@ -162,7 +162,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.Raw
 
 // ConsensusVersion is a sequence number for state-breaking change of the module.
 // It should be incremented on each consensus-breaking change introduced by the module.
-func (AppModule) ConsensusVersion() uint64 { return 4 }
+func (AppModule) ConsensusVersion() uint64 { return 6 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 func (am AppModule) BeginBlock(ctx context.Context) error {
@@ -199,7 +199,7 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 	am.LogInfo("Inference expired, not finished. Issuing refund", types.Inferences, "inferenceId", inference.InferenceId, "executor", inference.AssignedTo)
 	inference.Status = types.InferenceStatus_EXPIRED
 	inference.ActualCost = 0
-	err := am.keeper.IssueRefund(ctx, uint64(inference.EscrowAmount), inference.RequestedBy, "expired_inference:"+inference.InferenceId)
+	err := am.keeper.IssueRefund(ctx, inference.EscrowAmount, inference.RequestedBy, "expired_inference:"+inference.InferenceId)
 	if err != nil {
 		am.LogError("Error issuing refund", types.Inferences, "error", err)
 	}
@@ -253,7 +253,15 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 
 	partialUpgrades := am.keeper.GetAllPartialUpgrade(ctx)
 	for _, pu := range partialUpgrades {
-		if pu.Height < uint64(blockHeight) {
+		if pu.Height == uint64(blockHeight) {
+			if pu.NodeVersion != "" {
+				am.LogInfo("PartialUpgradeActive - updating current MLNode version", types.Upgrades,
+					"partialUpgradeHeight", pu.Height, "blockHeight", blockHeight, "nodeVersion", pu.NodeVersion)
+				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
+					CurrentVersion: pu.NodeVersion,
+				})
+			}
+		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
 			am.keeper.RemovePartialUpgrade(ctx, pu.Height)
 		}
@@ -266,12 +274,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	// and allow time for api nodes to load models on ml nodes.
 
 	if epochContext.IsEndOfPoCValidationStage(blockHeight) {
-		am.LogInfo("onEndOfPoCValidationStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onEndOfPoCValidationStage", types.Stages, "blockHeight", blockHeight)
 		am.onEndOfPoCValidationStage(ctx, blockHeight, blockTime)
 	}
 
 	if epochContext.IsSetNewValidatorsStage(blockHeight) {
-		am.LogInfo("onSetNewValidatorsStage start", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:onSetNewValidatorsStage", types.Stages, "blockHeight", blockHeight)
 		am.onSetNewValidatorsStage(ctx, blockHeight, blockTime)
 		am.keeper.SetEffectiveEpochIndex(ctx, getNextEpochIndex(*currentEpoch))
 	}
@@ -284,7 +292,7 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 			return err
 		}
 
-		am.LogInfo("NewPocStart", types.Stages, "blockHeight", blockHeight)
+		am.LogInfo("StartStage:PocStart", types.Stages, "blockHeight", blockHeight)
 		newGroup, err := am.keeper.CreateEpochGroup(ctx, uint64(blockHeight), upcomingEpoch.Index)
 		if err != nil {
 			am.LogError("Unable to create epoch group", types.EpochGroup, "error", err.Error())
@@ -410,6 +418,9 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
+	modelAssigner := NewModelAssigner(am.keeper, am.keeper)
+	modelAssigner.setModelsForParticipants(ctx, activeParticipants, *upcomingEpoch)
+
 	// Adjust weights based on collateral after the grace period. This modifies the weights in-place.
 	if err := am.keeper.AdjustWeightsByCollateral(ctx, activeParticipants); err != nil {
 		am.LogError("onSetNewValidatorsStage: failed to adjust weights by collateral", types.Tokenomics, "error", err)
@@ -419,9 +430,6 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
-
-	modelAssigner := NewModelAssigner(am.keeper, am.keeper)
-	modelAssigner.setModelsForParticipants(ctx, activeParticipants, *upcomingEpoch)
 
 	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
 	if err != nil {
@@ -619,6 +627,28 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 
 	am.keeper.SetEpochGroupData(ctx, newGroupData)
 	am.keeper.SetEpochGroupData(ctx, previousGroupData)
+
+	// Set all current ActiveParticipants as ParticipantStatus_ACTIVE
+	activeParticipants, found := am.keeper.GetActiveParticipants(ctx, newEpochIndex)
+	if !found {
+		am.LogError("Unable to get active participants", types.EpochGroup, "epochIndex", newEpochIndex)
+		return
+	}
+	ids := make([]string, len(activeParticipants.Participants))
+	for i, participant := range activeParticipants.Participants {
+		ids[i] = participant.Index
+	}
+	participants, ok := am.keeper.GetParticipants(ctx, ids)
+	if !ok {
+		am.LogError("Unable to get participants", types.EpochGroup, "ids", ids)
+		return
+	}
+
+	am.LogInfo("Setting participants to active", types.EpochGroup, "len(participants)", len(participants))
+	for _, participant := range participants {
+		participant.Status = types.ParticipantStatus_ACTIVE
+		am.keeper.SetParticipant(ctx, participant)
+	}
 }
 
 // applyEpochPowerCapping applies universal power capping to activeParticipants after ComputeNewWeights

@@ -110,10 +110,14 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
             chainContainer.id,
             configWithName
         )
+        val apiExecutor = DockerExecutor(
+            apiContainer.id,
+            configWithName
+        )
 
         LocalInferencePair(
             node = ApplicationCLI(configWithName, nodeLogs, executor, listOf()),
-            api = ApplicationAPI(apiUrls, configWithName, dapiLogs),
+            api = ApplicationAPI(apiUrls, configWithName, dapiLogs, apiExecutor),
             mock = mockContainer?.let {
                 MockServerInferenceMock(
                     baseUrl = "http://localhost:${it.getMappedPort(8080)!!}", name = it.names.first()
@@ -343,8 +347,8 @@ data class LocalInferencePair(
         if (epochData.phase != EpochPhase.Inference ||
             startOfNextPoc - currentBlockHeight < windowSizeInBlocks
         ) {
-            logSection("Waiting for SET_NEW_VALIDATORS stage before running inference")
-            return waitForStage(EpochStage.SET_NEW_VALIDATORS)
+            logSection("Waiting for CLAIM_REWARDS stage before running inference")
+            return waitForStage(EpochStage.CLAIM_REWARDS)
         } else {
             Logger.info("Skipping wait for SET_NEW_VALIDATORS, current phase is ${epochData.phase}")
             return null
@@ -482,7 +486,7 @@ data class LocalInferencePair(
                 throw e
             }
         }
-        return if (waitForProcessed) {
+        return if (waitForProcessed && submittedTransaction.code == 0) {
             this.node.waitForTxProcessed(submittedTransaction.txhash)
         } else {
             submittedTransaction
@@ -607,11 +611,21 @@ data class LocalInferencePair(
                 if (it.code != 0)
                     throw RuntimeException("Transaction failed: code=${it.code}, txhash=${it.txhash}, rawLog=${it.rawLog}")
             }.getProposalId()!!
-            this.makeGovernanceDeposit(proposalId, minDeposit)
+            val response = this.makeGovernanceDeposit(proposalId, minDeposit)
+            require(response.code == 0) { "Deposit failed: ${response.rawLog}" }
+            val votingPeriodEnd = Instant.now().plus(govParams.votingPeriod)
             logSection("Voting on proposal, no voters: ${noVoters.joinToString(", ")}")
             cluster.allPairs.forEach {
-                it.voteOnProposal(proposalId, if (noVoters.contains(it.name)) "no" else "yes")
+                val voteResponse = it.voteOnProposal(proposalId, if (noVoters.contains(it.name)) "no" else "yes")
+                require(voteResponse.code == 0) { "Vote failed: ${voteResponse.rawLog}" }
             }
+
+            logSection("Waiting for voting period to end")
+            while (Instant.now().isBefore(votingPeriodEnd)) {
+                Thread.sleep(1000)
+            }
+            cluster.allPairs.first().node.waitForNextBlock(2)
+
             proposalId
         }
 

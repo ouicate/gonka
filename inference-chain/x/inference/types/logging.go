@@ -26,6 +26,7 @@ const (
 	Stat
 	Pruning
 	BLS
+	ValidationRecovery
 	Testing = 255
 )
 
@@ -77,6 +78,8 @@ func (s SubSystem) String() string {
 		return "Pruning"
 	case BLS:
 		return "BLS"
+	case ValidationRecovery:
+		return "ValidationRecovery"
 	default:
 		return "Unknown"
 	}
