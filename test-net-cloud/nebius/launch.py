@@ -59,6 +59,7 @@ def load_config_from_env():
         "INFERENCE_PORT": "5050",
         "KEYRING_BACKEND": "file",
         "SYNC_WITH_SNAPSHOTS": "true",
+        "SNAPSHOT_INTERVAL": "200",
     }
     
     config = default_config.copy()
