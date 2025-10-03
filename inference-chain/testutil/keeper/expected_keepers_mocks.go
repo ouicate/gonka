@@ -12,6 +12,7 @@ package keeper
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	math "cosmossdk.io/math"
 	types "github.com/cosmos/cosmos-sdk/types"
@@ -20,7 +21,8 @@ import (
 	group "github.com/cosmos/cosmos-sdk/x/group"
 	keeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	types1 "github.com/cosmos/cosmos-sdk/x/staking/types"
-	types2 "github.com/productscience/inference/x/inference/types"
+	types2 "github.com/productscience/inference/x/bls/types"
+	types3 "github.com/productscience/inference/x/inference/types"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -774,10 +776,10 @@ func (m *MockParticipantKeeper) EXPECT() *MockParticipantKeeperMockRecorder {
 }
 
 // GetAllParticipant mocks base method.
-func (m *MockParticipantKeeper) GetAllParticipant(ctx context.Context) []types2.Participant {
+func (m *MockParticipantKeeper) GetAllParticipant(ctx context.Context) []types3.Participant {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllParticipant", ctx)
-	ret0, _ := ret[0].([]types2.Participant)
+	ret0, _ := ret[0].([]types3.Participant)
 	return ret0
 }
 
@@ -788,10 +790,10 @@ func (mr *MockParticipantKeeperMockRecorder) GetAllParticipant(ctx any) *gomock.
 }
 
 // GetParticipant mocks base method.
-func (m *MockParticipantKeeper) GetParticipant(ctx context.Context, index string) (types2.Participant, bool) {
+func (m *MockParticipantKeeper) GetParticipant(ctx context.Context, index string) (types3.Participant, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParticipant", ctx, index)
-	ret0, _ := ret[0].(types2.Participant)
+	ret0, _ := ret[0].(types3.Participant)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -803,10 +805,10 @@ func (mr *MockParticipantKeeperMockRecorder) GetParticipant(ctx, index any) *gom
 }
 
 // GetParticipants mocks base method.
-func (m *MockParticipantKeeper) GetParticipants(ctx context.Context, ids []string) ([]types2.Participant, bool) {
+func (m *MockParticipantKeeper) GetParticipants(ctx context.Context, ids []string) ([]types3.Participant, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetParticipants", ctx, ids)
-	ret0, _ := ret[0].([]types2.Participant)
+	ret0, _ := ret[0].([]types3.Participant)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -818,10 +820,10 @@ func (mr *MockParticipantKeeperMockRecorder) GetParticipants(ctx, ids any) *gomo
 }
 
 // ParticipantAll mocks base method.
-func (m *MockParticipantKeeper) ParticipantAll(ctx context.Context, req *types2.QueryAllParticipantRequest) (*types2.QueryAllParticipantResponse, error) {
+func (m *MockParticipantKeeper) ParticipantAll(ctx context.Context, req *types3.QueryAllParticipantRequest) (*types3.QueryAllParticipantResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipantAll", ctx, req)
-	ret0, _ := ret[0].(*types2.QueryAllParticipantResponse)
+	ret0, _ := ret[0].(*types3.QueryAllParticipantResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -845,7 +847,7 @@ func (mr *MockParticipantKeeperMockRecorder) RemoveParticipant(ctx, index any) *
 }
 
 // SetParticipant mocks base method.
-func (m *MockParticipantKeeper) SetParticipant(ctx context.Context, participant types2.Participant) {
+func (m *MockParticipantKeeper) SetParticipant(ctx context.Context, participant types3.Participant) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetParticipant", ctx, participant)
 }
@@ -881,10 +883,10 @@ func (m *MockHardwareNodeKeeper) EXPECT() *MockHardwareNodeKeeperMockRecorder {
 }
 
 // GetHardwareNodes mocks base method.
-func (m *MockHardwareNodeKeeper) GetHardwareNodes(ctx context.Context, address string) (*types2.HardwareNodes, bool) {
+func (m *MockHardwareNodeKeeper) GetHardwareNodes(ctx context.Context, address string) (*types3.HardwareNodes, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHardwareNodes", ctx, address)
-	ret0, _ := ret[0].(*types2.HardwareNodes)
+	ret0, _ := ret[0].(*types3.HardwareNodes)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -920,10 +922,10 @@ func (m *MockEpochGroupDataKeeper) EXPECT() *MockEpochGroupDataKeeperMockRecorde
 }
 
 // GetAllEpochGroupData mocks base method.
-func (m *MockEpochGroupDataKeeper) GetAllEpochGroupData(ctx context.Context) []types2.EpochGroupData {
+func (m *MockEpochGroupDataKeeper) GetAllEpochGroupData(ctx context.Context) []types3.EpochGroupData {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllEpochGroupData", ctx)
-	ret0, _ := ret[0].([]types2.EpochGroupData)
+	ret0, _ := ret[0].([]types3.EpochGroupData)
 	return ret0
 }
 
@@ -934,34 +936,34 @@ func (mr *MockEpochGroupDataKeeperMockRecorder) GetAllEpochGroupData(ctx any) *g
 }
 
 // GetEpochGroupData mocks base method.
-func (m *MockEpochGroupDataKeeper) GetEpochGroupData(ctx context.Context, pocStartBlockHeight uint64, modelId string) (types2.EpochGroupData, bool) {
+func (m *MockEpochGroupDataKeeper) GetEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) (types3.EpochGroupData, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEpochGroupData", ctx, pocStartBlockHeight, modelId)
-	ret0, _ := ret[0].(types2.EpochGroupData)
+	ret := m.ctrl.Call(m, "GetEpochGroupData", ctx, epochIndex, modelId)
+	ret0, _ := ret[0].(types3.EpochGroupData)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // GetEpochGroupData indicates an expected call of GetEpochGroupData.
-func (mr *MockEpochGroupDataKeeperMockRecorder) GetEpochGroupData(ctx, pocStartBlockHeight, modelId any) *gomock.Call {
+func (mr *MockEpochGroupDataKeeperMockRecorder) GetEpochGroupData(ctx, epochIndex, modelId any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochGroupData", reflect.TypeOf((*MockEpochGroupDataKeeper)(nil).GetEpochGroupData), ctx, pocStartBlockHeight, modelId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochGroupData", reflect.TypeOf((*MockEpochGroupDataKeeper)(nil).GetEpochGroupData), ctx, epochIndex, modelId)
 }
 
 // RemoveEpochGroupData mocks base method.
-func (m *MockEpochGroupDataKeeper) RemoveEpochGroupData(ctx context.Context, pocStartBlockHeight uint64, modelId string) {
+func (m *MockEpochGroupDataKeeper) RemoveEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveEpochGroupData", ctx, pocStartBlockHeight, modelId)
+	m.ctrl.Call(m, "RemoveEpochGroupData", ctx, epochIndex, modelId)
 }
 
 // RemoveEpochGroupData indicates an expected call of RemoveEpochGroupData.
-func (mr *MockEpochGroupDataKeeperMockRecorder) RemoveEpochGroupData(ctx, pocStartBlockHeight, modelId any) *gomock.Call {
+func (mr *MockEpochGroupDataKeeperMockRecorder) RemoveEpochGroupData(ctx, epochIndex, modelId any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveEpochGroupData", reflect.TypeOf((*MockEpochGroupDataKeeper)(nil).RemoveEpochGroupData), ctx, pocStartBlockHeight, modelId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveEpochGroupData", reflect.TypeOf((*MockEpochGroupDataKeeper)(nil).RemoveEpochGroupData), ctx, epochIndex, modelId)
 }
 
 // SetEpochGroupData mocks base method.
-func (m *MockEpochGroupDataKeeper) SetEpochGroupData(ctx context.Context, epochGroupData types2.EpochGroupData) {
+func (m *MockEpochGroupDataKeeper) SetEpochGroupData(ctx context.Context, epochGroupData types3.EpochGroupData) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetEpochGroupData", ctx, epochGroupData)
 }
@@ -1103,10 +1105,10 @@ func (m *MockModelKeeper) EXPECT() *MockModelKeeperMockRecorder {
 }
 
 // GetGovernanceModel mocks base method.
-func (m *MockModelKeeper) GetGovernanceModel(ctx context.Context, id string) (*types2.Model, bool) {
+func (m *MockModelKeeper) GetGovernanceModel(ctx context.Context, id string) (*types3.Model, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetGovernanceModel", ctx, id)
-	ret0, _ := ret[0].(*types2.Model)
+	ret0, _ := ret[0].(*types3.Model)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -1118,10 +1120,10 @@ func (mr *MockModelKeeperMockRecorder) GetGovernanceModel(ctx, id any) *gomock.C
 }
 
 // GetGovernanceModels mocks base method.
-func (m *MockModelKeeper) GetGovernanceModels(ctx context.Context) ([]*types2.Model, error) {
+func (m *MockModelKeeper) GetGovernanceModels(ctx context.Context) ([]*types3.Model, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetGovernanceModels", ctx)
-	ret0, _ := ret[0].([]*types2.Model)
+	ret0, _ := ret[0].([]*types3.Model)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1169,4 +1171,142 @@ func (m *MockAuthzKeeper) GranterGrants(ctx context.Context, req *authz.QueryGra
 func (mr *MockAuthzKeeperMockRecorder) GranterGrants(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GranterGrants", reflect.TypeOf((*MockAuthzKeeper)(nil).GranterGrants), ctx, req)
+}
+
+// SaveGrant mocks base method.
+func (m *MockAuthzKeeper) SaveGrant(ctx context.Context, grantee, granter types.AccAddress, authorization authz.Authorization, expiration *time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveGrant", ctx, grantee, granter, authorization, expiration)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveGrant indicates an expected call of SaveGrant.
+func (mr *MockAuthzKeeperMockRecorder) SaveGrant(ctx, grantee, granter, authorization, expiration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveGrant", reflect.TypeOf((*MockAuthzKeeper)(nil).SaveGrant), ctx, grantee, granter, authorization, expiration)
+}
+
+// MockBlsKeeper is a mock of BlsKeeper interface.
+type MockBlsKeeper struct {
+	ctrl     *gomock.Controller
+	recorder *MockBlsKeeperMockRecorder
+	isgomock struct{}
+}
+
+// MockBlsKeeperMockRecorder is the mock recorder for MockBlsKeeper.
+type MockBlsKeeperMockRecorder struct {
+	mock *MockBlsKeeper
+}
+
+// NewMockBlsKeeper creates a new mock instance.
+func NewMockBlsKeeper(ctrl *gomock.Controller) *MockBlsKeeper {
+	mock := &MockBlsKeeper{ctrl: ctrl}
+	mock.recorder = &MockBlsKeeperMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBlsKeeper) EXPECT() *MockBlsKeeperMockRecorder {
+	return m.recorder
+}
+
+// GetActiveEpochID mocks base method.
+func (m *MockBlsKeeper) GetActiveEpochID(ctx types.Context) (uint64, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveEpochID", ctx)
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetActiveEpochID indicates an expected call of GetActiveEpochID.
+func (mr *MockBlsKeeperMockRecorder) GetActiveEpochID(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveEpochID", reflect.TypeOf((*MockBlsKeeper)(nil).GetActiveEpochID), ctx)
+}
+
+// GetEpochBLSData mocks base method.
+func (m *MockBlsKeeper) GetEpochBLSData(ctx types.Context, epochID uint64) (types2.EpochBLSData, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEpochBLSData", ctx, epochID)
+	ret0, _ := ret[0].(types2.EpochBLSData)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetEpochBLSData indicates an expected call of GetEpochBLSData.
+func (mr *MockBlsKeeperMockRecorder) GetEpochBLSData(ctx, epochID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochBLSData", reflect.TypeOf((*MockBlsKeeper)(nil).GetEpochBLSData), ctx, epochID)
+}
+
+// GetSigningStatus mocks base method.
+func (m *MockBlsKeeper) GetSigningStatus(ctx types.Context, requestID []byte) (*types2.ThresholdSigningRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSigningStatus", ctx, requestID)
+	ret0, _ := ret[0].(*types2.ThresholdSigningRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSigningStatus indicates an expected call of GetSigningStatus.
+func (mr *MockBlsKeeperMockRecorder) GetSigningStatus(ctx, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningStatus", reflect.TypeOf((*MockBlsKeeper)(nil).GetSigningStatus), ctx, requestID)
+}
+
+// InitiateKeyGenerationForEpoch mocks base method.
+func (m *MockBlsKeeper) InitiateKeyGenerationForEpoch(ctx types.Context, epochID uint64, finalizedParticipants []types2.ParticipantWithWeightAndKey) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitiateKeyGenerationForEpoch", ctx, epochID, finalizedParticipants)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitiateKeyGenerationForEpoch indicates an expected call of InitiateKeyGenerationForEpoch.
+func (mr *MockBlsKeeperMockRecorder) InitiateKeyGenerationForEpoch(ctx, epochID, finalizedParticipants any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitiateKeyGenerationForEpoch", reflect.TypeOf((*MockBlsKeeper)(nil).InitiateKeyGenerationForEpoch), ctx, epochID, finalizedParticipants)
+}
+
+// ListActiveSigningRequests mocks base method.
+func (m *MockBlsKeeper) ListActiveSigningRequests(ctx types.Context, currentEpochID uint64) ([]*types2.ThresholdSigningRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveSigningRequests", ctx, currentEpochID)
+	ret0, _ := ret[0].([]*types2.ThresholdSigningRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveSigningRequests indicates an expected call of ListActiveSigningRequests.
+func (mr *MockBlsKeeperMockRecorder) ListActiveSigningRequests(ctx, currentEpochID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveSigningRequests", reflect.TypeOf((*MockBlsKeeper)(nil).ListActiveSigningRequests), ctx, currentEpochID)
+}
+
+// RequestThresholdSignature mocks base method.
+func (m *MockBlsKeeper) RequestThresholdSignature(ctx types.Context, signingData types2.SigningData) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestThresholdSignature", ctx, signingData)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RequestThresholdSignature indicates an expected call of RequestThresholdSignature.
+func (mr *MockBlsKeeperMockRecorder) RequestThresholdSignature(ctx, signingData any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestThresholdSignature", reflect.TypeOf((*MockBlsKeeper)(nil).RequestThresholdSignature), ctx, signingData)
+}
+
+// SetActiveEpochID mocks base method.
+func (m *MockBlsKeeper) SetActiveEpochID(ctx types.Context, epochID uint64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetActiveEpochID", ctx, epochID)
+}
+
+// SetActiveEpochID indicates an expected call of SetActiveEpochID.
+func (mr *MockBlsKeeperMockRecorder) SetActiveEpochID(ctx, epochID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetActiveEpochID", reflect.TypeOf((*MockBlsKeeper)(nil).SetActiveEpochID), ctx, epochID)
 }
