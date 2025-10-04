@@ -5,10 +5,11 @@ Earlier today, Gonka Chain experienced a temporary chain halt triggered by a det
 
 Proposed fix: https://github.com/gonka-ai/gonka/pull/384
 
-Recovery Instructions
+Recovery Instructions  
+
 1\ Stop the container (from gonka/deploy/join/ directory)
 ```
-docker compose down node
+docker compose down node && sudo rm -rf .inference/data/upgrade-info.json
 ```
 
 2\ Open the terminal of the container
