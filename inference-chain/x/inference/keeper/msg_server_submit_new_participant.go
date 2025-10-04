@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"errors"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
@@ -10,7 +11,22 @@ import (
 func (k msgServer) SubmitNewParticipant(goCtx context.Context, msg *types.MsgSubmitNewParticipant) (*types.MsgSubmitNewParticipantResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	newParticipant := createNewParticipant(ctx, msg)
-	k.SetParticipant(ctx, newParticipant)
+	err := k.IfConsensusKeyAlreadyExistByAnotherParticipant(ctx, newParticipant)
+	if err != nil {
+		return nil, err
+	}
+
+	oldParticipant, found := k.GetParticipant(ctx, newParticipant.Index)
+	if found {
+		if oldParticipant.ValidatorKey != newParticipant.ValidatorKey {
+			return nil, errors.New("only inference url update is allowed")
+		}
+
+		oldParticipant.InferenceUrl = newParticipant.InferenceUrl
+		k.SetParticipant(ctx, oldParticipant)
+	} else {
+		k.SetParticipant(ctx, newParticipant)
+	}
 
 	return &types.MsgSubmitNewParticipantResponse{}, nil
 }

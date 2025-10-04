@@ -2,7 +2,7 @@ package keeper
 
 import (
 	"context"
-
+	"errors"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -31,6 +31,19 @@ func (k Keeper) SetParticipant(ctx context.Context, participant types.Participan
 			k.LogWarn("Failed to update member", types.Participants, "error", err)
 		}
 	}
+}
+
+func (k Keeper) IfConsensusKeyAlreadyExistByAnotherParticipant(ctx context.Context, participant types.Participant) error {
+	return k.Participants.Walk(ctx, nil, func(addr sdk.AccAddress, p types.Participant) (bool, error) {
+		// it is not same participants AND it is not developer
+		if p.Index != participant.Index &&
+			p.Address != participant.Address &&
+			participant.ValidatorKey != "" && participant.ValidatorKey == p.ValidatorKey {
+			k.LogError("Participant validator key already exist", types.Participants, "participant_1", participant.Address, "participant_2", p.Address, "key", participant.ValidatorKey)
+			return true, errors.New("validator key already exists")
+		}
+		return false, nil
+	})
 }
 
 // GetParticipant returns a participant from its index

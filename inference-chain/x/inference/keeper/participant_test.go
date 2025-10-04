@@ -2,6 +2,7 @@ package keeper_test
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"
 
@@ -43,6 +44,47 @@ func TestParticipantGet(t *testing.T) {
 		)
 		expectedCounter++
 	}
+}
+
+func TestIfConsensusKeyAlreadyExist(t *testing.T) {
+	keeper, ctx := keepertest.InferenceKeeper(t)
+	const (
+		developers           = 3
+		notEmptyValidatorKey = "some_validator_key"
+	)
+
+	developersAddrs := make([]string, developers)
+	for i := 0; i < developers; i++ {
+		addr := testutil.Bech32Addr(i)
+		developersAddrs[i] = addr
+		participant := types.Participant{
+			Index:   addr,
+			Address: addr,
+		}
+		keeper.SetParticipant(ctx, participant)
+
+		exist := keeper.IfConsensusKeyAlreadyExistByAnotherParticipant(ctx, participant) // developer
+		assert.Nil(t, exist)
+	}
+
+	participant1 := types.Participant{
+		Index:        testutil.Bech32Addr(10),
+		Address:      testutil.Bech32Addr(10),
+		ValidatorKey: notEmptyValidatorKey,
+	}
+	keeper.SetParticipant(ctx, participant1)
+
+	exist := keeper.IfConsensusKeyAlreadyExistByAnotherParticipant(ctx, participant1) // same participant
+	assert.Nil(t, exist)
+
+	participant2 := types.Participant{
+		Index:        testutil.Bech32Addr(11),
+		Address:      testutil.Bech32Addr(11),
+		ValidatorKey: notEmptyValidatorKey,
+	}
+
+	exist = keeper.IfConsensusKeyAlreadyExistByAnotherParticipant(ctx, participant2)
+	assert.Error(t, exist)
 }
 
 func TestParticipantRemove(t *testing.T) {

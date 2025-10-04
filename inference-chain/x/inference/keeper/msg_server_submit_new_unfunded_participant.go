@@ -40,6 +40,12 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 			ValidatorKey: msg.GetValidatorKey(),
 			WorkerKey:    msg.GetWorkerKey(),
 		})
+
+	err = k.IfConsensusKeyAlreadyExistByAnotherParticipant(ctx, newParticipant)
+	if err != nil {
+		return nil, err
+	}
+
 	k.LogDebug("Adding new participant", types.Participants, "participant", newParticipant)
 	k.SetParticipant(ctx, newParticipant)
 	return &types.MsgSubmitNewUnfundedParticipantResponse{}, nil
