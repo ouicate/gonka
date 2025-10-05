@@ -22,6 +22,8 @@ type tmHTTPClient interface {
 	BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error)
 }
 
+// Example command:
+// ./blockstats --start 658088 --end 658188 --rpc-url http://node1.gonka.ai:26657 --out blockstats.csv
 func main() {
 	var startHeightFlag int64
 	var endHeightFlag int64
@@ -95,17 +97,18 @@ func writeEventsForBlock(writer *bufio.Writer, file *os.File, height int64, txs 
 	lines := 0
 	for _, tx := range txs {
 		for _, ev := range tx.Events {
-			if ev.Type != "message" {
-				continue
-			}
 			for _, attr := range ev.Attributes {
-				if attr.Key == "action" && attr.Value != "" {
-					// One line per message action
-					if _, err := writer.WriteString(strconv.FormatInt(height, 10) + "," + attr.Value + "\n"); err != nil {
-						return lines, err
-					}
-					lines++
+				if _, err := writer.WriteString(strconv.FormatInt(height, 10) + "," + ev.Type + "," + attr.Key + "," + attr.Value + "\n"); err != nil {
+					return lines, err
 				}
+				lines++
+				/*				if attr.Key == "action" && attr.Value != "" {
+								// One line per message action
+								if _, err := writer.WriteString(strconv.FormatInt(height, 10) + "," + ev.Type + "," + attr.Key + "," + attr.Value + "\n"); err != nil {
+									return lines, err
+								}
+								lines++
+							}*/
 			}
 		}
 	}
