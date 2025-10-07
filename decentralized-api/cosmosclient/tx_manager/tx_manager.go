@@ -132,16 +132,20 @@ func StartTxManager(
 	return m, nil
 }
 
+const maxAttempts = 100
+
 type txToSend struct {
-	TxInfo txInfo
-	Sent   bool
+	TxInfo   txInfo
+	Sent     bool
+	Attempts int
 }
 
 type txInfo struct {
-	Id      string
-	RawTx   []byte
-	TxHash  string
-	Timeout time.Time
+	Id       string
+	RawTx    []byte
+	TxHash   string
+	Timeout  time.Time
+	Attempts int
 }
 
 func (m *manager) GetApiAccount() apiconfig.ApiAccount {
@@ -159,7 +163,7 @@ func (m *manager) SendTransactionAsyncWithRetry(rawTx sdk.Msg) (*sdk.TxResponse,
 	if halt, err := m.isChanHalt(); err != nil || halt {
 		logging.Error("chain is slowing down or couldn't fetch actual chain status", types.Messages, "latest_block_timestamp", m.blockTimeTracker.latestBlockTime.Load().(time.Time))
 
-		if err := m.putOnRetry(id, "", time.Time{}, rawTx, false); err != nil {
+		if err := m.putOnRetry(id, "", time.Time{}, rawTx, 0, false); err != nil {
 			logging.Error("failed to put in queue", types.Messages, "tx_id", id, "resend_err", err)
 			return nil, ErrTxFailedToBroadcastAndPutOnRetry
 		}
@@ -173,13 +177,13 @@ func (m *manager) SendTransactionAsyncWithRetry(rawTx sdk.Msg) (*sdk.TxResponse,
 			return nil, broadcastErr
 		}
 
-		err := m.putOnRetry(id, "", timeout, rawTx, false)
+		err := m.putOnRetry(id, "", timeout, rawTx, 1, false)
 		if err != nil {
 			logging.Error("tx failed to broadcast, failed to put in queue", types.Messages, "tx_id", id, "broadcast_err", broadcastErr, "resend_err", err)
 		}
 		return nil, ErrTxFailedToBroadcastAndPutOnRetry
 	}
-	if err := m.putOnRetry(id, resp.TxHash, timeout, rawTx, true); err != nil {
+	if err := m.putOnRetry(id, resp.TxHash, timeout, rawTx, 1, true); err != nil {
 		logging.Error("tx broadcast, but failed to put in queue", types.Messages, "tx_id", id, "err", err)
 	}
 	return resp, nil
@@ -218,6 +222,7 @@ func (m *manager) putOnRetry(
 	txHash string,
 	timeout time.Time,
 	rawTx sdk.Msg,
+	attempts int,
 	sent bool) error {
 	logging.Debug("putOnRetry: tx with params", types.Messages,
 		"tx_id", id,
@@ -225,6 +230,11 @@ func (m *manager) putOnRetry(
 		"timeout", timeout.String(),
 		"sent", sent,
 	)
+
+	if attempts >= maxAttempts {
+		logging.Info("tx reached max attempts", types.Messages, "tx_id", id)
+		return nil
+	}
 
 	bz, err := m.client.Context().Codec.MarshalInterfaceJSON(rawTx)
 	if err != nil {
@@ -241,7 +251,10 @@ func (m *manager) putOnRetry(
 			RawTx:   bz,
 			TxHash:  txHash,
 			Timeout: timeout,
-		}, Sent: sent})
+		},
+		Sent:     sent,
+		Attempts: attempts,
+	})
 	if err != nil {
 		return err
 	}
@@ -351,7 +364,9 @@ func (m *manager) observeTxs() error {
 
 		if tx.TxHash == "" {
 			logging.Warn("tx hash is empty", types.Messages, "tx_id", tx.Id)
-			if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, false); err != nil {
+
+			tx.Attempts++
+			if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false); err != nil {
 				msg.NakWithDelay(defaultObserverNackDelay)
 				return
 			}
@@ -376,7 +391,8 @@ func (m *manager) observeTxs() error {
 		if errors.Is(err, ErrTxNotFound) {
 			if m.blockTimeTracker.latestBlockTime.Load().(time.Time).After(tx.Timeout) {
 				logging.Debug("tx expired", types.Messages, "tx_id", tx.Id, "tx_hash", tx.TxHash, "tx_timestamp", tx.Timeout, "latest_block_timestamp", m.blockTimeTracker.latestBlockTime)
-				if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, false); err != nil {
+				tx.Attempts++
+				if err := m.putOnRetry(tx.Id, "", time.Time{}, rawTx, tx.Attempts, false); err != nil {
 					msg.NakWithDelay(defaultObserverNackDelay)
 					return
 				}
