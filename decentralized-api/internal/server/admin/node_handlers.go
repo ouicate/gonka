@@ -93,11 +93,41 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
-	node, err := s.addNode(newNode)
+	// Upsert: if node exists, update it; otherwise, create
+	nodes, err := s.nodeBroker.GetNodes()
 	if err != nil {
-		return err
+		logging.Error("Error reading nodes", types.Nodes, "error", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
-	return ctx.JSON(http.StatusOK, node)
+
+	exists := false
+	for _, n := range nodes {
+		if n.Node.Id == newNode.Id {
+			exists = true
+			break
+		}
+	}
+
+	if exists {
+		response := make(chan *apiconfig.InferenceNodeConfig, 2)
+		err := s.nodeBroker.QueueMessage(broker.UpdateNode{Node: newNode, Response: response})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err)
+		}
+		node := <-response
+		if node == nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node")
+		}
+		// sync config file with updated node list
+		syncNodesWithConfig(s.nodeBroker, s.configManager)
+		return ctx.JSON(http.StatusOK, node)
+	} else {
+		node, err := s.addNode(newNode)
+		if err != nil {
+			return err
+		}
+		return ctx.JSON(http.StatusOK, node)
+	}
 }
 
 func (s *Server) addNode(newNode apiconfig.InferenceNodeConfig) (apiconfig.InferenceNodeConfig, error) {

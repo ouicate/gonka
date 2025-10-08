@@ -53,6 +53,8 @@ func NewServer(
 
 	g.POST("nodes", s.createNewNode)
 	g.POST("nodes/batch", s.createNewNodes)
+	// For explicit updates, also allow PUT on a single node
+	g.PUT("nodes/:id", s.createNewNode)
 	g.GET("nodes/upgrade-status", s.getUpgradeStatus)
 	g.POST("nodes/version-status", s.postVersionStatus)
 	g.GET("nodes", s.getNodes)
