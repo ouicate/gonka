@@ -35,7 +35,28 @@ type WriteCloserProvider interface {
 }
 
 func LoadDefaultConfigManager() (*ConfigManager, error) {
-	db := NewMySQLDb()
+	// Initialize a local-only companion MySQL DB with generic credentials
+	defaultDbCfg := MySqlConfig{
+		Username: "gonka",
+		Password: "gonka",
+		Host:     "127.0.0.1",
+		Port:     3306,
+		Database: "gonka",
+		Params: map[string]string{
+			"parseTime": "true",
+			"charset":   "utf8mb4",
+			"collation": "utf8mb4_0900_ai_ci",
+		},
+	}
+
+	db := NewMySQLDb(defaultDbCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.BootstrapLocal(ctx); err != nil {
+		log.Printf("Error bootstrapping local MySQL DB: %+v", err)
+		return nil, err
+	}
+
 	manager := ConfigManager{
 		KoanProvider:   getFileProvider(),
 		WriterProvider: NewFileWriteCloserProvider(getConfigPath()),
