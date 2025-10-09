@@ -72,6 +72,10 @@ func LoadDefaultConfigManager() (*ConfigManager, error) {
 		return nil, err
 	}
 
+	if err := loadNodeConfig(manager.getConfig()); err != nil {
+		log.Fatalf("error loading node config: %v", err)
+	}
+
 	return &manager, nil
 }
 
@@ -563,10 +567,6 @@ func readConfig(provider koanf.Provider) (Config, error) {
 		log.Printf("Loaded KEYRING_PASSWORD: %+v", keyringPassword)
 	} else {
 		log.Printf("Warning: KEYRING_PASSWORD environment variable not set - keyring operations may fail")
-	}
-
-	if err := loadNodeConfig(&config); err != nil {
-		log.Fatalf("error loading node config: %v", err)
 	}
 
 	return config, nil
