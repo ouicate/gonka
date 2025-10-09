@@ -36,9 +36,9 @@ type WriteCloserProvider interface {
 }
 
 func LoadDefaultConfigManager() (*ConfigManager, error) {
-	// Initialize a local embedded SQLite DB (in-process)
+	dbPath := getSqlitePath()
 	defaultDbCfg := SqliteConfig{
-		Path: "gonka.db",
+		Path: dbPath,
 	}
 
 	db := NewSQLiteDb(defaultDbCfg)
@@ -318,6 +318,14 @@ func getConfigPath() string {
 		configPath = "config.yaml" // Default value if the environment variable is not set
 	}
 	return configPath
+}
+
+func getSqlitePath() string {
+	path := os.Getenv("API_SQLITE_PATH")
+	if path == "" {
+		return "/root/.dapi/gonka.db"
+	}
+	return path
 }
 
 type FileWriteCloserProvider struct {
