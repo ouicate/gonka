@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"cosmossdk.io/collections"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/group"
 	"github.com/productscience/inference/testutil"
 	keeper2 "github.com/productscience/inference/testutil/keeper"
@@ -21,10 +23,12 @@ const MODEL_ID = "Qwen/QwQ-32B"
 
 func TestMsgServer_Validation(t *testing.T) {
 	inferenceHelper, k, ctx := NewMockInferenceHelper(t)
+	createParticipants(t, inferenceHelper.MessageServer, ctx)
 
 	model := &types.Model{Id: MODEL_ID, ValidationThreshold: &types.Decimal{Value: 85, Exponent: -2}}
 	k.SetModel(ctx, model)
 	StubModelSubgroup(t, ctx, k, inferenceHelper.Mocks, model)
+	addMembersToGroupData(k, ctx)
 
 	expected, err := inferenceHelper.StartInference("promptPayload", model.Id, time.Now().UnixNano(), calculations.DefaultMaxTokens)
 	require.NoError(t, err)
@@ -54,10 +58,12 @@ func createParticipants(t *testing.T, ms types.MsgServer, ctx context.Context) {
 
 func TestMsgServer_Validation_Invalidate(t *testing.T) {
 	inferenceHelper, k, ctx := NewMockInferenceHelper(t)
-
+	createParticipants(t, inferenceHelper.MessageServer, ctx)
 	model := &types.Model{Id: MODEL_ID, ValidationThreshold: &types.Decimal{Value: 85, Exponent: -2}}
 	k.SetModel(ctx, model)
 	StubModelSubgroup(t, ctx, k, inferenceHelper.Mocks, model)
+
+	addMembersToGroupData(k, ctx)
 
 	expected, err := inferenceHelper.StartInference("promptPayload", model.Id, time.Now().UnixNano(), calculations.DefaultMaxTokens)
 	require.NoError(t, err)
@@ -106,6 +112,33 @@ func TestMsgServer_Validation_Invalidate(t *testing.T) {
 
 	require.True(t, found)
 	require.Equal(t, types.InferenceStatus_VOTING, inference.Status)
+
+	has, err := k.ActiveInvalidations.Has(ctx, collections.Join(sdk.MustAccAddressFromBech32(testutil.Validator), expected.InferenceId))
+	require.NoError(t, err)
+	require.True(t, has)
+}
+
+func addMembersToGroupData(k keeper.Keeper, ctx sdk.Context) {
+	groupData, _ := k.GetEpochGroupData(ctx, 0, MODEL_ID)
+	groupData.ValidationWeights = []*types.ValidationWeight{
+		{
+			MemberAddress: testutil.Validator,
+			Weight:        100,
+			Reputation:    50,
+		},
+		{
+			MemberAddress: testutil.Requester,
+			Weight:        100,
+			Reputation:    100,
+		},
+	}
+	// Ensure TotalWeight is set to avoid division by zero in calculations
+	var total int64 = 0
+	for _, vw := range groupData.ValidationWeights {
+		total += vw.Weight
+	}
+	groupData.TotalWeight = total
+	k.SetEpochGroupData(ctx, groupData)
 }
 
 func TestMsgServer_NoInference(t *testing.T) {
@@ -199,4 +232,93 @@ func TestMeasurementsNeeded(t *testing.T) {
 	require.Equal(t, uint64(27), keeper.MeasurementsNeeded(0.10, 100))
 	require.Equal(t, uint64(262), keeper.MeasurementsNeeded(0.01, 300))
 	require.Equal(t, uint64(100), keeper.MeasurementsNeeded(0.01, 100))
+}
+
+// New tests for invalidation limits and duplicate validations
+func TestMsgServer_Validation_InvalidationsLimit_NoStatusChange_ButRecordsCredit(t *testing.T) {
+	inferenceHelper, k, ctx := NewMockInferenceHelper(t)
+	createParticipants(t, inferenceHelper.MessageServer, ctx)
+
+	model := &types.Model{Id: MODEL_ID, ValidationThreshold: &types.Decimal{Value: 85, Exponent: -2}}
+	k.SetModel(ctx, model)
+	StubModelSubgroup(t, ctx, k, inferenceHelper.Mocks, model)
+	addMembersToGroupData(k, ctx)
+
+	// Make the maximum allowed invalidations very small and deterministic
+	params := k.GetParams(ctx)
+	if params.BandwidthLimitsParams == nil {
+		params.BandwidthLimitsParams = &types.BandwidthLimitsParams{}
+	}
+	params.BandwidthLimitsParams.InvalidationsLimit = 1
+	params.BandwidthLimitsParams.InvalidationsLimitCurve = 1
+	params.BandwidthLimitsParams.InvalidationsSamplePeriod = 60
+	k.SetParams(ctx, params)
+
+	// Pre-populate one active invalidation for the validator so we hit the limit (>= 1)
+	err := k.ActiveInvalidations.Set(ctx, collections.Join(sdk.MustAccAddressFromBech32(testutil.Validator), "prev-inference"))
+	require.NoError(t, err)
+
+	// Create and finish an inference
+	expected, err := inferenceHelper.StartInference("promptPayload", model.Id, time.Now().UnixNano(), calculations.DefaultMaxTokens)
+	require.NoError(t, err)
+	_, err = inferenceHelper.FinishInference()
+	require.NoError(t, err)
+
+	// Attempt a failing validation; since limit reached, it should early-return without changing status
+	_, err = inferenceHelper.MessageServer.Validation(ctx, &types.MsgValidation{
+		InferenceId: expected.InferenceId,
+		Creator:     testutil.Validator,
+		Value:       0.10, // below threshold so it would normally trigger invalidation
+	})
+	require.NoError(t, err)
+
+	// Inference status should remain FINISHED (no transition to VOTING)
+	saved, found := k.GetInference(ctx, expected.InferenceId)
+	require.True(t, found)
+	require.Equal(t, types.InferenceStatus_FINISHED, saved.Status)
+
+	// Validator should still get credit for performing validation in EpochGroupValidations
+	egv, ok := k.GetEpochGroupValidations(ctx, testutil.Validator, saved.EpochId)
+	require.True(t, ok)
+	// The recorded list should contain this inference id
+	foundId := false
+	for _, id := range egv.ValidatedInferences {
+		if id == expected.InferenceId {
+			foundId = true
+			break
+		}
+	}
+	require.True(t, foundId, "expected inference id to be recorded in epoch group validations")
+}
+
+func TestMsgServer_Validation_DuplicateValidation_ReturnsErrDuplicateValidation(t *testing.T) {
+	inferenceHelper, k, ctx := NewMockInferenceHelper(t)
+	createParticipants(t, inferenceHelper.MessageServer, ctx)
+
+	model := &types.Model{Id: MODEL_ID, ValidationThreshold: &types.Decimal{Value: 85, Exponent: -2}}
+	k.SetModel(ctx, model)
+	StubModelSubgroup(t, ctx, k, inferenceHelper.Mocks, model)
+	addMembersToGroupData(k, ctx)
+
+	expected, err := inferenceHelper.StartInference("promptPayload", model.Id, time.Now().UnixNano(), calculations.DefaultMaxTokens)
+	require.NoError(t, err)
+	_, err = inferenceHelper.FinishInference()
+	require.NoError(t, err)
+
+	// First validation should succeed
+	_, err = inferenceHelper.MessageServer.Validation(ctx, &types.MsgValidation{
+		InferenceId: expected.InferenceId,
+		Creator:     testutil.Validator,
+		Value:       0.99,
+	})
+	require.NoError(t, err)
+
+	// Second validation (same validator, same inference, not a revalidation) should return ErrDuplicateValidation
+	_, err = inferenceHelper.MessageServer.Validation(ctx, &types.MsgValidation{
+		InferenceId: expected.InferenceId,
+		Creator:     testutil.Validator,
+		Value:       0.99,
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, types.ErrDuplicateValidation)
 }

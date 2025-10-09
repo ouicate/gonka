@@ -38,6 +38,7 @@ type GroupMessageKeeper interface {
 	Vote(goCtx context.Context, msg *group.MsgVote) (*group.MsgVoteResponse, error)
 	GroupInfo(goCtx context.Context, request *group.QueryGroupInfoRequest) (*group.QueryGroupInfoResponse, error)
 	GroupMembers(goCtx context.Context, request *group.QueryGroupMembersRequest) (*group.QueryGroupMembersResponse, error)
+	ProposalsByGroupPolicy(goCtx context.Context, request *group.QueryProposalsByGroupPolicyRequest) (*group.QueryProposalsByGroupPolicyResponse, error)
 }
 
 // ParamSubspace defines the expected Subspace interface for parameters.

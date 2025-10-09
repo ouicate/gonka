@@ -189,4 +189,14 @@ message BandwidthLimitsParams {
 
   // kb_per_output_token is the estimated KB per output token
   Decimal kb_per_output_token = 3;
+
+  // The total max simultaneous invalidations across the chain
+  uint64 invalidations_limit = 4;
+
+  // The seconds to look back to determine inference rate for invalidations
+  uint64 invalidations_sample_period = 5;
+
+  // The curve for the tanh function for determining how quickly traffic expands the
+  // max invalidations allowed
+  uint64 invalidations_limit_curve = 6;
 }

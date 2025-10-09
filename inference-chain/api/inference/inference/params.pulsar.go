@@ -8837,6 +8837,9 @@ var (
 	fd_BandwidthLimitsParams_estimated_limits_per_block_kb protoreflect.FieldDescriptor
 	fd_BandwidthLimitsParams_kb_per_input_token            protoreflect.FieldDescriptor
 	fd_BandwidthLimitsParams_kb_per_output_token           protoreflect.FieldDescriptor
+	fd_BandwidthLimitsParams_invalidations_limit           protoreflect.FieldDescriptor
+	fd_BandwidthLimitsParams_invalidations_sample_period   protoreflect.FieldDescriptor
+	fd_BandwidthLimitsParams_invalidations_limit_curve     protoreflect.FieldDescriptor
 )
 
 func init() {
@@ -8845,6 +8848,9 @@ func init() {
 	fd_BandwidthLimitsParams_estimated_limits_per_block_kb = md_BandwidthLimitsParams.Fields().ByName("estimated_limits_per_block_kb")
 	fd_BandwidthLimitsParams_kb_per_input_token = md_BandwidthLimitsParams.Fields().ByName("kb_per_input_token")
 	fd_BandwidthLimitsParams_kb_per_output_token = md_BandwidthLimitsParams.Fields().ByName("kb_per_output_token")
+	fd_BandwidthLimitsParams_invalidations_limit = md_BandwidthLimitsParams.Fields().ByName("invalidations_limit")
+	fd_BandwidthLimitsParams_invalidations_sample_period = md_BandwidthLimitsParams.Fields().ByName("invalidations_sample_period")
+	fd_BandwidthLimitsParams_invalidations_limit_curve = md_BandwidthLimitsParams.Fields().ByName("invalidations_limit_curve")
 }
 
 var _ protoreflect.Message = (*fastReflection_BandwidthLimitsParams)(nil)
@@ -8930,6 +8936,24 @@ func (x *fastReflection_BandwidthLimitsParams) Range(f func(protoreflect.FieldDe
 			return
 		}
 	}
+	if x.InvalidationsLimit != uint64(0) {
+		value := protoreflect.ValueOfUint64(x.InvalidationsLimit)
+		if !f(fd_BandwidthLimitsParams_invalidations_limit, value) {
+			return
+		}
+	}
+	if x.InvalidationsSamplePeriod != uint64(0) {
+		value := protoreflect.ValueOfUint64(x.InvalidationsSamplePeriod)
+		if !f(fd_BandwidthLimitsParams_invalidations_sample_period, value) {
+			return
+		}
+	}
+	if x.InvalidationsLimitCurve != uint64(0) {
+		value := protoreflect.ValueOfUint64(x.InvalidationsLimitCurve)
+		if !f(fd_BandwidthLimitsParams_invalidations_limit_curve, value) {
+			return
+		}
+	}
 }
 
 // Has reports whether a field is populated.
@@ -8951,6 +8975,12 @@ func (x *fastReflection_BandwidthLimitsParams) Has(fd protoreflect.FieldDescript
 		return x.KbPerInputToken != nil
 	case "inference.inference.BandwidthLimitsParams.kb_per_output_token":
 		return x.KbPerOutputToken != nil
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		return x.InvalidationsLimit != uint64(0)
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		return x.InvalidationsSamplePeriod != uint64(0)
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		return x.InvalidationsLimitCurve != uint64(0)
 	default:
 		if fd.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -8973,6 +9003,12 @@ func (x *fastReflection_BandwidthLimitsParams) Clear(fd protoreflect.FieldDescri
 		x.KbPerInputToken = nil
 	case "inference.inference.BandwidthLimitsParams.kb_per_output_token":
 		x.KbPerOutputToken = nil
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		x.InvalidationsLimit = uint64(0)
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		x.InvalidationsSamplePeriod = uint64(0)
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		x.InvalidationsLimitCurve = uint64(0)
 	default:
 		if fd.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -8998,6 +9034,15 @@ func (x *fastReflection_BandwidthLimitsParams) Get(descriptor protoreflect.Field
 	case "inference.inference.BandwidthLimitsParams.kb_per_output_token":
 		value := x.KbPerOutputToken
 		return protoreflect.ValueOfMessage(value.ProtoReflect())
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		value := x.InvalidationsLimit
+		return protoreflect.ValueOfUint64(value)
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		value := x.InvalidationsSamplePeriod
+		return protoreflect.ValueOfUint64(value)
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		value := x.InvalidationsLimitCurve
+		return protoreflect.ValueOfUint64(value)
 	default:
 		if descriptor.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -9024,6 +9069,12 @@ func (x *fastReflection_BandwidthLimitsParams) Set(fd protoreflect.FieldDescript
 		x.KbPerInputToken = value.Message().Interface().(*Decimal)
 	case "inference.inference.BandwidthLimitsParams.kb_per_output_token":
 		x.KbPerOutputToken = value.Message().Interface().(*Decimal)
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		x.InvalidationsLimit = value.Uint()
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		x.InvalidationsSamplePeriod = value.Uint()
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		x.InvalidationsLimitCurve = value.Uint()
 	default:
 		if fd.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -9056,6 +9107,12 @@ func (x *fastReflection_BandwidthLimitsParams) Mutable(fd protoreflect.FieldDesc
 		return protoreflect.ValueOfMessage(x.KbPerOutputToken.ProtoReflect())
 	case "inference.inference.BandwidthLimitsParams.estimated_limits_per_block_kb":
 		panic(fmt.Errorf("field estimated_limits_per_block_kb of message inference.inference.BandwidthLimitsParams is not mutable"))
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		panic(fmt.Errorf("field invalidations_limit of message inference.inference.BandwidthLimitsParams is not mutable"))
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		panic(fmt.Errorf("field invalidations_sample_period of message inference.inference.BandwidthLimitsParams is not mutable"))
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		panic(fmt.Errorf("field invalidations_limit_curve of message inference.inference.BandwidthLimitsParams is not mutable"))
 	default:
 		if fd.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -9077,6 +9134,12 @@ func (x *fastReflection_BandwidthLimitsParams) NewField(fd protoreflect.FieldDes
 	case "inference.inference.BandwidthLimitsParams.kb_per_output_token":
 		m := new(Decimal)
 		return protoreflect.ValueOfMessage(m.ProtoReflect())
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit":
+		return protoreflect.ValueOfUint64(uint64(0))
+	case "inference.inference.BandwidthLimitsParams.invalidations_sample_period":
+		return protoreflect.ValueOfUint64(uint64(0))
+	case "inference.inference.BandwidthLimitsParams.invalidations_limit_curve":
+		return protoreflect.ValueOfUint64(uint64(0))
 	default:
 		if fd.IsExtension() {
 			panic(fmt.Errorf("proto3 declared messages do not support extensions: inference.inference.BandwidthLimitsParams"))
@@ -9157,6 +9220,15 @@ func (x *fastReflection_BandwidthLimitsParams) ProtoMethods() *protoiface.Method
 			l = options.Size(x.KbPerOutputToken)
 			n += 1 + l + runtime.Sov(uint64(l))
 		}
+		if x.InvalidationsLimit != 0 {
+			n += 1 + runtime.Sov(uint64(x.InvalidationsLimit))
+		}
+		if x.InvalidationsSamplePeriod != 0 {
+			n += 1 + runtime.Sov(uint64(x.InvalidationsSamplePeriod))
+		}
+		if x.InvalidationsLimitCurve != 0 {
+			n += 1 + runtime.Sov(uint64(x.InvalidationsLimitCurve))
+		}
 		if x.unknownFields != nil {
 			n += len(x.unknownFields)
 		}
@@ -9185,6 +9257,21 @@ func (x *fastReflection_BandwidthLimitsParams) ProtoMethods() *protoiface.Method
 		if x.unknownFields != nil {
 			i -= len(x.unknownFields)
 			copy(dAtA[i:], x.unknownFields)
+		}
+		if x.InvalidationsLimitCurve != 0 {
+			i = runtime.EncodeVarint(dAtA, i, uint64(x.InvalidationsLimitCurve))
+			i--
+			dAtA[i] = 0x30
+		}
+		if x.InvalidationsSamplePeriod != 0 {
+			i = runtime.EncodeVarint(dAtA, i, uint64(x.InvalidationsSamplePeriod))
+			i--
+			dAtA[i] = 0x28
+		}
+		if x.InvalidationsLimit != 0 {
+			i = runtime.EncodeVarint(dAtA, i, uint64(x.InvalidationsLimit))
+			i--
+			dAtA[i] = 0x20
 		}
 		if x.KbPerOutputToken != nil {
 			encoded, err := options.Marshal(x.KbPerOutputToken)
@@ -9359,6 +9446,63 @@ func (x *fastReflection_BandwidthLimitsParams) ProtoMethods() *protoiface.Method
 					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, err
 				}
 				iNdEx = postIndex
+			case 4:
+				if wireType != 0 {
+					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field InvalidationsLimit", wireType)
+				}
+				x.InvalidationsLimit = 0
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					x.InvalidationsLimit |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+			case 5:
+				if wireType != 0 {
+					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field InvalidationsSamplePeriod", wireType)
+				}
+				x.InvalidationsSamplePeriod = 0
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					x.InvalidationsSamplePeriod |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+			case 6:
+				if wireType != 0 {
+					return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, fmt.Errorf("proto: wrong wireType = %d for field InvalidationsLimitCurve", wireType)
+				}
+				x.InvalidationsLimitCurve = 0
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, runtime.ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return protoiface.UnmarshalOutput{NoUnkeyedLiterals: input.NoUnkeyedLiterals, Flags: input.Flags}, io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					x.InvalidationsLimitCurve |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
 			default:
 				iNdEx = preIndex
 				skippy, err := runtime.Skip(dAtA[iNdEx:])
@@ -10401,6 +10545,13 @@ type BandwidthLimitsParams struct {
 	KbPerInputToken *Decimal `protobuf:"bytes,2,opt,name=kb_per_input_token,json=kbPerInputToken,proto3" json:"kb_per_input_token,omitempty"`
 	// kb_per_output_token is the estimated KB per output token
 	KbPerOutputToken *Decimal `protobuf:"bytes,3,opt,name=kb_per_output_token,json=kbPerOutputToken,proto3" json:"kb_per_output_token,omitempty"`
+	// The total max simultaneous invalidations across the chain
+	InvalidationsLimit uint64 `protobuf:"varint,4,opt,name=invalidations_limit,json=invalidationsLimit,proto3" json:"invalidations_limit,omitempty"`
+	// The seconds to look back to determine inference rate for invalidations
+	InvalidationsSamplePeriod uint64 `protobuf:"varint,5,opt,name=invalidations_sample_period,json=invalidationsSamplePeriod,proto3" json:"invalidations_sample_period,omitempty"`
+	// The curve for the tanh function for determining how quickly traffic expands the
+	// max invalidations allowed
+	InvalidationsLimitCurve uint64 `protobuf:"varint,6,opt,name=invalidations_limit_curve,json=invalidationsLimitCurve,proto3" json:"invalidations_limit_curve,omitempty"`
 }
 
 func (x *BandwidthLimitsParams) Reset() {
@@ -10442,6 +10593,27 @@ func (x *BandwidthLimitsParams) GetKbPerOutputToken() *Decimal {
 		return x.KbPerOutputToken
 	}
 	return nil
+}
+
+func (x *BandwidthLimitsParams) GetInvalidationsLimit() uint64 {
+	if x != nil {
+		return x.InvalidationsLimit
+	}
+	return 0
+}
+
+func (x *BandwidthLimitsParams) GetInvalidationsSamplePeriod() uint64 {
+	if x != nil {
+		return x.InvalidationsSamplePeriod
+	}
+	return 0
+}
+
+func (x *BandwidthLimitsParams) GetInvalidationsLimitCurve() uint64 {
+	if x != nil {
+		return x.InvalidationsLimitCurve
+	}
+	return 0
 }
 
 var File_inference_inference_params_proto protoreflect.FileDescriptor
@@ -10820,7 +10992,7 @@ var file_inference_inference_params_proto_rawDesc = []byte{
 	0x6b, 0x65, 0x6e, 0x5f, 0x70, 0x72, 0x69, 0x63, 0x65, 0x18, 0x08, 0x20, 0x01, 0x28, 0x04, 0x52,
 	0x18, 0x67, 0x72, 0x61, 0x63, 0x65, 0x50, 0x65, 0x72, 0x69, 0x6f, 0x64, 0x50, 0x65, 0x72, 0x54,
 	0x6f, 0x6b, 0x65, 0x6e, 0x50, 0x72, 0x69, 0x63, 0x65, 0x3a, 0x04, 0xe8, 0xa0, 0x1f, 0x01, 0x22,
-	0xf7, 0x01, 0x0a, 0x15, 0x42, 0x61, 0x6e, 0x64, 0x77, 0x69, 0x64, 0x74, 0x68, 0x4c, 0x69, 0x6d,
+	0xa4, 0x03, 0x0a, 0x15, 0x42, 0x61, 0x6e, 0x64, 0x77, 0x69, 0x64, 0x74, 0x68, 0x4c, 0x69, 0x6d,
 	0x69, 0x74, 0x73, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x12, 0x40, 0x0a, 0x1d, 0x65, 0x73, 0x74,
 	0x69, 0x6d, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x73, 0x5f, 0x70, 0x65,
 	0x72, 0x5f, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x5f, 0x6b, 0x62, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
@@ -10835,19 +11007,30 @@ var file_inference_inference_params_proto_rawDesc = []byte{
 	0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e,
 	0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x44, 0x65, 0x63, 0x69, 0x6d, 0x61,
 	0x6c, 0x52, 0x10, 0x6b, 0x62, 0x50, 0x65, 0x72, 0x4f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x54, 0x6f,
-	0x6b, 0x65, 0x6e, 0x3a, 0x04, 0xe8, 0xa0, 0x1f, 0x01, 0x42, 0xb9, 0x01, 0x0a, 0x17, 0x63, 0x6f,
-	0x6d, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x69, 0x6e, 0x66, 0x65,
-	0x72, 0x65, 0x6e, 0x63, 0x65, 0x42, 0x0b, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x50, 0x72, 0x6f,
-	0x74, 0x6f, 0x50, 0x01, 0x5a, 0x24, 0x63, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x73, 0x64, 0x6b, 0x2e,
-	0x69, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65,
-	0x2f, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0xa2, 0x02, 0x03, 0x49, 0x49, 0x58,
-	0xaa, 0x02, 0x13, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x49, 0x6e, 0x66,
-	0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0xca, 0x02, 0x13, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
-	0x63, 0x65, 0x5c, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0xe2, 0x02, 0x1f, 0x49,
-	0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x5c, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
-	0x63, 0x65, 0x5c, 0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02,
-	0x14, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x3a, 0x3a, 0x49, 0x6e, 0x66, 0x65,
-	0x72, 0x65, 0x6e, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6b, 0x65, 0x6e, 0x12, 0x2f, 0x0a, 0x13, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x73, 0x5f, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x12, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x4c,
+	0x69, 0x6d, 0x69, 0x74, 0x12, 0x3e, 0x0a, 0x1b, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x5f, 0x73, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x5f, 0x70, 0x65, 0x72,
+	0x69, 0x6f, 0x64, 0x18, 0x05, 0x20, 0x01, 0x28, 0x04, 0x52, 0x19, 0x69, 0x6e, 0x76, 0x61, 0x6c,
+	0x69, 0x64, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x50, 0x65,
+	0x72, 0x69, 0x6f, 0x64, 0x12, 0x3a, 0x0a, 0x19, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x5f, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x5f, 0x63, 0x75, 0x72, 0x76,
+	0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x17, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x4c, 0x69, 0x6d, 0x69, 0x74, 0x43, 0x75, 0x72, 0x76, 0x65,
+	0x3a, 0x04, 0xe8, 0xa0, 0x1f, 0x01, 0x42, 0xb9, 0x01, 0x0a, 0x17, 0x63, 0x6f, 0x6d, 0x2e, 0x69,
+	0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
+	0x63, 0x65, 0x42, 0x0b, 0x50, 0x61, 0x72, 0x61, 0x6d, 0x73, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x50,
+	0x01, 0x5a, 0x24, 0x63, 0x6f, 0x73, 0x6d, 0x6f, 0x73, 0x73, 0x64, 0x6b, 0x2e, 0x69, 0x6f, 0x2f,
+	0x61, 0x70, 0x69, 0x2f, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x69, 0x6e,
+	0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0xa2, 0x02, 0x03, 0x49, 0x49, 0x58, 0xaa, 0x02, 0x13,
+	0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65,
+	0x6e, 0x63, 0x65, 0xca, 0x02, 0x13, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x5c,
+	0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0xe2, 0x02, 0x1f, 0x49, 0x6e, 0x66, 0x65,
+	0x72, 0x65, 0x6e, 0x63, 0x65, 0x5c, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x5c,
+	0x47, 0x50, 0x42, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0xea, 0x02, 0x14, 0x49, 0x6e,
+	0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x3a, 0x3a, 0x49, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
+	0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (

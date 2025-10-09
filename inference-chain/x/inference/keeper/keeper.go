@@ -60,6 +60,7 @@ type (
 		TrainingStartAllowListSet collections.KeySet[sdk.AccAddress]
 		PruningState              collections.Item[types.PruningState]
 		InferencesToPrune         collections.Map[collections.Pair[int64, string], collections.NoValue]
+		ActiveInvalidations       collections.KeySet[collections.Pair[sdk.AccAddress, string]]
 	}
 )
 
@@ -264,6 +265,12 @@ func NewKeeper(
 			"inferences_to_prune",
 			collections.PairKeyCodec(collections.Int64Key, collections.StringKey),
 			collections.NoValue{},
+		),
+		ActiveInvalidations: collections.NewKeySet(
+			sb,
+			types.ActiveInvalidationsPrefix,
+			"active_invalidations",
+			collections.PairKeyCodec(sdk.AccAddressKey, collections.StringKey),
 		),
 	}
 	// Build the collections schema

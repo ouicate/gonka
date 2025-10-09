@@ -57,6 +57,10 @@ func setPruningDefaults(ctx context.Context, k keeper.Keeper, fromVM module.Vers
 	if err != nil {
 		return err
 	}
+	params.BandwidthLimitsParams.InvalidationsLimit = 500
+	params.BandwidthLimitsParams.InvalidationsLimitCurve = 250
+	params.BandwidthLimitsParams.InvalidationsSamplePeriod = 120
+
 	params.EpochParams.InferencePruningMax = 5000
 	params.EpochParams.PocPruningMax = 1000
 	return k.SetParams(ctx, params)

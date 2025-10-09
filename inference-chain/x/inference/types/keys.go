@@ -43,6 +43,7 @@ var (
 	TrainingStartAllowListPrefix     = collections.NewPrefix(20)
 	PruningStatePrefix               = collections.NewPrefix(21)
 	InferencesToPrunePrefix          = collections.NewPrefix(22)
+	ActiveInvalidationsPrefix        = collections.NewPrefix(23)
 	ParamsKey                        = []byte("p_inference")
 )
 
