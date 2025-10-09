@@ -2,12 +2,12 @@
 
 MAKEFLAGS += --no-print-directory
 
-export PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
+export PROJECT_ROOT := $(shell git rev-parse --show-toplevel)/mlnode
 
 VERSION ?= $(shell git describe --always)
-IMAGE_NAME := gcr.io/decentralized-ai/mlnode:$(VERSION)
+IMAGE_NAME := ghcr.io/gonka-ai/mlnode:$(VERSION)
 IMAGE_NAME_GITHUB := ghcr.io/product-science/mlnode:$(VERSION)
-LATEST_IMAGE_NAME := gcr.io/decentralized-ai/mlnode:latest
+LATEST_IMAGE_NAME := ghcr.io/gonka-ai/mlnode:latest
 LATEST_IMAGE_NAME_GITHUB := ghcr.io/product-science/mlnode:latest
 TAG_NAME := "release/v$(VERSION)"
 

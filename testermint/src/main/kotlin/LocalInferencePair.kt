@@ -5,6 +5,7 @@ import com.github.dockerjava.api.model.*
 import com.github.dockerjava.core.DockerClientBuilder
 import com.github.kittinunf.fuel.core.FuelError
 import com.productscience.data.*
+import okhttp3.Address
 import org.tinylog.kotlin.Logger
 import java.io.File
 import java.time.Duration
@@ -109,10 +110,14 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
             chainContainer.id,
             configWithName
         )
+        val apiExecutor = DockerExecutor(
+            apiContainer.id,
+            configWithName
+        )
 
         LocalInferencePair(
             node = ApplicationCLI(configWithName, nodeLogs, executor, listOf()),
-            api = ApplicationAPI(apiUrls, configWithName, dapiLogs),
+            api = ApplicationAPI(apiUrls, configWithName, dapiLogs, apiExecutor),
             mock = mockContainer?.let {
                 MockServerInferenceMock(
                     baseUrl = "http://localhost:${it.getMappedPort(8080)!!}", name = it.names.first()
@@ -342,8 +347,8 @@ data class LocalInferencePair(
         if (epochData.phase != EpochPhase.Inference ||
             startOfNextPoc - currentBlockHeight < windowSizeInBlocks
         ) {
-            logSection("Waiting for SET_NEW_VALIDATORS stage before running inference")
-            return waitForStage(EpochStage.SET_NEW_VALIDATORS)
+            logSection("Waiting for CLAIM_REWARDS stage before running inference")
+            return waitForStage(EpochStage.CLAIM_REWARDS)
         } else {
             Logger.info("Skipping wait for SET_NEW_VALIDATORS, current phase is ${epochData.phase}")
             return null
@@ -563,7 +568,7 @@ data class LocalInferencePair(
                 description,
                 "--deposit",
                 // TODO: Denom and amount should not be hardcoded
-                "${deposit}nicoin",
+                "${deposit}ngonka",
             )
         )
     }
@@ -646,7 +651,9 @@ data class LocalInferencePair(
         wrapLog("waitForInference", true) {
             var inference: InferencePayload? = null
             var tries = 0
-            while (if (finished) inference?.actualCost == null else inference == null && tries < blocks) {
+            while (tries < blocks &&
+                (if (finished) inference?.actualCost == null else inference == null)
+            ) {
                 this.node.waitForNextBlock()
                 inference = this.api.getInferenceOrNull(inferenceId)
                 tries++

@@ -27,11 +27,11 @@ fi
 echo "Using the following arguments"
 echo "KEYRING_BACKEND: $KEYRING_BACKEND"
 
-export KEY_NAME="genesis"
-export APP_NAME="inferenced"
-export CHAIN_ID="gonka-rehearsal"
-export COIN_DENOM="nicoin"
-export STATE_DIR="/root/.inference"
+KEY_NAME="genesis"
+APP_NAME="inferenced"
+CHAIN_ID="gonka-mainnet"
+COIN_DENOM="ngonka"
+STATE_DIR="/root/.inference"
 
 update_configs() {
   if [ "${REST_API_ACTIVE:-}" = true ]; then

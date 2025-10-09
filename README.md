@@ -7,7 +7,7 @@ We introduce a novel consensus mechanism, **Proof of Work 2.0**, that ensures ne
 ## Key Roles
 
 - **Developers** — Use the decentralized network to run inference and LLM training.
-- **Participants (Hardware Providers or Nodes)**  — Contribute computational resources and earn rewards based on their input.
+- **Hosts (Hardware Providers or Nodes)**  — Contribute computational resources and earn rewards based on their input.
 ## Key Features
 
 1. A novel **“Sprint”** mechanism, where participants compete in time-bound computational Races to solve AI-relevant tasks. Instead of traditional Proof of Work (e.g., compute hashes), these Races use **transformer-based models**, aligning the computation with AI model workloads. The number of successful computations a node generates during the Race determines its **voting weight**, directly linking computational contribution to governance and task validation rights. This voting weight not only determines consensus power but also controls task allocation: nodes with higher weight are assigned a larger share of AI inferences and training workloads, and are proportionally responsible for validating others’ results. This ensures that system resources are used efficiently, with real-world tasks assigned in proportion to each node’s proven compute capacity, enabling a “one-computational-power-one-vote” principle rather than capital-based influence (see diagram 1).
@@ -23,13 +23,13 @@ We introduce a novel consensus mechanism, **Proof of Work 2.0**, that ensures ne
 For a deeper technical and conceptual explanation, check out [the White Paper](https://gonka.ai/whitepaper.pdf).
 ## Getting started
 
-For the most up-to-date documentation, please visit [https://testnet.productscience.ai/](https://testnet.productscience.ai/introduction/)
+For the most up-to-date documentation, please visit [https://gonka.ai/introduction/](https://gonka.ai/introduction/).
 
 To join Testnet:
-- **As Developer**: Explore the [Quickstart Guide](https://testnet.productscience.ai/developer/quickstart/) to understand how to create a user account and submit an inference request using the `inferenced` CLI tool.
-- **As Participant (Hardware Providers or Nodes)**:
-    - Review the [Hardware Specifications](https://testnet.productscience.ai/participant/hardware-specifications/) to ensure your equipment meets the requirements.
-    - Follow the [Participant Quickstart Guide](https://testnet.productscience.ai/participant/quickstart/) to set up your node and start contributing computational resources.
+- **As Developer**: Explore the [Quickstart Guide](https://gonka.ai/developer/quickstart/) to understand how to create a user account and submit an inference request using the `inferenced` CLI tool.
+- **As Host (Hardware Provider or Node)**:
+    - Review the [Hardware Specifications](https://gonka.ai/participant/hardware-specifications/) to ensure your equipment meets the requirements.
+    - Follow the [Participant Quickstart Guide](https://gonka.ai/participant/quickstart/) to set up your node and start contributing computational resources.
 ### Local Quickstart
 
 This section walks you through setting up a local development environment to build and test the core components, without joining the real network or running a full MLNode.
@@ -80,9 +80,6 @@ Our project is built as a modular, containerized infrastructure with multiple in
 - `ml` node — Handles AI workload execution: training, inference, and Proof of Work 2.0. Participants run `ml`nodes to contribute compute.
     - Technologies: Python, Docker, NVIDIA CUDA, gRPC, PyTorch, vLLM.
     - Location: [MLNode GitHub Repository](https://github.com/product-science/mlnode/tree/main)
-- Ethereum Node — Interfaces with Ethereum for anchoring and bridging use cases.
-    - Technologies: [Work in progress]
-    - Location:  [Work in progress]
 
 ![network-architecture](https://github.com/user-attachments/assets/df7aaf8a-209b-477e-8aeb-cfa423d7b10d)
 
@@ -114,11 +111,10 @@ The system is designed around **containerized microservices**. Each component ru
 - Scalable compute – Easily add more `ml`nodes or `api`nodes
 - Simplified redeployments – Faster updates and rollback support
 
-We maintain deployment examples and tooling in the [pivot-deploy](https://github.com/product-science/pivot-deploy) repository. (Planned to be merged into the main repository soon).
-## Policies
-
-[Terms & Policies](https://testnet.productscience.ai/termsofuse/) governing the use of the platform.
+We maintain deployment examples and tooling in the [https://github.com/gonka-ai/gonka/](https://github.com/gonka-ai/gonka/).
+## Model licenses
+[https://gonka.ai/model-licenses/](https://gonka.ai/model-licenses/)
 ## Support
 
 - Reach us at hello@productscience.ai.
-- [Discord](https://discord.com/invite/pUSEmYX4JP) – Join for real-time discussions, updates, and support.
+- [Discord](https://discord.gg/aJDBXt2XJ5) – Join for real-time discussions, updates, and support.

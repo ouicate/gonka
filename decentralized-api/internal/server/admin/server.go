@@ -6,6 +6,7 @@ import (
 	cosmos_client "decentralized-api/cosmosclient"
 	"decentralized-api/internal/server/middleware"
 	pserver "decentralized-api/internal/server/public"
+	"decentralized-api/internal/validation"
 
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 	blstypes "github.com/productscience/inference/x/bls/types"
@@ -26,6 +27,7 @@ type Server struct {
 	nodeBroker    *broker.Broker
 	configManager *apiconfig.ConfigManager
 	recorder      cosmos_client.CosmosMessageClient
+	validator     *validation.InferenceValidator
 	cdc           *codec.ProtoCodec
 	blockQueue    *pserver.BridgeQueue
 }
@@ -34,6 +36,7 @@ func NewServer(
 	recorder cosmos_client.CosmosMessageClient,
 	nodeBroker *broker.Broker,
 	configManager *apiconfig.ConfigManager,
+	validator *validation.InferenceValidator,
 	blockQueue *pserver.BridgeQueue) *Server {
 	cdc := getCodec()
 
@@ -44,6 +47,7 @@ func NewServer(
 		nodeBroker:    nodeBroker,
 		configManager: configManager,
 		recorder:      recorder,
+		validator:     validator,
 		cdc:           cdc,
 		blockQueue:    blockQueue,
 	}
@@ -53,6 +57,8 @@ func NewServer(
 
 	g.POST("nodes", s.createNewNode)
 	g.POST("nodes/batch", s.createNewNodes)
+	g.GET("nodes/upgrade-status", s.getUpgradeStatus)
+	g.POST("nodes/version-status", s.postVersionStatus)
 	g.GET("nodes", s.getNodes)
 	g.DELETE("nodes/:id", s.deleteNode)
 	g.POST("nodes/:id/enable", s.enableNode)
@@ -67,6 +73,9 @@ func NewServer(
 	g.POST("bls/request", s.postRequestThresholdSignature)
 
 	g.POST("debug/create-dummy-training-task", s.postDummyTrainingTask)
+
+	// Manual validation recovery and claim endpoint
+	g.POST("claim-reward/recover", s.postClaimRewardRecover)
 
 	// Bridge
 	g.POST("bridge/block", s.postBridgeBlock)

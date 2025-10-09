@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 ################################################################################
-FROM gcr.io/decentralized-ai/vllm:v0.9.1 AS base
+FROM ghcr.io/gonka-ai/vllm:v0.9.1 AS base
 
 RUN --mount=type=cache,target=/var/lib/apt/lists \
     --mount=type=cache,target=/root/.cache/pip \
@@ -81,7 +81,6 @@ COPY packages/train/scripts /app/packages/train/scripts
 COPY packages/train/resources /app/packages/train/resources
 
 COPY packages/common/src /app/packages/common/src
-COPY .git /app/.git
 
 ENV PYTHONPATH="/app"
 ENV PYTHONPATH="${PYTHONPATH}:/app/packages/api/src"

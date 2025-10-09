@@ -49,6 +49,11 @@ proxy-release:
 	@make -C proxy release
 	@make -C proxy docker-push
 
+proxy-ssl-release:
+	@echo "Releasing proxy-ssl..."
+	@make -C proxy-ssl release
+	@make -C proxy-ssl docker-push
+
 bridge-release:
 	@echo "Releasing bridge..."
 	@make -C bridge release

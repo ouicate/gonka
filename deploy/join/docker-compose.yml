@@ -1,6 +1,6 @@
 services:
   tmkms:
-    image: ghcr.io/product-science/tmkms-softsign-with-keygen:0.1.23
+    image: ghcr.io/product-science/tmkms-softsign-with-keygen:0.2.3-patch4
     container_name: tmkms
     restart: unless-stopped
     environment:
@@ -10,7 +10,7 @@ services:
 
   node:
     container_name: node
-    image: ghcr.io/product-science/inferenced:0.1.23
+    image: ghcr.io/product-science/inferenced:0.2.3-patch4
     command: ["sh", "./init-docker.sh"]
     volumes:
       - .inference:/root/.inference
@@ -27,13 +27,13 @@ services:
       - CONFIG_p2p__handshake_timeout=30s
       - CONFIG_p2p__dial_timeout=30s
       - TMKMS_PORT=${TMKMS_PORT:-26658}
-      - SYNC_WITH_SNAPSHOTS=true
+      - SYNC_WITH_SNAPSHOTS=${SYNC_WITH_SNAPSHOTS:-true}
       - RPC_SERVER_URL_1=${RPC_SERVER_URL_1}
       - RPC_SERVER_URL_2=${RPC_SERVER_URL_2}
       - REST_API_ACTIVE=true
       - INIT_ONLY=false
-      - IS_GENESIS=true
-      - GENESIS_SEEDS=c637495acea140a2f76e52b20f7e80e5cb6784ef@gonka.spv.re:5000,c2556c33c3c30f04f31817815eab844104fea034@47.236.26.199:5000,dbca3846804a0495850048e35898b97c60fb89ab@195.242.13.239:5000,9712d51caa666c15c0ae37067d61e312209aa51d@36.189.234.197:18027,f99c57f258ef042d02bce33482135fb5cfb69bdb@185.216.21.98:5000,5511e206df2d7e582bd329ff2bfcdc2c79a3445e@47.236.19.22:15000,94c113ce4e2f7f6ffcacae238a924342a7a8b0df@36.189.234.237:17240,44f7c802202a7aed0c6a7facff7bf009268c28eb@89.169.103.180:5000,345cb118044901a7df585a6925b84193ac281c71@69.19.136.233:5000
+      - IS_GENESIS=false
+      - GENESIS_SEEDS=780e60b5defca577a160590e0bf51c6bb916d2c6@gonka.spv.re:5000,39ebfea6d2ab91e90c26cb702345cfa2f9bc611b@47.236.26.199:5000,645fbce2dedcc7166f4df7931d2c87ca5188b569@node2.gonka.ai:5000,6140f7090137d93c272ff5ccd863484d1592949d@node3.gonka.ai:5000,947a89a2d5f2af45cb7853f56be0bab8303ffce9@36.189.234.197:18027,78f3279bd30fe6f1b84a9c40c3b97bd74e575981@185.216.21.98:5000,d53a970a40231474fb4092ee64609b975d906085@47.236.19.22:15000,b7dd3863523d78cc5a7c56ddb786395fe49c954a@93.119.168.58:5000,b4ad5a33520ce10d0b7ed5193e2de71e2f1f7a51@36.189.234.237:17240,0772f16cc65cb4d19341b192bd7eba964f11d124@node1.gonka.ai:5000,4d63a0411a257669e794ff62f801550a8449d239@69.19.136.233:5000
     ports:
       - "5000:26656" #p2p
       - "26657:26657" #rpc
@@ -45,7 +45,7 @@ services:
 
   api:
     container_name: api
-    image: ghcr.io/product-science/api:0.1.23
+    image: ghcr.io/product-science/api:0.2.3-patch4
     volumes:
       - .inference:/root/.inference
       - .dapi:/root/.dapi
@@ -102,19 +102,36 @@ services:
   
   proxy:
     container_name: proxy
-    image: ghcr.io/product-science/proxy:0.1.23
+    image: ghcr.io/product-science/proxy:0.2.3-patch4
     ports:
       - "${API_PORT:-8000}:80"
+      - "${API_SSL_PORT:-8443}:443"
     environment:
-      - API_PORT=9000
+      - NGINX_MODE=${NGINX_MODE:-http}
+      - SERVER_NAME=${SERVER_NAME:-}
+      - GONKA_API_PORT=9000
       - CHAIN_RPC_PORT=26657
       - CHAIN_API_PORT=1317
       - CHAIN_GRPC_PORT=9090
       - DASHBOARD_PORT=5173
+      # SSL enablement (entrypoint enables SSL if CERT_ISSUER_DOMAIN is set)
+      - CERT_ISSUER_DOMAIN=${CERT_ISSUER_DOMAIN:-}
+      - PROXY_ADD_NODE_PREFIX=${PROXY_ADD_NODE_PREFIX:-false}
+      # Optional: override proxy-ssl discovery
+      - PROXY_SSL_SERVICE_NAME=${PROXY_SSL_SERVICE_NAME:-proxy-ssl}
+      - PROXY_SSL_PORT=${PROXY_SSL_PORT:-8080}
+    volumes:
+      - ${SSL_CERT_SOURCE:-./secrets/nginx-ssl}:/etc/nginx/ssl
     depends_on:
-      - node
-      - api
-      - explorer
+      node:
+        condition: service_started
+      api:
+        condition: service_started
+      explorer:
+        condition: service_started
+      proxy-ssl:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/health"]
@@ -123,10 +140,56 @@ services:
       retries: 3
       start_period: 10s
 
+  proxy-ssl:
+    container_name: proxy-ssl
+    image: ghcr.io/product-science/proxy-ssl:0.2.3-patch4
+    profiles:
+      - ssl
+    environment:
+      # ACME Configuration
+      - ACME_ACCOUNT_EMAIL=${ACME_ACCOUNT_EMAIL:-}
+      - ACME_DNS_PROVIDER=${ACME_DNS_PROVIDER:-}
+
+      # Service Configuration
+      - CERT_ISSUER_DOMAIN=${CERT_ISSUER_DOMAIN:-}
+      - CERT_ISSUER_ALLOWED_SUBDOMAINS=${CERT_ISSUER_ALLOWED_SUBDOMAINS:-}
+      - CERT_ISSUER_JWT_SECRET=${CERT_ISSUER_JWT_SECRET:-}
+
+      # DNS Provider Configuration (if needed for your provider)
+      # AWS
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      # Cloudflare
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
+      # Google Cloud
+      - GCE_PROJECT=${GCE_PROJECT:-}
+      - GCE_SERVICE_ACCOUNT_JSON_B64=${GCE_SERVICE_ACCOUNT_JSON_B64:-}
+      # Azure
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      # DigitalOcean
+      - DO_AUTH_TOKEN=${DO_AUTH_TOKEN:-}
+      # Hetzner
+      - HETZNER_API_KEY=${HETZNER_API_KEY:-}
+    volumes:
+      - ./secrets/nginx-ssl:/app/certs
+      - ./secrets/certbot:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   explorer:
     container_name: explorer
     image: ghcr.io/product-science/explorer:latest
     expose:
       - "5173"
     restart: unless-stopped
+
 

@@ -1,5 +1,5 @@
 ################################################################################
-FROM gcr.io/decentralized-ai/vllm:v0.9.1 AS app
+FROM ghcr.io/gonka-ai/vllm:v0.9.1 AS app
 
 ENV APP_PATH=/app/packages/train
 
@@ -69,7 +69,6 @@ COPY packages/train/resources /app/packages/train/resources
 COPY packages/common/src /app/packages/common/src
 
 # Just to provide metadata for the wandb project
-COPY .git /app/.git
 
 ENV PYTHONPATH="/app"
 ENV PYTHONPATH="${PYTHONPATH}:${APP_PATH}/src"

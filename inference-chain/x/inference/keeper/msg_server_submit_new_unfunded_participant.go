@@ -10,8 +10,6 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
-const FaucetRequests = 1000
-
 func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *types.MsgSubmitNewUnfundedParticipant) (*types.MsgSubmitNewUnfundedParticipantResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -35,7 +33,6 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 	k.LogInfo("added account with pubkey", types.Participants, "pubkey", newAccount.GetPubKey(), "address", newAccount.GetAddress())
 
 	k.AccountKeeper.SetAccount(ctx, newAccount)
-	// TODO: Handling the message
 	newParticipant := createNewParticipant(ctx,
 		&types.MsgSubmitNewParticipant{
 			Creator:      msg.GetAddress(),
@@ -45,20 +42,5 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 		})
 	k.LogDebug("Adding new participant", types.Participants, "participant", newParticipant)
 	k.SetParticipant(ctx, newParticipant)
-	if newParticipant.GetInferenceUrl() == "" {
-		// Consumer only!
-		k.LogInfo("Funding new consumer", types.Participants, "consumer", newParticipant)
-		starterAmount := int64(DefaultMaxTokens * TokenCost * FaucetRequests)
-		err := k.MintRewardCoins(ctx, starterAmount, "starter_coins:"+newParticipant.GetAddress())
-		if err != nil {
-			k.LogError("Error minting coins", types.Participants, "error", err)
-			return nil, err
-		}
-		err = k.PayParticipantFromModule(ctx, msg.GetAddress(), uint64(starterAmount), types.ModuleName, "starter_coins:"+newParticipant.GetAddress(), nil)
-		if err != nil {
-			k.LogError("Error sending coins", types.Participants, "error", err)
-			return nil, err
-		}
-	}
 	return &types.MsgSubmitNewUnfundedParticipantResponse{}, nil
 }
