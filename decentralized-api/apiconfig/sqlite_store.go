@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	_ "modernc.org/sqlite"
 )
@@ -71,6 +72,13 @@ CREATE TABLE IF NOT EXISTS inference_nodes (
   max_concurrent INTEGER NOT NULL,
   models_json TEXT NOT NULL,
   hardware_json TEXT NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now')),
+  created_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now'))
+);
+
+CREATE TABLE IF NOT EXISTS kv_config (
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL,
   updated_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now')),
   created_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now'))
 );`
@@ -195,4 +203,79 @@ FROM inference_nodes ORDER BY id`)
 		return nil, err
 	}
 	return out, nil
+}
+
+// KV helpers for dynamic config
+
+// KVSetJSON upserts an arbitrary Go value encoded as JSON at the given key.
+func KVSetJSON(ctx context.Context, db *sql.DB, key string, value any) error {
+	if db == nil {
+		return errors.New("db is nil")
+	}
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	q := `INSERT INTO kv_config(key, value_json) VALUES(?, ?)
+ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = (STRFTIME('%Y-%m-%d %H:%M:%f','now'))`
+	if _, err := tx.ExecContext(ctx, q, key, string(bytes)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// KVGetJSON loads a key and unmarshals JSON into destPtr.
+// If key not found, ok=false and no error is returned.
+func KVGetJSON(ctx context.Context, db *sql.DB, key string, destPtr any) (ok bool, err error) {
+	if db == nil {
+		return false, errors.New("db is nil")
+	}
+	var raw string
+	err = db.QueryRowContext(ctx, `SELECT value_json FROM kv_config WHERE key = ?`, key).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal([]byte(raw), destPtr); err != nil {
+		return false, fmt.Errorf("unmarshal json for key %s: %w", key, err)
+	}
+	return true, nil
+}
+
+// KVSetInt64 stores an int64 under key.
+func KVSetInt64(ctx context.Context, db *sql.DB, key string, v int64) error {
+	return KVSetJSON(ctx, db, key, v)
+}
+
+// KVGetInt64 retrieves an int64. If missing, returns ok=false.
+func KVGetInt64(ctx context.Context, db *sql.DB, key string) (val int64, ok bool, err error) {
+	var tmp int64
+	ok, err = KVGetJSON(ctx, db, key, &tmp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return tmp, true, nil
+}
+
+// KVSetString stores a string under key.
+func KVSetString(ctx context.Context, db *sql.DB, key string, v string) error {
+	return KVSetJSON(ctx, db, key, v)
+}
+
+// KVGetString retrieves a string. If missing, returns ok=false.
+func KVGetString(ctx context.Context, db *sql.DB, key string) (val string, ok bool, err error) {
+	var tmp string
+	ok, err = KVGetJSON(ctx, db, key, &tmp)
+	if !ok || err != nil {
+		return "", ok, err
+	}
+	return tmp, true, nil
 }
