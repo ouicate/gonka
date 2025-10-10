@@ -2,6 +2,7 @@ package apiconfig
 
 import (
 	"context"
+	"database/sql"
 	"decentralized-api/logging"
 	"encoding/base64"
 	"encoding/json"
@@ -28,7 +29,6 @@ type ConfigManager struct {
 	WriterProvider WriteCloserProvider
 	sqlDb          SqlDatabase
 	mutex          sync.Mutex
-	dirty          dirtyState
 }
 
 type WriteCloserProvider interface {
@@ -490,7 +490,6 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 	// Populate in-memory nodes and mark dirty. Auto-flush will persist and then set merged flag.
 	cm.mutex.Lock()
 	cm.currentConfig.Nodes = newNodes
-	cm.dirty.Nodes = true
 	cm.mutex.Unlock()
 
 	logging.Info("Loaded node configuration into memory; will persist on next flush", types.Config,
@@ -679,60 +678,61 @@ func (cm *ConfigManager) flushToDB(_ context.Context) error {
 		return err
 	}
 	cm.mutex.Lock()
-	dirty := cm.dirty
 	cfg := cm.currentConfig
-	cm.dirty = dirtyState{}
 	cm.mutex.Unlock()
-
-	if !dirty.any() {
-		return nil
-	}
 	db := cm.sqlDb.GetDb()
 	if db == nil {
 		return nil
 	}
 
-	if dirty.Nodes {
-		if err := ReplaceInferenceNodes(ctx, db, cfg.Nodes); err != nil {
-			return err
-		}
-		_ = KVSetJSON(ctx, db, kvKeyNodeConfigMerged, true)
+	// Always flush everything; each logical group uses its own transaction inside helpers
+	if err := ReplaceInferenceNodes(ctx, db, cfg.Nodes); err != nil {
+		return err
 	}
-	if dirty.Seeds {
-		_ = SetActiveSeed(ctx, db, "current", cfg.CurrentSeed)
-		_ = SetActiveSeed(ctx, db, "previous", cfg.PreviousSeed)
-		_ = SetActiveSeed(ctx, db, "upcoming", cfg.UpcomingSeed)
+	_ = KVSetJSON(ctx, db, kvKeyNodeConfigMerged, true)
+
+	// Seeds: must be atomic as a group; perform in one tx
+	if err := setSeedsAtomic(ctx, db, cfg); err != nil {
+		return err
 	}
-	if dirty.Heights {
-		_ = KVSetInt64(ctx, db, kvKeyCurrentHeight, cfg.CurrentHeight)
-		_ = KVSetInt64(ctx, db, kvKeyLastProcessedHeight, cfg.LastProcessedHeight)
-	}
-	if dirty.Versions {
-		_ = KVSetJSON(ctx, db, kvKeyUpgradePlan, cfg.UpgradePlan)
-		_ = KVSetString(ctx, db, kvKeyCurrentNodeVersion, cfg.CurrentNodeVersion)
-		_ = KVSetString(ctx, db, kvKeyLastUsedVersion, cfg.LastUsedVersion)
-		_ = KVSetJSON(ctx, db, kvKeyMLNodeKeyConfig, cfg.MLNodeKeyConfig)
-	}
-	if dirty.ValidationParams {
-		_ = KVSetJSON(ctx, db, kvKeyValidationParams, cfg.ValidationParams)
-	}
-	if dirty.BandwidthParams {
-		_ = KVSetJSON(ctx, db, kvKeyBandwidthParams, cfg.BandwidthParams)
-	}
+
+	_ = KVSetInt64(ctx, db, kvKeyCurrentHeight, cfg.CurrentHeight)
+	_ = KVSetInt64(ctx, db, kvKeyLastProcessedHeight, cfg.LastProcessedHeight)
+	_ = KVSetJSON(ctx, db, kvKeyUpgradePlan, cfg.UpgradePlan)
+	_ = KVSetString(ctx, db, kvKeyCurrentNodeVersion, cfg.CurrentNodeVersion)
+	_ = KVSetString(ctx, db, kvKeyLastUsedVersion, cfg.LastUsedVersion)
+	_ = KVSetJSON(ctx, db, kvKeyMLNodeKeyConfig, cfg.MLNodeKeyConfig)
+	_ = KVSetJSON(ctx, db, kvKeyValidationParams, cfg.ValidationParams)
+	_ = KVSetJSON(ctx, db, kvKeyBandwidthParams, cfg.BandwidthParams)
 	return nil
 }
 
-type dirtyState struct {
-	Nodes            bool
-	Seeds            bool
-	Heights          bool
-	Versions         bool
-	ValidationParams bool
-	BandwidthParams  bool
+// setSeedsAtomic writes all three seeds in a single transaction to keep them consistent.
+func setSeedsAtomic(ctx context.Context, db *sql.DB, cfg Config) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE seed_info SET is_active = 0 WHERE is_active = 1 AND type IN ('current','previous','upcoming')`); err != nil {
+		return err
+	}
+	if err := insertSeedTx(ctx, tx, "current", cfg.CurrentSeed); err != nil {
+		return err
+	}
+	if err := insertSeedTx(ctx, tx, "previous", cfg.PreviousSeed); err != nil {
+		return err
+	}
+	if err := insertSeedTx(ctx, tx, "upcoming", cfg.UpcomingSeed); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-func (d dirtyState) any() bool {
-	return d.Nodes || d.Seeds || d.Heights || d.Versions || d.ValidationParams || d.BandwidthParams
+func insertSeedTx(ctx context.Context, tx *sql.Tx, seedType string, s SeedInfo) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO seed_info(type, seed, epoch_index, signature, claimed, is_active) VALUES(?, ?, ?, ?, ?, 1)`,
+		seedType, s.Seed, s.EpochIndex, s.Signature, s.Claimed)
+	return err
 }
 
 // ensureDbReady pings the DB and attempts to reopen if needed
