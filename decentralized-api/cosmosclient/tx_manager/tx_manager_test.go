@@ -1,17 +1,10 @@
 package tx_manager
 
 import (
-	"context"
-	"decentralized-api/apiconfig"
-	"decentralized-api/internal/nats/client"
-	natssrv "decentralized-api/internal/nats/server"
-	"encoding/base64"
 	"encoding/json"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/google/uuid"
-	"github.com/ignite/cli/v28/ignite/pkg/cosmosclient"
 	"github.com/ignite/cli/v28/ignite/pkg/cosmosclient/mocks"
 	"github.com/productscience/inference/api/inference/inference"
 	testutil "github.com/productscience/inference/testutil/cosmoclient"
@@ -71,65 +64,4 @@ func TestPack_Unpack_Msg(t *testing.T) {
 	assert.Equal(t, rawTx.PromptTokenCount, result.PromptTokenCount)
 	assert.Equal(t, rawTx.CompletionTokenCount, result.CompletionTokenCount)
 	assert.Equal(t, rawTx.ExecutedBy, result.ExecutedBy)
-}
-
-func TestTxManagerOnChainHalt(t *testing.T) {
-	const addr = "gonka19vqp63msjpm5vz85ghwmmx052zenxm4wkqcd3y"
-	config := apiconfig.NatsServerConfig{
-		Host: "0.0.0.0",
-		Port: 4111,
-	}
-
-	srv := natssrv.NewServer(config)
-
-	err := srv.Start()
-	assert.NoError(t, err)
-
-	ctx := context.Background()
-	cosmoclient, err := cosmosclient.New(
-		ctx,
-		cosmosclient.WithAddressPrefix("gonka"),
-		cosmosclient.WithKeyringServiceName("inferenced"),
-		cosmosclient.WithNodeAddress("http://localhost:26657"),
-		cosmosclient.WithKeyringDir("/home/zb/jobs/productai/code/gonka/local-test-net/prod-local/genesis"),
-		cosmosclient.WithGasPrices("0ngonka"),
-		cosmosclient.WithFees("0ngonka"),
-		cosmosclient.WithGas("auto"),
-		cosmosclient.WithGasAdjustment(5),
-	)
-
-	natsConn, err := client.ConnectToNats(config.Host, config.Port, "tx_manager")
-	assert.NoError(t, err)
-
-	acc, err := cosmoclient.Account(addr)
-	assert.NoError(t, err)
-
-	pubKeyBytes, err := base64.StdEncoding.DecodeString("ArVokzTKWFnsDsrH9uRwciOr56n2jqRhMu6CEIfsheP9")
-	assert.NoError(t, err)
-
-	accountKey := secp256k1.PubKey{Key: pubKeyBytes}
-
-	txManager, err := StartTxManager(
-		ctx,
-		&cosmoclient,
-		&apiconfig.ApiAccount{
-			AccountKey:    &accountKey,
-			SignerAccount: &acc,
-			AddressPrefix: "gonka",
-		},
-		5*time.Second,
-		natsConn, addr,
-	)
-	assert.NoError(t, err)
-
-	time.Sleep(2 * time.Second)
-
-	_, err = txManager.SendTransactionAsyncWithRetry(&types.MsgStartInference{
-		Creator:     addr,
-		AssignedTo:  addr,
-		InferenceId: uuid.New().String(),
-		RequestedBy: addr,
-	})
-	assert.NoError(t, err)
-	<-ctx.Done()
 }
