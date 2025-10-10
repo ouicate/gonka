@@ -274,6 +274,15 @@ func (cm *ConfigManager) SetPreviousSeed(seed SeedInfo) error {
 	return nil
 }
 
+func (cm *ConfigManager) AdvanceCurrentSeed() {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	cm.currentConfig.PreviousSeed = cm.currentConfig.CurrentSeed
+	cm.currentConfig.CurrentSeed = cm.currentConfig.UpcomingSeed
+	cm.currentConfig.UpcomingSeed = SeedInfo{}
+}
+
 func (cm *ConfigManager) MarkPreviousSeedClaimed() error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
