@@ -179,6 +179,8 @@ current_node_version: "v3.0.8"
 ]`
 	nodePath := writeTemp(t, tmp, "node-config.json", nodeJson)
 	dbPath := filepath.Join(tmp, "test.db")
+	// Ensure no leftover file exists
+	_ = os.Remove(dbPath)
 
 	// First load -> migration and hydrate
 	mgr, err := apiconfig.LoadConfigManagerWithPaths(cfgPath, dbPath, nodePath)
@@ -211,6 +213,10 @@ current_node_version: "v3.0.8"
 		ids2 = append(ids2, n.Id)
 	}
 	require.Equal(t, ids, ids2)
+
+	// Cleanup test DB explicitly
+	require.NoError(t, mgr2.FlushNow(ctx))
+	_ = os.Remove(dbPath)
 }
 
 func loadManager(t *testing.T) error {
@@ -250,10 +256,11 @@ func TestNoLoggingToStdout(t *testing.T) {
 	var buf bytes.Buffer
 
 	// Load config with overrides
-	_, err = logging.WithNoopLogger(func() (interface{}, error) {
+	_, noLoggerErr := logging.WithNoopLogger(func() (interface{}, error) {
 		err := loadManager(t)
 		return nil, err
 	})
+	require.NoError(t, noLoggerErr)
 
 	// Close the pipe and reset stdout
 	_ = w.Close()

@@ -532,6 +532,10 @@ func (cm *ConfigManager) migrateDynamicDataToDb(ctx context.Context) error {
 		return nil
 	}
 	config := cm.currentConfig
+	// If YAML indicates nodes were already merged historically, persist the flag so LoadNodeConfig skips
+	if config.NodeConfigIsMerged {
+		_ = KVSetJSON(ctx, cm.sqlDb.GetDb(), kvKeyNodeConfigMerged, true)
+	}
 	// Nodes: upsert unconditionally (idempotent)
 	if err := WriteNodes(ctx, cm.sqlDb.GetDb(), config.Nodes); err != nil {
 		logging.Error("Error writing nodes to DB", types.Config, "error", err)
