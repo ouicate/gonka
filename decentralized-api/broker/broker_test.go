@@ -331,7 +331,7 @@ func TestReleaseNode(t *testing.T) {
 	release := make(chan bool, 2)
 	queueMessage(t, broker, ReleaseNode{node.Id, InferenceSuccess{}, release})
 
-	b := !<-release
+	b := <-release
 	require.True(t, b, "expected release response to be true")
 	queueMessage(t, broker, LockAvailableNode{"model1", availableNode})
 	require.NotNil(t, <-availableNode, "expected node1, got nil")
