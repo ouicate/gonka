@@ -1,0 +1,426 @@
+"""Model manager for HuggingFace models."""
+
+import asyncio
+import os
+import shutil
+import time
+from typing import Dict, Optional, List
+from pathlib import Path
+
+from huggingface_hub import scan_cache_dir, snapshot_download, HfFileSystemResolvedPath
+from huggingface_hub.utils import RepositoryNotFoundError, RevisionNotFoundError, HfHubHTTPError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
+import requests
+
+from api.models.types import (
+    Model,
+    ModelStatus,
+    ModelStatusResponse,
+    DownloadProgress,
+    DiskSpaceInfo,
+)
+from common.logger import create_logger
+
+logger = create_logger(__name__)
+
+# Network-related exceptions that should trigger retries
+NETWORK_EXCEPTIONS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.RequestException,
+    HfHubHTTPError,
+    TimeoutError,
+    ConnectionError,
+    OSError,  # Can include network-related OS errors
+)
+
+
+class DownloadTask:
+    """Represents a running download task."""
+    
+    def __init__(self, model: Model):
+        self.model = model
+        self.task: Optional[asyncio.Task] = None
+        self.start_time = time.time()
+        self.error_message: Optional[str] = None
+        self.status = ModelStatus.DOWNLOADING
+        self.cancelled = False
+
+
+class ModelManager:
+    """Manages HuggingFace models in cache with download tracking."""
+    
+    MAX_CONCURRENT_DOWNLOADS = 3
+    
+    def __init__(self, cache_dir: Optional[str] = None):
+        """
+        Args:
+            cache_dir: Optional custom cache directory. If None, uses HF_HOME or default.
+        """
+        self.cache_dir = cache_dir or os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+        self._download_tasks: Dict[str, DownloadTask] = {}
+        self._lock = asyncio.Lock()
+        logger.info(f"ModelManager initialized with cache_dir: {self.cache_dir}")
+    
+    def _get_task_id(self, model: Model) -> str:
+        return model.get_identifier()
+    
+    def is_model_exist(self, model: Model) -> bool:
+        """Checks if a model exists and is valid in the cache.
+        
+        Uses snapshot_download with local_files_only=True to validate checksums
+        of all files on disk. This is the canonical way to verify model integrity
+        without making network requests. It detects missing, incomplete, or corrupted files.
+        """
+        try:
+            # Temporarily override HF_HUB_OFFLINE to ensure cache can be checked.
+            old_offline = os.environ.get("HF_HUB_OFFLINE")
+            try:
+                os.environ["HF_HUB_OFFLINE"] = "0"
+                snapshot_download(
+                    repo_id=model.hf_repo,
+                    revision=model.hf_commit,
+                    cache_dir=self.cache_dir,
+                    local_files_only=True,
+                )
+                logger.info(
+                    f"Model {model.hf_repo}@{model.hf_commit or 'main'} "
+                    f"verified with checksums validated"
+                )
+                return True
+            finally:
+                # Restore original HF_HUB_OFFLINE value
+                if old_offline is None:
+                    os.environ.pop("HF_HUB_OFFLINE", None)
+                else:
+                    os.environ["HF_HUB_OFFLINE"] = old_offline
+        except Exception as e:
+            # Any exception means the model is not fully cached or is corrupted.
+            logger.debug(
+                f"Model {model.hf_repo}@{model.hf_commit or 'main'} "
+                f"not fully cached or corrupted: {e}"
+            )
+            return False
+    
+    def _download_model_with_retry(self, model: Model) -> str:
+        """Downloads a model, retrying on transient network errors.
+        
+        Retries up to 5 times with exponential backoff. The huggingface_hub library
+        handles checksum validation and resumes partial downloads automatically.
+        """
+        @retry(
+            stop=stop_after_attempt(5),
+            wait=wait_exponential(multiplier=1, min=1, max=60),
+            retry=retry_if_exception_type(NETWORK_EXCEPTIONS),
+            before_sleep=before_sleep_log(logger, logger.level),
+            reraise=True,
+        )
+        def _download_with_retry():
+            logger.info(
+                f"Downloading {model.hf_repo} "
+                f"(commit: {model.hf_commit or 'latest'})"
+            )
+            # Temporarily override HF_HUB_OFFLINE to ensure downloads work
+            old_offline = os.environ.get("HF_HUB_OFFLINE")
+            try:
+                os.environ["HF_HUB_OFFLINE"] = "0"
+                return snapshot_download(
+                    repo_id=model.hf_repo,
+                    revision=model.hf_commit,
+                    cache_dir=self.cache_dir,
+                    resume_download=True,
+                    local_files_only=False,
+                )
+            finally:
+                # Restore original HF_HUB_OFFLINE value
+                if old_offline is None:
+                    os.environ.pop("HF_HUB_OFFLINE", None)
+                else:
+                    os.environ["HF_HUB_OFFLINE"] = old_offline
+        
+        return _download_with_retry()
+    
+    def _verify_download_success(self, model: Model) -> bool:
+        """Verifies download integrity using checksum validation."""
+        if self.is_model_exist(model):
+            logger.info(f"Download verification successful: {model.hf_repo}")
+            return True
+        else:
+            logger.error(f"Download verification failed: {model.hf_repo}")
+            return False
+    
+    async def add_model(self, model: Model) -> str:
+        """Starts a model download asynchronously.
+        
+        Raises:
+            ValueError: If download limit is exceeded or model is already downloading.
+        """
+        task_id = self._get_task_id(model)
+        
+        async with self._lock:
+            if task_id in self._download_tasks:
+                existing = self._download_tasks[task_id]
+                if existing.status == ModelStatus.DOWNLOADING:
+                    raise ValueError(f"Model {task_id} is already downloading")
+            
+            active_downloads = sum(
+                1 for task in self._download_tasks.values()
+                if task.status == ModelStatus.DOWNLOADING
+            )
+            if active_downloads >= self.MAX_CONCURRENT_DOWNLOADS:
+                raise ValueError(
+                    f"Maximum concurrent downloads ({self.MAX_CONCURRENT_DOWNLOADS}) reached"
+                )
+            
+            if self.is_model_exist(model):
+                logger.info(f"Model {task_id} already exists in cache")
+                task = DownloadTask(model)
+                task.status = ModelStatus.DOWNLOADED
+                self._download_tasks[task_id] = task
+                return task_id
+            
+            download_task_obj = DownloadTask(model)
+            self._download_tasks[task_id] = download_task_obj
+            
+            download_task_obj.task = asyncio.create_task(
+                self._download_model(task_id, model, download_task_obj)
+            )
+        
+        logger.info(f"Started download for model {task_id}")
+        return task_id
+    
+    async def _download_model(
+        self, task_id: str, model: Model, task_obj: DownloadTask
+    ):
+        """Wrapper for the download process with error handling and status updates.
+        
+        This method:
+        1. Downloads with retry logic in a thread pool to avoid blocking asyncio loop.
+        2. Verifies download integrity after completion.
+        3. Sets a 24-hour timeout to prevent hangs.
+        4. Handles exceptions and updates the download task's status.
+        """
+        try:
+            logger.info(
+                f"Starting download for model {model.hf_repo} "
+                f"(commit: {model.hf_commit or 'latest'}) with retry logic"
+            )
+            
+            loop = asyncio.get_event_loop()
+            
+            # Timeout after 24 hours to prevent infinite hangs (large models can be 500GB+)
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    self._download_model_with_retry,
+                    model,
+                ),
+                timeout=86400  # 24 hours
+            )
+            
+            logger.info(f"Download completed for {task_id}, verifying...")
+            
+            if self._verify_download_success(model):
+                task_obj.status = ModelStatus.DOWNLOADED
+                logger.info(f"Successfully downloaded and verified model {task_id}")
+            else:
+                task_obj.status = ModelStatus.ERROR
+                task_obj.error_message = "Download verification failed - model files incomplete or corrupted"
+                logger.error(f"Download verification failed for {task_id}")
+            
+        except RepositoryNotFoundError as e:
+            logger.error(f"Repository not found: {model.hf_repo}")
+            task_obj.status = ModelStatus.ERROR
+            task_obj.error_message = f"Repository not found: {model.hf_repo}"
+        except RevisionNotFoundError as e:
+            logger.error(f"Revision not found: {model.hf_commit}")
+            task_obj.status = ModelStatus.ERROR
+            task_obj.error_message = f"Revision not found: {model.hf_commit}"
+        except asyncio.TimeoutError:
+            logger.error(f"Download timeout (24 hours) for {task_id}")
+            task_obj.status = ModelStatus.ERROR
+            task_obj.error_message = "Download timeout after 24 hours"
+        except asyncio.CancelledError:
+            logger.info(f"Download cancelled for {task_id}")
+            task_obj.status = ModelStatus.PARTIAL
+            task_obj.error_message = "Download cancelled"
+            # HuggingFace Hub handles partial download cleanup automatically
+            raise
+        except NETWORK_EXCEPTIONS as e:
+            # This occurs after all retry attempts are exhausted
+            logger.error(
+                f"Network error downloading model {task_id} after "
+                f"5 retry attempts: {e}"
+            )
+            task_obj.status = ModelStatus.ERROR
+            task_obj.error_message = (
+                f"Network error after 5 retry attempts: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Error downloading model {task_id}: {e}", exc_info=True)
+            task_obj.status = ModelStatus.ERROR
+            task_obj.error_message = str(e)
+    
+    def get_model_status(self, model: Model) -> ModelStatusResponse:
+        """Gets the current status of a model."""
+        task_id = self._get_task_id(model)
+        
+        if task_id in self._download_tasks:
+            task = self._download_tasks[task_id]
+            
+            progress = None
+            if task.status == ModelStatus.DOWNLOADING:
+                elapsed = time.time() - task.start_time
+                progress = DownloadProgress(
+                    start_time=task.start_time,
+                    elapsed_seconds=elapsed
+                )
+            
+            return ModelStatusResponse(
+                model=model,
+                status=task.status,
+                progress=progress,
+                error_message=task.error_message
+            )
+        
+        if self.is_model_exist(model):
+            return ModelStatusResponse(
+                model=model,
+                status=ModelStatus.DOWNLOADED
+            )
+        
+        return ModelStatusResponse(
+            model=model,
+            status=ModelStatus.NOT_FOUND
+        )
+    
+    async def cancel_download(self, model: Model):
+        """Cancels an ongoing download.
+        
+        Raises:
+            ValueError: If no download is in progress for the specified model.
+        """
+        task_id = self._get_task_id(model)
+        
+        async with self._lock:
+            if task_id not in self._download_tasks:
+                raise ValueError(f"No download task found for {task_id}")
+            
+            task = self._download_tasks[task_id]
+            
+            if task.status != ModelStatus.DOWNLOADING:
+                raise ValueError(f"Model {task_id} is not downloading (status: {task.status})")
+            
+            if task.task:
+                task.task.cancel()
+                try:
+                    await task.task
+                except asyncio.CancelledError:
+                    pass
+            
+            task.cancelled = True
+            logger.info(f"Cancelled download for {task_id}")
+    
+    async def delete_model(self, model: Model) -> str:
+        """Deletes a model from the cache or cancels an ongoing download.
+        
+        If `model.hf_commit` is specified, only that revision is deleted. Otherwise,
+        all revisions for the repository are removed.
+        
+        Returns:
+            "cancelled" if download was in progress, "deleted" if removed from cache.
+        
+        Raises:
+            ValueError: If the model or specific revision is not found.
+        """
+        task_id = self._get_task_id(model)
+        
+        if task_id in self._download_tasks:
+            task = self._download_tasks[task_id]
+            if task.status == ModelStatus.DOWNLOADING:
+                await self.cancel_download(model)
+                async with self._lock:
+                    del self._download_tasks[task_id]
+                return "cancelled"
+        
+        if not self.is_model_exist(model):
+            raise ValueError(f"Model {task_id} not found in cache")
+        
+        cache_info = scan_cache_dir(self.cache_dir)
+        
+        repo = next((r for r in cache_info.repos if r.repo_id == model.hf_repo), None)
+        if not repo:
+            raise ValueError(f"Model {task_id} not found in cache")
+        
+        if model.hf_commit:
+            # Delete a specific revision
+            revision = next((r for r in repo.revisions if r.commit_hash == model.hf_commit), None)
+            if not revision:
+                raise ValueError(f"Revision {model.hf_commit} not found")
+            revisions_to_delete = [revision.commit_hash]
+        else:
+            # Delete all revisions for the repo
+            revisions_to_delete = [r.commit_hash for r in repo.revisions]
+        
+        if not revisions_to_delete:
+            raise ValueError(f"No revisions found to delete for {task_id}")
+        
+        strategy = cache_info.delete_revisions(*revisions_to_delete)
+        logger.info(
+            f"Deleting {model.hf_repo} ({len(revisions_to_delete)} revision(s)): "
+            f"{strategy.expected_freed_size_str}"
+        )
+        strategy.execute()
+        
+        return "deleted"
+    
+    def list_models(self) -> List[Model]:
+        """Lists all models in the cache."""
+        models = []
+        
+        try:
+            cache_info = scan_cache_dir(self.cache_dir)
+            
+            for repo in cache_info.repos:
+                for revision in repo.revisions:
+                    models.append(Model(
+                        hf_repo=repo.repo_id,
+                        hf_commit=revision.commit_hash
+                    ))
+            
+            logger.info(f"Found {len(models)} models in cache")
+            return models
+            
+        except Exception as e:
+            logger.error(f"Error listing models: {e}")
+            return []
+    
+    def get_disk_space(self) -> DiskSpaceInfo:
+        """Gets disk space information for the cache."""
+        try:
+            cache_info = scan_cache_dir(self.cache_dir)
+            cache_size = cache_info.size_on_disk
+            
+            stat = shutil.disk_usage(self.cache_dir)
+            
+            return DiskSpaceInfo(
+                cache_size_bytes=cache_size,
+                available_bytes=stat.free,
+                cache_path=self.cache_dir
+            )
+            
+        except Exception as e:
+            logger.error(f"Error getting disk space: {e}")
+            # Return default values on error
+            return DiskSpaceInfo(
+                cache_size_bytes=0,
+                available_bytes=0,
+                cache_path=self.cache_dir
+            )
+

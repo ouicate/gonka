@@ -6,6 +6,9 @@ from contextlib import asynccontextmanager
 from api.inference.manager import InferenceManager
 from api.inference.routes import router as inference_router
 
+from api.models.manager import ModelManager
+from api.models.routes import router as models_router
+
 from zeroband.service.manager import TrainManager
 from zeroband.service.routes import router as train_router
 
@@ -31,6 +34,7 @@ async def lifespan(app: FastAPI):
     app.state.pow_manager = PowManager()
     app.state.inference_manager = InferenceManager()
     app.state.train_manager = TrainManager()
+    app.state.model_manager = ModelManager()
 
     await start_vllm_proxy()
 
@@ -94,4 +98,10 @@ app.include_router(
     api_router,
     prefix=API_PREFIX,
     tags=["API"],
+)
+
+app.include_router(
+    models_router,
+    prefix=API_PREFIX + "/models",
+    tags=["Models"],
 )
