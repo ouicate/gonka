@@ -18,6 +18,87 @@ func writeTempFile(t *testing.T, dir, name, contents string) string {
 	return p
 }
 
+// Scenario 1: YAML has dynamic state, DB empty, node-config.json present but should be ignored because merged_node_config=true
+func TestLoadDefaultConfigManager_Migration_Idempotent_And_NodeConfigSkipped(t *testing.T) {
+	tmp := t.TempDir()
+
+	yaml := `api:
+  port: 8080
+chain_node:
+  url: http://join1-node:26657
+  signer_key_name: join1
+  account_public_key: ""
+  keyring_backend: test
+  keyring_dir: /root/.inference
+current_height: 393
+current_seed:
+  seed: 3898730504561900192
+  epoch_index: 380
+  signature: abc
+previous_seed:
+  seed: 1370553182438852893
+  epoch_index: 370
+  signature: def
+upcoming_seed:
+  seed: 254929314898674592
+  epoch_index: 390
+  signature: ghi
+nodes:
+  - host: http://yaml-node:8080/
+    models:
+      modelA: {args: []}
+    id: yaml-node-1
+    max_concurrent: 5
+merged_node_config: true
+current_node_version: "v3.0.8"
+`
+	cfgPath := writeTempFile(t, tmp, "config.yaml", yaml)
+
+	// Present but must be ignored due to merged_node_config=true
+	nodeJson := `[{"host":"http://json-node:8080/","models":{"modelB":{"args":[]}},"id":"json-node-1","max_concurrent":10,"hardware":[]}]`
+	nodePath := writeTempFile(t, tmp, "node-config.json", nodeJson)
+	dbPath := filepath.Join(tmp, "test.db")
+	_ = os.Remove(dbPath)
+
+	// First load -> migration and hydrate
+	mgr, err := apiconfig.LoadConfigManagerWithPaths(cfgPath, dbPath, nodePath)
+	require.NoError(t, err)
+	ctx := context.Background()
+	require.NoError(t, mgr.FlushNow(ctx))
+
+	// Migration flag present
+	var dummy bool
+	ok, err := apiconfig.KVGetJSON(ctx, mgr.SqlDb().GetDb(), "config_migrated", &dummy)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Nodes come from YAML, not JSON
+	nodes, err := apiconfig.ReadNodes(ctx, mgr.SqlDb().GetDb())
+	require.NoError(t, err)
+	ids := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		ids = append(ids, n.Id)
+	}
+	b, _ := json.Marshal(ids)
+	require.NotContains(t, ids, "json-node-1", string(b))
+	require.Contains(t, ids, "yaml-node-1", string(b))
+
+	// Second load -> idempotent
+	mgr2, err := apiconfig.LoadConfigManagerWithPaths(cfgPath, dbPath, nodePath)
+	require.NoError(t, err)
+	require.NoError(t, mgr2.FlushNow(ctx))
+	nodes2, err := apiconfig.ReadNodes(ctx, mgr2.SqlDb().GetDb())
+	require.NoError(t, err)
+	ids2 := make([]string, 0, len(nodes2))
+	for _, n := range nodes2 {
+		ids2 = append(ids2, n.Id)
+	}
+	require.Equal(t, ids, ids2)
+
+	// Cleanup
+	_ = os.Remove(dbPath)
+}
+
 // Scenario 2: Migration + node-config merge on first run (merged_node_config=false)
 func TestMigrationAndNodeConfigMerge_FirstRun(t *testing.T) {
 	tmp := t.TempDir()
@@ -111,7 +192,17 @@ merged_node_config: false
 func TestRelaunchAfterMigration_Idempotent(t *testing.T) {
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "test.db")
-	yaml1 := `api:\n  port: 8080\ncurrent_height: 10\nnodes:\n  - host: http://yaml-node:8080/\n    models:\n      modelY: {args: []}\n    id: yaml-node\n    max_concurrent: 3\nmerged_node_config: false\n`
+	yaml1 := `api:
+  port: 8080
+current_height: 10
+nodes:
+  - host: http://yaml-node:8080/
+    models:
+      modelY: {args: []}
+    id: yaml-node
+    max_concurrent: 3
+merged_node_config: false
+`
 	cfgPath := writeTempFile(t, tmp, "config.yaml", yaml1)
 
 	// First run with JSON nodes imported
