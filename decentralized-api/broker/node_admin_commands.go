@@ -150,9 +150,10 @@ func (c UpdateNode) Execute(b *Broker) {
 
 	// Fetch existing node
 	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	existing, exists := b.nodes[c.Node.Id]
 	if !exists {
-		b.mu.Unlock()
 		logging.Error("UpdateNode. Node not found", types.Nodes, "node_id", c.Node.Id)
 		c.Response <- nil
 		return
@@ -179,7 +180,6 @@ func (c UpdateNode) Execute(b *Broker) {
 
 	// Apply update
 	existing.Node = updated
-	b.mu.Unlock()
 
 	// Optionally trigger a status re-check
 	b.TriggerStatusQuery()
