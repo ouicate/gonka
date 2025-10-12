@@ -4,6 +4,9 @@ import time
 import requests
 import gc
 import torch
+import shutil
+import shlex
+from pathlib import Path
 from typing import Optional, List
 from abc import ABC, abstractmethod
 
@@ -68,6 +71,27 @@ class VLLMRunner(IVLLMRunner):
                 pass
         return default
 
+    @staticmethod
+    def _fix_flashinfer_cache_if_locked():
+        hf_home = Path(os.getenv("HF_HOME", "/root/.cache"))
+        flashinfer_cache_dir = hf_home / "flashinfer"
+        if not flashinfer_cache_dir.exists():
+            return
+        
+        has_lock_files = any(
+            file.suffix == ".lock"
+            for file in flashinfer_cache_dir.rglob("*")
+            if file.is_file()
+        )
+        
+        if has_lock_files:
+            logger.warning("Found .lock files in flashinfer cache, deleting cache directory: %s", flashinfer_cache_dir)
+            shutil.rmtree(flashinfer_cache_dir, ignore_errors=True)
+            logger.info("Flashinfer cache deleted successfully")
+        
+    def _verify_and_fix_env(self):
+        self._fix_flashinfer_cache_if_locked()
+
     def start(self):
         if self.processes:
             raise RuntimeError("VLLMRunner is already running")
@@ -81,11 +105,14 @@ class VLLMRunner(IVLLMRunner):
         instances = min(self.MAX_INSTANCES, max(1, total_gpus // gpus_per_instance))
         logger.info("instances to start: %d", instances)
 
+        self._verify_and_fix_env()
+
         backend_ports = []
         for i in range(instances):
+            sleep_time = 5 * i
             port = self.VLLM_PORT + i + 1
             backend_ports.append(port)
-            command = [
+            vllm_command = [
                 self.vllm_python_path,
                 "-m", "vllm.entrypoints.openai.api_server",
                 "--model", self.model,
@@ -93,6 +120,10 @@ class VLLMRunner(IVLLMRunner):
                 "--port", str(port),
                 "--host", self.VLLM_HOST
             ] + self.additional_args
+
+            vllm_command_str = " ".join(shlex.quote(arg) for arg in vllm_command)
+            
+            command = ["sh", "-c", f"sleep {sleep_time} && exec {vllm_command_str}"]
 
             env = os.environ.copy()
             env["VLLM_USE_V1"] = "0"
@@ -102,7 +133,7 @@ class VLLMRunner(IVLLMRunner):
                 gpu_ids = list(range(start_gpu, start_gpu + gpus_per_instance))
                 env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
 
-            logger.info("Starting vLLM instance %d on port %d with GPUs %s", i, port, env.get("CUDA_VISIBLE_DEVICES", "all"))
+            logger.info("Starting vLLM instance %d on port %d with GPUs %s (sleep: %ds)", i, port, env.get("CUDA_VISIBLE_DEVICES", "all"), sleep_time)
             process = subprocess.Popen(
                 command,
                 env=env,

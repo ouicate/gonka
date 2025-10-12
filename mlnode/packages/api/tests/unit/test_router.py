@@ -1,5 +1,6 @@
 import pytest
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import MagicMock, AsyncMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,10 @@ from api.inference.routes import router
 def mock_manager():
     manager = MagicMock(spec=InferenceManager)
     manager.is_running.return_value = False
+    # Create a completed future that can be awaited
+    completed_task = asyncio.Future()
+    completed_task.set_result(None)
+    manager._startup_task = completed_task
     return manager
 
 @pytest.fixture
@@ -28,8 +33,7 @@ def test_inference_up_already_running(client, mock_manager):
     assert response.json()["status"] == "OK"
 
     mock_manager.stop.assert_called_once()
-    mock_manager.init_vllm.assert_called_once()
-    mock_manager.start.assert_called_once()
+    mock_manager.start_async.assert_called_once()
 
 def test_inference_up_not_running(client, mock_manager):
     mock_manager.is_running.return_value = False
@@ -39,9 +43,7 @@ def test_inference_up_not_running(client, mock_manager):
     assert response.json()["status"] == "OK"
 
     mock_manager.stop.assert_not_called()
-
-    mock_manager.init_vllm.assert_called_once()
-    mock_manager.start.assert_called_once()
+    mock_manager.start_async.assert_called_once()
 
 def test_inference_down(client, mock_manager):
     response = client.post("/inference/down")
