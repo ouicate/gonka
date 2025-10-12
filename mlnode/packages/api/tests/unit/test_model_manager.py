@@ -371,6 +371,25 @@ async def test_delete_model_cancel_download(manager, sample_model):
         mock_cancel.assert_called_once()
 
 
+@pytest.mark.asyncio
+@patch('api.models.manager.scan_cache_dir')
+async def test_delete_partial_model(mock_scan, manager, sample_model):
+    """Test deleting a model with PARTIAL status (incomplete download)."""
+    # Mock cache with the model for deletion
+    revision = MockRevision("abc123")
+    repo = MockRepo("test/model", [revision])
+    cache_info = MockCacheInfo([repo])
+    mock_scan.return_value = cache_info
+    
+    # Mock is_model_exist to return False (model is incomplete)
+    # Mock _has_partial_files to return True (some files exist)
+    with patch.object(manager, 'is_model_exist', return_value=False), \
+         patch.object(manager, '_has_partial_files', return_value=True):
+        result = await manager.delete_model(sample_model)
+    
+    assert result == "deleted"
+
+
 @patch('api.models.manager.scan_cache_dir')
 def test_list_models(mock_scan, manager):
     """Test listing models with status."""

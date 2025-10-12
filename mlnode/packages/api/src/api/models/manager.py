@@ -415,7 +415,8 @@ class ModelManager:
                     del self._download_tasks[task_id]
                 return "cancelled"
         
-        if not self.is_model_exist(model):
+        # Check if model exists in cache (either fully downloaded or partial)
+        if not self.is_model_exist(model) and not self._has_partial_files(model):
             raise ValueError(f"Model {task_id} not found in cache")
         
         cache_info = scan_cache_dir(self.cache_dir)
