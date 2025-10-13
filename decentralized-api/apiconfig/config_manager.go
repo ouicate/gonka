@@ -149,6 +149,14 @@ func (cm *ConfigManager) getConfig() *Config {
 	return &cm.currentConfig
 }
 
+// GetConfig returns a snapshot copy of the current configuration.
+// The returned value should be treated as read-only by callers.
+func (cm *ConfigManager) GetConfig() Config {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	return cm.currentConfig
+}
+
 func (cm *ConfigManager) GetUpgradePlan() UpgradePlan { return cm.currentConfig.UpgradePlan }
 
 func (cm *ConfigManager) SetUpgradePlan(plan UpgradePlan) error {
