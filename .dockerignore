@@ -1,16 +1,21 @@
-build/
-decentralized-api/build/
-inference-chain/build/
-.idea/
-.vscode/
-.git/
-.github/
-.DS_Store
+# VCS and editor metadata
+**/.git
 **/.DS_Store
+**/.idea
+**/.vscode
+
+# Build outputs and caches
+**/build
+**/dist
+**/output
+**/.cache
+**/node_modules
+**/.pytest_cache
+**/__pycache__
+
 prod-local/
 public-html/
 demo/
 mlnode/
 **/.venv
-
 **/*.env
