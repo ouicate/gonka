@@ -771,7 +771,7 @@ func (cm *ConfigManager) flushToDB(_ context.Context) error {
 			if err := os.WriteFile(cm.configDumpPath, dumpBytes, 0o644); err != nil {
 				logging.Warn("Failed to write config dump", types.Config, "path", cm.configDumpPath, "error", err)
 			}
-			logging.Info("Saved config dump", types.Config)
+			logging.Info("Saved config dump", types.Config, "configDumpPath", cm.configDumpPath)
 		}
 	}
 	return nil
