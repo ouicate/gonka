@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type ConfigManager struct {
 	WriterProvider WriteCloserProvider
 	sqlDb          SqlDatabase
 	mutex          sync.Mutex
+	configDumpPath string
 }
 
 type WriteCloserProvider interface {
@@ -58,6 +60,7 @@ func LoadConfigManagerWithPaths(configPath, sqlitePath, nodeConfigPath string) (
 		WriterProvider: NewFileWriteCloserProvider(configPath),
 		sqlDb:          db,
 		mutex:          sync.Mutex{},
+		configDumpPath: filepath.Join(filepath.Dir(sqlitePath), "config-dump.json"),
 	}
 	err := manager.Load()
 	if err != nil {
@@ -721,6 +724,8 @@ func (cm *ConfigManager) FlushNow(ctx context.Context) error {
 
 // flushToDB writes all dynamic fields if there were any changes since last flush.
 func (cm *ConfigManager) flushToDB(_ context.Context) error {
+	logging.Info("Executing flushToDB", types.Config)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := cm.ensureDbReady(ctx); err != nil {
@@ -753,6 +758,22 @@ func (cm *ConfigManager) flushToDB(_ context.Context) error {
 	_ = KVSetJSON(ctx, db, kvKeyMLNodeKeyConfig, cfg.MLNodeKeyConfig)
 	_ = KVSetJSON(ctx, db, kvKeyValidationParams, cfg.ValidationParams)
 	_ = KVSetJSON(ctx, db, kvKeyBandwidthParams, cfg.BandwidthParams)
+
+	logging.Info("Flushed dynamic config to DB", types.Config)
+
+	// Also write a pretty-printed config dump JSON next to the DB
+	if cm.configDumpPath != "" {
+		if dumpBytes, err := json.MarshalIndent(cfg, "", "  "); err != nil {
+			logging.Warn("Failed to marshal config dump", types.Config, "error", err)
+		} else {
+			// Ensure directory exists
+			_ = os.MkdirAll(filepath.Dir(cm.configDumpPath), 0o755)
+			if err := os.WriteFile(cm.configDumpPath, dumpBytes, 0o644); err != nil {
+				logging.Warn("Failed to write config dump", types.Config, "path", cm.configDumpPath, "error", err)
+			}
+			logging.Info("Saved config dump", types.Config)
+		}
+	}
 	return nil
 }
 
