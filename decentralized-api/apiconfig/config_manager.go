@@ -614,43 +614,55 @@ func (cm *ConfigManager) HydrateFromDB(_ context.Context) error {
 	defer cm.mutex.Unlock()
 	if db := cm.sqlDb.GetDb(); db != nil {
 		if nodes, err := ReadNodes(ctx, db); err == nil && len(nodes) >= 0 {
+			logging.Info("Reading nodes from DB", types.Config, "nodes", nodes)
 			cm.currentConfig.Nodes = nodes
 		}
 		if s, ok, err := GetActiveSeed(ctx, db, "current"); err == nil && ok {
+			logging.Info("Reading active seed from DB", types.Config, "seed", s)
 			cm.currentConfig.CurrentSeed = s
 		}
 		if s, ok, err := GetActiveSeed(ctx, db, "previous"); err == nil && ok {
+			logging.Info("Reading previous seed from DB", types.Config, "seed", s)
 			cm.currentConfig.PreviousSeed = s
 		}
 		if s, ok, err := GetActiveSeed(ctx, db, "upcoming"); err == nil && ok {
+			logging.Info("Reading upcoming seed from DB", types.Config, "seed", s)
 			cm.currentConfig.UpcomingSeed = s
 		}
 		if v, ok, err := KVGetInt64(ctx, db, kvKeyCurrentHeight); err == nil && ok {
+			logging.Info("Reading current height from DB", types.Config, "height", v)
 			cm.currentConfig.CurrentHeight = v
 		}
 		if v, ok, err := KVGetInt64(ctx, db, kvKeyLastProcessedHeight); err == nil && ok {
+			logging.Info("Reading last processed height from DB", types.Config, "height", v)
 			cm.currentConfig.LastProcessedHeight = v
 		}
 		var up UpgradePlan
 		if ok, err := KVGetJSON(ctx, db, kvKeyUpgradePlan, &up); err == nil && ok {
+			logging.Info("Reading upgrade plan from DB", types.Config, "plan", up)
 			cm.currentConfig.UpgradePlan = up
 		}
 		if v, ok, err := KVGetString(ctx, db, kvKeyCurrentNodeVersion); err == nil && ok {
+			logging.Info("Reading current node version from DB", types.Config, "version", v)
 			cm.currentConfig.CurrentNodeVersion = v
 		}
 		if v, ok, err := KVGetString(ctx, db, kvKeyLastUsedVersion); err == nil && ok {
+			logging.Info("Reading last used version from DB", types.Config, "version", v)
 			cm.currentConfig.LastUsedVersion = v
 		}
 		var vp ValidationParamsCache
 		if ok, err := KVGetJSON(ctx, db, kvKeyValidationParams, &vp); err == nil && ok {
+			logging.Info("Reading validation params from DB", types.Config, "params", vp)
 			cm.currentConfig.ValidationParams = vp
 		}
 		var bp BandwidthParamsCache
 		if ok, err := KVGetJSON(ctx, db, kvKeyBandwidthParams, &bp); err == nil && ok {
+			logging.Info("Reading bandwidth params from DB", types.Config, "params", bp)
 			cm.currentConfig.BandwidthParams = bp
 		}
 		var mk MLNodeKeyConfig
 		if ok, err := KVGetJSON(ctx, db, kvKeyMLNodeKeyConfig, &mk); err == nil && ok {
+			logging.Info("Reading MLNodeKeyConfig from DB", types.Config, "config", mk)
 			cm.currentConfig.MLNodeKeyConfig = mk
 		}
 	}
