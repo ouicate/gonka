@@ -677,6 +677,7 @@ func (cm *ConfigManager) StartAutoFlush(ctx context.Context, interval time.Durat
 
 // FlushNow flushes dynamic fields immediately.
 func (cm *ConfigManager) FlushNow(ctx context.Context) error {
+	logging.Info("Executing FlushNow", types.Config)
 	return cm.flushToDB(ctx)
 }
 

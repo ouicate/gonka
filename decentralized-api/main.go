@@ -185,6 +185,12 @@ func main() {
 	logging.Info("Servers started", types.Server, "addr", addr)
 
 	<-ctx.Done()
+
+	ctxFlush, cancelFlush := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelFlush()
+	logging.Info("Flushing config to the DB on app exit", types.Config)
+	_ = config.FlushNow(ctxFlush)
+
 	os.Exit(1) // Exit with an error for cosmovisor to restart the process
 }
 
