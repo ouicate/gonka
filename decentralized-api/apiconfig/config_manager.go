@@ -664,10 +664,6 @@ func (cm *ConfigManager) StartAutoFlush(ctx context.Context, interval time.Durat
 		defer t.Stop()
 		for {
 			select {
-			case <-ctx.Done():
-				logging.Info("Flushing config to the DB on app exit", types.Config)
-				_ = cm.flushToDB(context.Background())
-				return
 			case <-t.C:
 				_ = cm.flushToDB(context.Background())
 			}
