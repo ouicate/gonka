@@ -48,5 +48,5 @@ var (
 	ErrPocNodeIdEmpty                        = sdkerrors.Register(ModuleName, 1142, "node id is empty")
 	ErrInferenceFinishProcessed              = sdkerrors.Register(ModuleName, 1143, "inference has already finished processed")
 	ErrInferenceStartProcessed               = sdkerrors.Register(ModuleName, 1144, "inference has already started processed")
-	ErrBridgeAddressNotFound                 = sdkerrors.Register(ModuleName, 1139, "bridge addresses not found")
+	ErrBridgeAddressNotFound                 = sdkerrors.Register(ModuleName, 1145, "bridge addresses not found")
 )
