@@ -121,7 +121,8 @@ ON CONFLICT(id) DO UPDATE SET
   poc_port = excluded.poc_port,
   max_concurrent = excluded.max_concurrent,
   models_json = excluded.models_json,
-  hardware_json = excluded.hardware_json`
+  hardware_json = excluded.hardware_json,
+  updated_at = (STRFTIME('%Y-%m-%d %H:%M:%f','now'))`
 
 	stmt, err := tx.PrepareContext(ctx, q)
 	if err != nil {
