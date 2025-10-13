@@ -53,6 +53,8 @@ func NewServer(
 
 	g.POST("nodes", s.createNewNode)
 	g.POST("nodes/batch", s.createNewNodes)
+	// For explicit updates, also allow PUT on a single node
+	g.PUT("nodes/:id", s.createNewNode)
 	g.GET("nodes/upgrade-status", s.getUpgradeStatus)
 	g.POST("nodes/version-status", s.postVersionStatus)
 	g.GET("nodes", s.getNodes)
@@ -69,6 +71,12 @@ func NewServer(
 	g.POST("bls/request", s.postRequestThresholdSignature)
 
 	g.POST("debug/create-dummy-training-task", s.postDummyTrainingTask)
+
+	// Export DB state (human-readable JSON) for admin purposes
+	g.GET("export/db", s.exportDb)
+
+	// Return current unsanitized config as JSON
+	g.GET("config", s.getConfig)
 
 	// Manual validation recovery and claim endpoint
 	g.POST("claim-reward/recover", s.postClaimRewardRecover)
@@ -92,4 +100,10 @@ func getCodec() *codec.ProtoCodec {
 
 func (s *Server) Start(addr string) {
 	go s.e.Start(addr)
+}
+
+// getConfig returns the current configuration as JSON (unsanitized)
+func (s *Server) getConfig(c echo.Context) error {
+	cfg := s.configManager.GetConfig()
+	return c.JSONPretty(200, cfg, "  ")
 }
