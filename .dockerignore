@@ -2,6 +2,8 @@
 .git
 .gitignore
 .gitattributes
+**/.git
+**/.DS_Store
 **/.idea/
 **/.vscode/
 
@@ -13,6 +15,18 @@ test-logs-*/
 # Dependency caches
 **/.gradle/
 **/node_modules/
+
+# Build outputs and caches
+**/build/
+**/dist/
+**/output/
+**/.cache
+**/.pytest_cache
+**/__pycache__
+
+# Environment files
+**/.venv
+**/*.env
 
 # Large/unrelated directories to api/node Docker builds
 local-test-net/
@@ -32,7 +46,5 @@ jq_test/
 test-net-cloud/
 upgrade-build-files/
 16504109747-artifacts/
-
-# Build outputs
-**/build/
-**/output/
+demo/
+mlnode/
