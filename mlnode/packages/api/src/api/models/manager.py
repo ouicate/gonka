@@ -1,5 +1,3 @@
-"""Model manager for HuggingFace models."""
-
 import asyncio
 import os
 import shutil
@@ -483,8 +481,14 @@ class ModelManager:
                     del self._download_tasks[task_id]
                 was_downloading = True
         
-        # Now check if there are any partial files in cache to clean up
-        cache_info = scan_cache_dir(self.cache_dir)
+        try:
+            cache_info = scan_cache_dir(self.cache_dir)
+        except Exception as e:
+            if was_downloading:
+                logger.info(f"Download cancelled for {task_id}, cache directory does not exist: {e}")
+                return "cancelled"
+            else:
+                raise ValueError(f"Model {task_id} not found in cache")
         
         repo = next((r for r in cache_info.repos if r.repo_id == model.hf_repo), None)
         if not repo:
