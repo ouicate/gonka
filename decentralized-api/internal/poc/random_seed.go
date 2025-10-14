@@ -58,22 +58,7 @@ func (rsm *RandomSeedManagerImpl) GenerateSeedInfo(epochIndex uint64) {
 }
 
 func (rsm *RandomSeedManagerImpl) ChangeCurrentSeed() {
-	configManager := rsm.configManager
-	err := configManager.SetPreviousSeed(configManager.GetCurrentSeed())
-	if err != nil {
-		logging.Error("Failed to set previous seed", types.Claims, "error", err)
-		return
-	}
-	err = configManager.SetCurrentSeed(configManager.GetUpcomingSeed())
-	if err != nil {
-		logging.Error("Failed to set current seed", types.Claims, "error", err)
-		return
-	}
-	err = configManager.SetUpcomingSeed(apiconfig.SeedInfo{})
-	if err != nil {
-		logging.Error("Failed to set upcoming seed", types.Claims, "error", err)
-		return
-	}
+	rsm.configManager.AdvanceCurrentSeed()
 }
 
 func (rsm *RandomSeedManagerImpl) GetSeedForEpoch(epochIndex uint64) apiconfig.SeedInfo {
