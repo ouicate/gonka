@@ -15,8 +15,8 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
-// ConfigManagerInterface defines the minimal interface needed from ConfigManager
-type ConfigManagerInterface interface {
+// NodesConfigManagerInterface defines the minimal interface needed from ConfigManager
+type NodesConfigManagerInterface interface {
 	GetNodes() []apiconfig.InferenceNodeConfig
 	GetCurrentNodeVersion() string
 	SetNodes(nodes []apiconfig.InferenceNodeConfig) error
@@ -36,7 +36,7 @@ type BrokerInterface interface {
 // - Model pre-downloading for upcoming epochs
 // - GPU hardware detection and updates
 type MLNodeBackgroundManager struct {
-	configManager       ConfigManagerInterface
+	configManager       NodesConfigManagerInterface
 	phaseTracker        PhaseTrackerInterface
 	broker              BrokerInterface
 	mlNodeClientFactory mlnodeclient.ClientFactory
@@ -45,7 +45,7 @@ type MLNodeBackgroundManager struct {
 
 // NewMLNodeBackgroundManager creates a new MLNode background manager
 func NewMLNodeBackgroundManager(
-	configManager ConfigManagerInterface,
+	configManager NodesConfigManagerInterface,
 	phaseTracker PhaseTrackerInterface,
 	broker BrokerInterface,
 	clientFactory mlnodeclient.ClientFactory,
@@ -233,8 +233,11 @@ func formatURLWithVersion(host string, port int, version string, segment string)
 // checkAndUpdateGPUs fetches GPU info from all nodes and updates hardware
 func (m *MLNodeBackgroundManager) checkAndUpdateGPUs(ctx context.Context) {
 	nodes := m.configManager.GetNodes()
-	updatedNodes := make([]apiconfig.InferenceNodeConfig, len(nodes))
-	copy(updatedNodes, nodes)
+	updatedNodes := make([]apiconfig.InferenceNodeConfig, 0, len(nodes))
+
+	for _, node := range nodes {
+		updatedNodes = append(updatedNodes, node.DeepCopy())
+	}
 
 	for i := range updatedNodes {
 		node := &updatedNodes[i]
