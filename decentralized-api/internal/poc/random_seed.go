@@ -81,6 +81,12 @@ func (rsm *RandomSeedManagerImpl) RequestMoney(epochIndex uint64) {
 	//  Solution: query seed here?
 	seed := rsm.GetSeedForEpoch(epochIndex)
 
+	// This will only happen in tests, and it starts a long retry process that
+	// obscures good failures
+	if seed.EpochIndex == 0 {
+		return
+	}
+
 	logging.Info("IsSetNewValidatorsStage: sending ClaimRewards transaction", types.Claims, "seed", seed)
 	err := rsm.transactionRecorder.ClaimRewards(&inference.MsgClaimRewards{
 		Seed:       seed.Seed,
