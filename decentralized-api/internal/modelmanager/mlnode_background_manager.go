@@ -112,8 +112,8 @@ func (m *MLNodeBackgroundManager) isInDownloadWindow(epochState *chainphase.Epoc
 	inferenceValidationCutoff := epochState.LatestEpoch.InferenceValidationCutoff()
 
 	// Window: [SetNewValidators + 30, InferenceValidationCutoff - 200]
-	windowStart := setNewValidators + 30
-	windowEnd := inferenceValidationCutoff - 200
+	windowStart := setNewValidators + 3
+	windowEnd := inferenceValidationCutoff - 10
 
 	if currentBlock < windowStart || currentBlock > windowEnd {
 		return false

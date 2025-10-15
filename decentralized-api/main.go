@@ -148,7 +148,7 @@ func main() {
 		chainPhaseTracker,
 		nodeBroker,
 		&mlnodeclient.HttpClientFactory{},
-		30*time.Minute,
+		1*time.Minute,
 	)
 	go mlnodeBackgroundManager.Start(ctx)
 
