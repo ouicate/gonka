@@ -409,7 +409,7 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	if epochContext.IsStartOfPocStage(blockHeight) {
 
 		logging.Info("DapiStage:IsStartOfPocStage: sending StartPoCEvent to the PoC orchestrator", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash)
-		d.randomSeedManager.GenerateSeed(epochContext.EpochIndex)
+		d.randomSeedManager.GenerateSeedInfo(epochContext.EpochIndex)
 		return
 	}
 
@@ -455,11 +455,10 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	if epochContext.IsClaimMoneyStage(blockHeight) {
 		logging.Info("DapiStage:IsClaimMoneyStage", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash)
 
-		// Get the previous epoch seed for validation recovery
-		previousSeed := d.configManager.GetPreviousSeed()
-
 		// Calculate previous epoch index
 		expectedPreviousEpochIndex := epochContext.EpochIndex - 1
+		// Get the previous epoch seed for validation recovery
+		previousSeed := d.randomSeedManager.GetSeedForEpoch(expectedPreviousEpochIndex)
 
 		// Verify the seed is from the correct epoch
 		if previousSeed.EpochIndex != expectedPreviousEpochIndex {
@@ -475,7 +474,7 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 			d.executeMissedValidationRecoveryWithSeed(expectedPreviousEpochIndex, previousSeed)
 
 			// Then, claim rewards (this ensures we've validated everything before claiming)
-			d.randomSeedManager.RequestMoney()
+			d.randomSeedManager.RequestMoney(expectedPreviousEpochIndex)
 
 			// Mark the seed as claimed to prevent duplicate claims
 			err := d.configManager.MarkPreviousSeedClaimed()
@@ -623,10 +622,18 @@ func (d *OnNewBlockDispatcher) executeMissedValidationRecoveryWithSeed(previousE
 
 	// Check if seed is valid
 	if previousSeed.Seed == 0 {
-		logging.Warn("Missed validation recovery skipped: invalid seed", types.ValidationRecovery,
+		logging.Warn("Empty seed, try to reproduce", types.ValidationRecovery,
 			"previousEpochIndex", previousEpochIndex,
 			"seedEpochIndex", previousSeed.EpochIndex)
-		return
+		regeneratedSeed, err := d.randomSeedManager.CreateNewSeed(previousSeed.EpochIndex)
+		if err != nil {
+			logging.Error("Error regenerating seed", types.ValidationRecovery,
+				"err", err,
+				"previousEpochIndex", previousEpochIndex,
+				"seedEpochIndex", previousSeed.EpochIndex)
+			return
+		}
+		previousSeed.Seed = regeneratedSeed.Seed
 	}
 
 	// Verify seed epoch matches (this should always be true now, but good to verify)
