@@ -62,27 +62,28 @@ define DOCKER_BUILD
 	@echo "GOOS:      $(GOOS)"
 	@echo "GENESIS_OVERRIDES_FILE: $(GENESIS_OVERRIDES_FILE)"
 
-	@echo "Creating build context..."
-	@rm -rf .docker-context
-	@mkdir -p .docker-context/inference-chain .docker-context/common
-	@rsync -a --delete --exclude=".docker-context" ./ .docker-context/inference-chain/
-	@rsync -a ../common/ .docker-context/common/
-	@mkdir -p .docker-context/cosmovisor
-	@rsync -a ../cosmovisor/ .docker-context/cosmovisor/ 2>/dev/null || true
 
-	DOCKER_BUILDKIT=1 docker build \
-		--load \
-		--platform $(PLATFORM) \
-		--build-arg LDFLAGS='$(ldflags)' \
-		--build-arg GOOS=$(GOOS) \
-		--build-arg GOARCH=$(GOARCH) \
-		--build-arg GENESIS_OVERRIDES_FILE=$(GENESIS_OVERRIDES_FILE) \
-		-f .docker-context/inference-chain/$(DOCKER_FILE) \
-		-t $(DOCKER_TAG) \
-		.docker-context
-
-	@rm -rf .docker-context
-endef
+	@echo "Creating minimal build context..."
+    	@rm -rf .docker-context && mkdir -p .docker-context/inference-chain
+    	@cp -r * .docker-context/inference-chain/ 2>/dev/null || true
+    	@cp -r .[^.]* .docker-context/inference-chain/ 2>/dev/null || true
+    	@mkdir -p .docker-context/common
+    	@cp -r ../common/* .docker-context/common/ 2>/dev/null || true
+    	@cp -r ../common/.[^.]* .docker-context/common/ 2>/dev/null || true
+    	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
+    	@DOCKER_BUILDKIT=1 \
+    	docker build \
+    		--load \
+    		--platform $(PLATFORM) \
+    		--build-arg LDFLAGS='$(ldflags)' \
+    		--build-arg GOOS=$(GOOS) \
+    		--build-arg GOARCH=$(GOARCH) \
+    		--build-arg GENESIS_OVERRIDES_FILE=$(GENESIS_OVERRIDES_FILE) \
+    		-f $(DOCKER_FILE) \
+    		.docker-context \
+    		-t $(DOCKER_TAG)
+    	@rm -rf .docker-context
+    endef
 
 define DOCKER_BUILD_UPGRADE
 	@echo "--> building inferenced docker image"
@@ -92,24 +93,28 @@ define DOCKER_BUILD_UPGRADE
 	@echo "GOOS:      $(GOOS)"
 	@echo "TAGS:      $(if $(filter 1,$(TESTS)),upgraded,not set)"
 
-	@echo "Creating build context..."
-	@rm -rf .docker-context
-	@mkdir -p .docker-context/inference-chain .docker-context/common
+	    @echo "Creating minimal build context for upgrade..."
+    	@rm -rf .docker-context && mkdir -p .docker-context/inference-chain
+    	@cp -r * .docker-context/inference-chain/ 2>/dev/null || true
+    	@cp -r .[^.]* .docker-context/inference-chain/ 2>/dev/null || true
+    	@mkdir -p .docker-context/common
+    	@cp -r ../common/* .docker-context/common/ 2>/dev/null || true
+    	@cp -r ../common/.[^.]* .docker-context/common/ 2>/dev/null || true
+    	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
+    	@DOCKER_BUILDKIT=1 \
+    	docker build \
+    		--platform $(PLATFORM) \
+    		--build-arg LDFLAGS='$(ldflags)' \
+    		--build-arg GOOS=$(GOOS) \
+    		--build-arg GOARCH=$(GOARCH) \
+    		$(if $(filter 1,$(TESTS)),--build-arg TAGS='upgraded',) \
+    		--target binary-exporter \
+    		-f $(DOCKER_FILE) \
+    		--output type=local,dest=./output \
+    		.docker-context
+    	@rm -rf .docker-context
+    endef
 
-	@rsync -a --delete --exclude=".docker-context" ./ .docker-context/inference-chain/
-	@rsync -a ../common/ .docker-context/common/
-	DOCKER_BUILDKIT=1 docker build \
-		--platform $(PLATFORM) \
-		--build-arg LDFLAGS='$(ldflags)' \
-		--build-arg GOOS=$(GOOS) \
-		--build-arg GOARCH=$(GOARCH) \
-		$(if $(filter 1,$(TESTS)),--build-arg TAGS='upgraded',) \
-		--target binary-exporter \
-		-f .docker-context/inference-chain/$(DOCKER_FILE) \
-		--output type=local,dest=./output \
-		.docker-context
-	@rm -rf .docker-context
-endef
 
 build-docker:
 	rm -rf build/

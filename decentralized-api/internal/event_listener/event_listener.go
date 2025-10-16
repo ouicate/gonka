@@ -40,21 +40,21 @@ const (
 
 // TODO: write tests properly
 type EventListener struct {
-	nodeBroker          *broker.Broker
-	configManager       *apiconfig.ConfigManager
-	validator           *validation.InferenceValidator
-	transactionRecorder cosmosclient.InferenceCosmosClient
-	trainingExecutor    *training.Executor
-	blsManager          *bls.BlsManager
-	nodeCaughtUp        atomic.Bool
-	phaseTracker        *chainphase.ChainPhaseTracker
-	dispatcher          *OnNewBlockDispatcher
-	cancelFunc          context.CancelFunc
+	nodeBroker            *broker.Broker
+	configManager         *apiconfig.ConfigManager
+	validator             *validation.InferenceValidator
+	transactionRecorder   cosmosclient.InferenceCosmosClient
+	trainingExecutor      *training.Executor
+	blsManager            *bls.BlsManager
+	nodeCaughtUp          atomic.Bool
+	phaseTracker          *chainphase.ChainPhaseTracker
+	dispatcher            *OnNewBlockDispatcher
+	cancelFunc            context.CancelFunc
 	rewardRecoveryChecker *startup.RewardRecoveryChecker
 
-	eventHandlers       []EventHandler
+	eventHandlers []EventHandler
 
-	ws                  *websocket.Conn
+	ws            *websocket.Conn
 	blockObserver *BlockObserver
 }
 
@@ -305,7 +305,12 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 		}
 
 		// Update BlockObserver with latest height and sync status
-		el.blockObserver.updateStatus(blockInfo.Height, el.isNodeSynced())
+		height, err := strconv.ParseInt(blockInfo.Block.Header.Height, 10, 64)
+		if err != nil {
+			logging.Error("failed to parse block height", types.Stages, "height", blockInfo.Block.Header.Height, "err", err)
+			return
+		}
+		el.blockObserver.updateStatus(height, el.isNodeSynced())
 
 		// Process using the new dispatcher
 		ctx := context.Background() // We could pass this from caller if needed
@@ -317,7 +322,7 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 		// Still handle upgrade processing separately
 		upgrade.ProcessNewBlockEvent(event, el.transactionRecorder, el.configManager)
 		if el.isNodeSynced() {
-			el.rewardRecoveryChecker.RecoverIfNeeded(blockInfo.Height)
+			el.rewardRecoveryChecker.RecoverIfNeeded(height)
 		}
 
 	case txEventType:
