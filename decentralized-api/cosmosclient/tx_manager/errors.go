@@ -14,7 +14,8 @@ var (
 	ErrDecodingTxHash     = errors.New("error decoding transaction hash")
 	ErrInvalidAddress     = errors.New("invalid bech32 string")
 
-	ErrTxFailedToBroadcastAndPutOnRetry = errors.New("failed to broadcast and put on retry")
+	ErrTxFailedToBroadcastAndPutOnRetry = errors.New("failed to broadcast but put on retry")
+	ErrTxFailedToBroadcastAndRetry      = errors.New("failed to broadcast and failed to put on retry")
 	ErrTxNotFound                       = errors.New("tx not found")
 )
 

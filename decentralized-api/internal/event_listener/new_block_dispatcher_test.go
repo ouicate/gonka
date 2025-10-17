@@ -2,9 +2,10 @@ package event_listener
 
 import (
 	"decentralized-api/chainphase"
-	"github.com/productscience/inference/x/inference/types"
 	"testing"
 	"time"
+
+	"github.com/productscience/inference/x/inference/types"
 
 	"decentralized-api/internal/event_listener/chainevents"
 
@@ -100,6 +101,7 @@ func TestParseNewBlockInfo(t *testing.T) {
 		"block": map[string]interface{}{
 			"header": map[string]interface{}{
 				"height": "12345",
+				"time":   "2025-10-15T05:57:37.79431638Z",
 			},
 		},
 		"block_id": map[string]interface{}{
@@ -125,4 +127,5 @@ func TestParseNewBlockInfo(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(12345), blockInfo.Height)
 	assert.Equal(t, "ABCDEF123456", blockInfo.Hash)
+	assert.Equal(t, time.Date(2025, 10, 15, 5, 57, 37, 794316380, time.UTC), blockInfo.Time)
 }

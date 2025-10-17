@@ -2,6 +2,7 @@ package chainphase
 
 import (
 	"sync"
+	"time"
 
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -23,6 +24,7 @@ type ChainPhaseTracker struct {
 type BlockInfo struct {
 	Height int64
 	Hash   string
+	Time   time.Time
 }
 
 // NewChainPhaseTracker creates a new ChainPhaseTracker instance.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"decentralized-api/apiconfig"
+	"decentralized-api/chainphase"
 	"decentralized-api/cosmosclient/tx_manager"
 	"decentralized-api/internal/nats/client"
 	"decentralized-api/logging"
@@ -38,10 +39,13 @@ import (
 )
 
 type InferenceCosmosClient struct {
-	ctx        context.Context
-	apiAccount *apiconfig.ApiAccount
-	Address    string
-	manager    tx_manager.TxManager
+	ctx           context.Context
+	apiAccount    *apiconfig.ApiAccount
+	Address       string
+	manager       tx_manager.TxManager
+	chainTracker  *tx_manager.ChainTracker
+	txBroadcaster *tx_manager.Broadcaster
+	cosmosClient  *cosmosclient.Client
 }
 
 func NewInferenceCosmosClientWithRetry(
@@ -149,16 +153,22 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 		return nil, err
 	}
 
-	mn, err := tx_manager.StartTxManager(ctx, &cosmoclient, apiAccount, time.Second*60, natsConn, accAddress)
+	chainTracker := tx_manager.NewChainTracker(&cosmoclient, 10*time.Second)
+	broadcaster := tx_manager.NewBroadcaster(apiAccount, &cosmoclient, chainTracker)
+
+	mn, err := tx_manager.StartTxManager(ctx, &cosmoclient, apiAccount, natsConn, chainTracker, broadcaster)
 	if err != nil {
 		return nil, err
 	}
 
 	return &InferenceCosmosClient{
-		ctx:        ctx,
-		Address:    accAddress,
-		apiAccount: apiAccount,
-		manager:    mn,
+		ctx:           ctx,
+		Address:       accAddress,
+		apiAccount:    apiAccount,
+		manager:       mn,
+		chainTracker:  chainTracker,
+		txBroadcaster: broadcaster,
+		cosmosClient:  &cosmoclient,
 	}, nil
 }
 
@@ -203,15 +213,15 @@ type CosmosMessageClient interface {
 }
 
 func (icc *InferenceCosmosClient) GetApiAccount() apiconfig.ApiAccount {
-	return icc.manager.GetApiAccount()
+	return *icc.apiAccount
 }
 
 func (icc *InferenceCosmosClient) GetClientContext() sdkclient.Context {
-	return icc.manager.GetClientContext()
+	return icc.cosmosClient.Context()
 }
 
 func (icc *InferenceCosmosClient) Status(ctx context.Context) (*ctypes.ResultStatus, error) {
-	return icc.manager.Status(ctx)
+	return icc.cosmosClient.Status(ctx)
 }
 
 func (icc *InferenceCosmosClient) GetContext() context.Context {
@@ -223,7 +233,7 @@ func (icc *InferenceCosmosClient) GetAddress() string {
 }
 
 func (icc *InferenceCosmosClient) GetKeyring() *keyring.Keyring {
-	return icc.manager.GetKeyring()
+	return &icc.cosmosClient.AccountRegistry.Keyring
 }
 
 func (icc *InferenceCosmosClient) GetAccountAddress() string {
@@ -314,7 +324,7 @@ func (icc *InferenceCosmosClient) ClaimRewards(transaction *inference.MsgClaimRe
 }
 
 func (icc *InferenceCosmosClient) BankBalances(ctx context.Context, address string) ([]sdk.Coin, error) {
-	return icc.manager.BankBalances(ctx, address)
+	return icc.cosmosClient.BankBalances(ctx, address, nil)
 }
 
 func (icc *InferenceCosmosClient) SubmitPocBatch(transaction *inference.MsgSubmitPocBatch) error {
@@ -417,15 +427,15 @@ func (icc *InferenceCosmosClient) GetPartialUpgrades() (*types.QueryAllPartialUp
 }
 
 func (icc *InferenceCosmosClient) NewUpgradeQueryClient() upgradetypes.QueryClient {
-	return upgradetypes.NewQueryClient(icc.manager.GetClientContext())
+	return upgradetypes.NewQueryClient(icc.GetClientContext())
 }
 
 func (icc *InferenceCosmosClient) NewInferenceQueryClient() types.QueryClient {
-	return types.NewQueryClient(icc.manager.GetClientContext())
+	return types.NewQueryClient(icc.GetClientContext())
 }
 
 func (icc *InferenceCosmosClient) NewCometQueryClient() cmtservice.ServiceClient {
-	return cmtservice.NewServiceClient(icc.manager.GetClientContext())
+	return cmtservice.NewServiceClient(icc.GetClientContext())
 }
 
 func (icc *InferenceCosmosClient) SendTransactionSyncNoRetry(transaction proto.Message, dstMsg proto.Message) error {
@@ -476,9 +486,13 @@ func (icc *InferenceCosmosClient) SubmitPartialSignature(requestId []byte, slotI
 }
 
 func (icc *InferenceCosmosClient) NewBLSQueryClient() blstypes.QueryClient {
-	return blstypes.NewQueryClient(icc.manager.GetClientContext())
+	return blstypes.NewQueryClient(icc.GetClientContext())
 }
 
 func (icc *InferenceCosmosClient) NewRestrictionsQueryClient() restrictionstypes.QueryClient {
-	return restrictionstypes.NewQueryClient(icc.manager.GetClientContext())
+	return restrictionstypes.NewQueryClient(icc.GetClientContext())
+}
+
+func (icc *InferenceCosmosClient) UpdateCurrentBlockInfo(info *chainphase.BlockInfo) {
+	icc.chainTracker.UpdateFromEvent(info)
 }

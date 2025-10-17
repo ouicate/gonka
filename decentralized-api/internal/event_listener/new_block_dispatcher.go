@@ -533,12 +533,20 @@ func (d *OnNewBlockDispatcher) executeMissedValidationRecoveryWithSeed(previousE
 
 // parseNewBlockInfo extracts NewBlockInfo from a JSONRPCResponse event
 func parseNewBlockInfo(event *chainevents.JSONRPCResponse) (*chainphase.BlockInfo, error) {
-	blockHeight, err := getBlockHeight(event.Result.Data.Value)
+
+	data := event.Result.Data.Value
+
+	// Log all key-value pairs from data map
+	for key, value := range data {
+		logging.Info("Block data", types.Stages, "key", key, "value", value)
+	}
+
+	blockHeight, time, err := getBlockHeightAndTime(data)
 	if err != nil {
 		return nil, err
 	}
 
-	blockHash, err := getBlockHash(event.Result.Data.Value)
+	blockHash, err := getBlockHash(data)
 	if err != nil {
 		return nil, err
 	}
@@ -546,32 +554,43 @@ func parseNewBlockInfo(event *chainevents.JSONRPCResponse) (*chainphase.BlockInf
 	return &chainphase.BlockInfo{
 		Height: blockHeight,
 		Hash:   blockHash,
+		Time:   time,
 	}, nil
 }
 
 // Helper functions moved from event_listener.go for parsing block data
-func getBlockHeight(data map[string]interface{}) (int64, error) {
+func getBlockHeightAndTime(data map[string]interface{}) (int64, time.Time, error) {
 	block, ok := data["block"].(map[string]interface{})
 	if !ok {
-		return 0, errors.New("failed to access 'block' key")
+		return 0, time.Time{}, errors.New("failed to access 'block' key")
 	}
 
 	header, ok := block["header"].(map[string]interface{})
 	if !ok {
-		return 0, errors.New("failed to access 'header' key")
+		return 0, time.Time{}, errors.New("failed to access 'header' key")
 	}
 
 	heightString, ok := header["height"].(string)
 	if !ok {
-		return 0, errors.New("failed to access 'height' key or it's not a string")
+		return 0, time.Time{}, errors.New("failed to access 'height' key or it's not a string")
 	}
 
 	height, err := strconv.ParseInt(heightString, 10, 64)
 	if err != nil {
-		return 0, errors.New("Failed to convert retrieved height value to int64")
+		return 0, time.Time{}, errors.New("Failed to convert retrieved height value to int64")
 	}
 
-	return height, nil
+	timeString, ok := header["time"].(string)
+	if !ok {
+		return 0, time.Time{}, errors.New("failed to access 'time' key or it's not a string")
+	}
+
+	parsedTime, err := time.Parse(time.RFC3339Nano, timeString)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("failed to parse time string: %v", err)
+	}
+
+	return height, parsedTime, nil
 }
 
 func getBlockHash(data map[string]interface{}) (string, error) {
