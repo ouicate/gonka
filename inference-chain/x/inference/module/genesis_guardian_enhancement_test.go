@@ -422,7 +422,7 @@ func TestApplyGenesisGuardianEnhancement_TwoGuardians(t *testing.T) {
 
 	// Test case: immature network with 2 genesis guardians
 	computeResults := []stakingkeeper.ComputeResult{
-		{OperatorAddress: "guardian1", Power: 300},
+		{OperatorAddress: "guardian1", Power: 800},
 		{OperatorAddress: "guardian2", Power: 1200},
 		{OperatorAddress: "validator3", Power: 2000},
 		{OperatorAddress: "validator4", Power: 1500},
@@ -482,7 +482,7 @@ func TestApplyGenesisGuardianEnhancement_ThreeGuardians(t *testing.T) {
 
 	// Test case: immature network with 3 genesis guardians
 	computeResults := []stakingkeeper.ComputeResult{
-		{OperatorAddress: "guardian1", Power: 200},
+		{OperatorAddress: "guardian1", Power: 500},
 		{OperatorAddress: "guardian2", Power: 700},
 		{OperatorAddress: "guardian3", Power: 800},
 		{OperatorAddress: "validator4", Power: 2000},
