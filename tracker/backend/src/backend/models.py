@@ -17,6 +17,7 @@ class ParticipantStats(BaseModel):
     index: str
     address: str
     weight: int
+    validator_key: Optional[str] = None
     inference_url: Optional[str] = None
     status: Optional[str] = None
     models: List[str] = []

@@ -12,6 +12,7 @@ export interface Participant {
   index: string;
   address: string;
   weight: number;
+  validator_key?: string;
   inference_url?: string;
   status?: string;
   models: string[];

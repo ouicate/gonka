@@ -73,7 +73,8 @@ class InferenceService:
             epoch_participant_data = {
                 p["index"]: {
                     "weight": p.get("weight", 0),
-                    "models": p.get("models", [])
+                    "models": p.get("models", []),
+                    "validator_key": p.get("validator_key")
                 }
                 for p in epoch_data["active_participants"]["participants"]
             }
@@ -90,6 +91,7 @@ class InferenceService:
                         index=p["index"],
                         address=p["address"],
                         weight=epoch_data_for_participant.get("weight", 0),
+                        validator_key=epoch_data_for_participant.get("validator_key"),
                         inference_url=p.get("inference_url"),
                         status=p.get("status"),
                         models=epoch_data_for_participant.get("models", []),
@@ -182,7 +184,8 @@ class InferenceService:
             epoch_participant_data = {
                 p["index"]: {
                     "weight": p.get("weight", 0),
-                    "models": p.get("models", [])
+                    "models": p.get("models", []),
+                    "validator_key": p.get("validator_key")
                 }
                 for p in epoch_data["active_participants"]["participants"]
             }
@@ -199,6 +202,7 @@ class InferenceService:
                         index=p["index"],
                         address=p["address"],
                         weight=epoch_data_for_participant.get("weight", 0),
+                        validator_key=epoch_data_for_participant.get("validator_key"),
                         inference_url=p.get("inference_url"),
                         status=p.get("status"),
                         models=epoch_data_for_participant.get("models", []),
