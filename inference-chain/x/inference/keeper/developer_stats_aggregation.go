@@ -237,7 +237,7 @@ func (k Keeper) GetSummaryLastNEpochsByDeveloper(ctx context.Context, developerA
 	return summary
 }
 
-func (k Keeper) GetSummaryByModelAndTime(ctx context.Context, from, to int64) (map[string]StatsSummary, error) {
+func (k Keeper) GetSummaryByModelAndTime(ctx context.Context, from, to int64) map[string]StatsSummary {
 	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
 	timeStore := prefix.NewStore(store, types.KeyPrefix(StatsDevelopersByTime))
 
@@ -257,9 +257,7 @@ func (k Keeper) GetSummaryByModelAndTime(ctx context.Context, from, to int64) (m
 		}
 
 		var stat types.DeveloperStatsByTime
-		if err := k.cdc.Unmarshal(iter.Value(), &stat); err != nil {
-			return nil, err
-		}
+		k.cdc.MustUnmarshal(iter.Value(), &stat)
 
 		model := stat.Inference.Model
 		s, ok := stats[model]
@@ -271,7 +269,7 @@ func (k Keeper) GetSummaryByModelAndTime(ctx context.Context, from, to int64) (m
 		s.ActualCost += stat.Inference.ActualCostInCoins
 		stats[model] = s
 	}
-	return stats, nil
+	return stats
 }
 
 func (k Keeper) DumpAllDeveloperStats(ctx context.Context) (map[string][]*types.DeveloperStatsByEpoch, map[string][]*types.DeveloperStatsByTime) {
