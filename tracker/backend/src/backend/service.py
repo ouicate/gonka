@@ -10,7 +10,9 @@ from backend.models import (
     RewardInfo,
     SeedInfo,
     ParticipantDetailsResponse,
-    WarmKeyInfo
+    WarmKeyInfo,
+    HardwareInfo,
+    MLNodeInfo
 )
 
 logger = logging.getLogger(__name__)
@@ -530,11 +532,42 @@ class InferenceService:
                 for wk in (warm_keys_data or [])
             ]
             
+            hardware_nodes_data = await self.cache_db.get_hardware_nodes(epoch_id, participant_id)
+            
+            if hardware_nodes_data is None:
+                logger.info(f"Fetching hardware nodes inline for participant {participant_id}")
+                try:
+                    hardware_nodes_raw = await self.client.get_hardware_nodes(participant_id)
+                    if hardware_nodes_raw:
+                        await self.cache_db.save_hardware_nodes_batch(epoch_id, participant_id, hardware_nodes_raw)
+                        hardware_nodes_data = hardware_nodes_raw
+                    else:
+                        hardware_nodes_data = []
+                except Exception as e:
+                    logger.warning(f"Failed to fetch hardware nodes for {participant_id}: {e}")
+                    hardware_nodes_data = []
+            
+            ml_nodes = []
+            for node in (hardware_nodes_data or []):
+                hardware_list = [
+                    HardwareInfo(type=hw["type"], count=hw["count"])
+                    for hw in node.get("hardware", [])
+                ]
+                ml_nodes.append(MLNodeInfo(
+                    local_id=node.get("local_id", ""),
+                    status=node.get("status", ""),
+                    models=node.get("models", []),
+                    hardware=hardware_list,
+                    host=node.get("host", ""),
+                    port=node.get("port", "")
+                ))
+            
             return ParticipantDetailsResponse(
                 participant=participant,
                 rewards=rewards,
                 seed=seed,
-                warm_keys=warm_keys
+                warm_keys=warm_keys,
+                ml_nodes=ml_nodes
             )
             
         except Exception as e:
@@ -616,4 +649,28 @@ class InferenceService:
             
         except Exception as e:
             logger.error(f"Error polling warm keys: {e}")
+    
+    async def poll_hardware_nodes(self):
+        try:
+            logger.info("Polling hardware nodes")
+            
+            epoch_data = await self.client.get_current_epoch_participants()
+            current_epoch = epoch_data["active_participants"]["epoch_group_id"]
+            participants = epoch_data["active_participants"]["participants"]
+            
+            for participant in participants:
+                participant_id = participant["index"]
+                
+                try:
+                    hardware_nodes = await self.client.get_hardware_nodes(participant_id)
+                    await self.cache_db.save_hardware_nodes_batch(current_epoch, participant_id, hardware_nodes)
+                    logger.debug(f"Updated {len(hardware_nodes)} hardware nodes for {participant_id}")
+                except Exception as e:
+                    logger.debug(f"Failed to fetch hardware nodes for {participant_id}: {e}")
+                    continue
+            
+            logger.info(f"Completed hardware nodes polling for {len(participants)} participants")
+            
+        except Exception as e:
+            logger.error(f"Error polling hardware nodes: {e}")
 

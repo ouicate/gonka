@@ -8,7 +8,9 @@ from backend.models import (
     EpochInfo,
     RewardInfo,
     SeedInfo,
-    ParticipantDetailsResponse
+    ParticipantDetailsResponse,
+    HardwareInfo,
+    MLNodeInfo
 )
 
 
@@ -312,7 +314,8 @@ def test_participant_details_response():
         participant=participant,
         rewards=rewards,
         seed=seed,
-        warm_keys=[]
+        warm_keys=[],
+        ml_nodes=[]
     )
     
     assert response.participant.index == "gonka1abc"
@@ -320,6 +323,7 @@ def test_participant_details_response():
     assert response.seed is not None
     assert response.seed.signature == "test_signature"
     assert response.warm_keys == []
+    assert response.ml_nodes == []
 
 
 def test_participant_details_response_no_seed():
@@ -342,11 +346,72 @@ def test_participant_details_response_no_seed():
         participant=participant,
         rewards=[],
         seed=None,
-        warm_keys=[]
+        warm_keys=[],
+        ml_nodes=[]
     )
     
     assert response.participant.index == "gonka1abc"
     assert len(response.rewards) == 0
     assert response.seed is None
     assert response.warm_keys == []
+    assert response.ml_nodes == []
+
+
+def test_participant_details_response_with_ml_nodes():
+    participant = ParticipantStats(
+        index="gonka1abc",
+        address="gonka1abc",
+        weight=100,
+        current_epoch_stats=CurrentEpochStats(
+            inference_count="10",
+            missed_requests="1",
+            earned_coins="0",
+            rewarded_coins="0",
+            burned_coins="0",
+            validated_inferences="9",
+            invalidated_inferences="1"
+        )
+    )
+    
+    hardware = [
+        HardwareInfo(type="NVIDIA RTX 3090", count=2),
+        HardwareInfo(type="NVIDIA A100", count=1)
+    ]
+    
+    ml_nodes = [
+        MLNodeInfo(
+            local_id="node-1",
+            status="INFERENCE",
+            models=["Model-A", "Model-B"],
+            hardware=hardware,
+            host="192.168.1.1",
+            port="8080"
+        ),
+        MLNodeInfo(
+            local_id="node-2",
+            status="POC",
+            models=["Model-C"],
+            hardware=[],
+            host="192.168.1.2",
+            port="8080"
+        )
+    ]
+    
+    response = ParticipantDetailsResponse(
+        participant=participant,
+        rewards=[],
+        seed=None,
+        warm_keys=[],
+        ml_nodes=ml_nodes
+    )
+    
+    assert response.participant.index == "gonka1abc"
+    assert len(response.ml_nodes) == 2
+    assert response.ml_nodes[0].local_id == "node-1"
+    assert response.ml_nodes[0].status == "INFERENCE"
+    assert len(response.ml_nodes[0].hardware) == 2
+    assert response.ml_nodes[0].hardware[0].type == "NVIDIA RTX 3090"
+    assert response.ml_nodes[0].hardware[0].count == 2
+    assert response.ml_nodes[1].local_id == "node-2"
+    assert len(response.ml_nodes[1].hardware) == 0
 

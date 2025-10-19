@@ -51,10 +51,25 @@ export interface WarmKeyInfo {
   granted_at: string;
 }
 
+export interface HardwareInfo {
+  type: string;
+  count: number;
+}
+
+export interface MLNodeInfo {
+  local_id: string;
+  status: string;
+  models: string[];
+  hardware: HardwareInfo[];
+  host: string;
+  port: string;
+}
+
 export interface ParticipantDetailsResponse {
   participant: Participant;
   rewards: RewardInfo[];
   seed: SeedInfo | null;
   warm_keys: WarmKeyInfo[];
+  ml_nodes: MLNodeInfo[];
 }
 

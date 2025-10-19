@@ -316,4 +316,15 @@ class GonkaClient:
         
         logger.info(f"Found {len(warm_keys)} warm keys for {granter}")
         return warm_keys
+    
+    async def get_hardware_nodes(self, participant_address: str) -> List[Dict[str, Any]]:
+        path = f"/chain-api/productscience/inference/inference/hardware_nodes/{participant_address}"
+        try:
+            data = await self._make_request(path)
+            hardware_nodes = data.get("nodes", {}).get("hardware_nodes", [])
+            logger.info(f"Found {len(hardware_nodes)} hardware nodes for {participant_address}")
+            return hardware_nodes
+        except Exception as e:
+            logger.warning(f"Failed to fetch hardware nodes for {participant_address}: {e}")
+            return []
 

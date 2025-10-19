@@ -20,6 +20,7 @@ jail_polling_task = None
 health_polling_task = None
 rewards_polling_task = None
 warm_keys_polling_task = None
+hardware_nodes_polling_task = None
 inference_service_instance = None
 
 
@@ -99,9 +100,22 @@ async def poll_warm_keys():
         await asyncio.sleep(300)
 
 
+async def poll_hardware_nodes():
+    await asyncio.sleep(25)
+    
+    while True:
+        try:
+            if inference_service_instance:
+                await inference_service_instance.poll_hardware_nodes()
+        except Exception as e:
+            logger.error(f"Hardware nodes polling error: {e}")
+        
+        await asyncio.sleep(600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task, jail_polling_task, health_polling_task, rewards_polling_task, warm_keys_polling_task, inference_service_instance
+    global background_task, jail_polling_task, health_polling_task, rewards_polling_task, warm_keys_polling_task, hardware_nodes_polling_task, inference_service_instance
     
     inference_urls = os.getenv("INFERENCE_URLS", "http://node2.gonka.ai:8000").split(",")
     inference_urls = [url.strip() for url in inference_urls]
@@ -124,7 +138,8 @@ async def lifespan(app: FastAPI):
     health_polling_task = asyncio.create_task(poll_node_health())
     rewards_polling_task = asyncio.create_task(poll_rewards())
     warm_keys_polling_task = asyncio.create_task(poll_warm_keys())
-    logger.info("Background polling tasks started (epoch: 5min, jail: 120s, health: 30s, rewards: 60s, warm_keys: 5min)")
+    hardware_nodes_polling_task = asyncio.create_task(poll_hardware_nodes())
+    logger.info("Background polling tasks started (epoch: 5min, jail: 120s, health: 30s, rewards: 60s, warm_keys: 5min, hardware_nodes: 10min)")
     
     yield
     
@@ -162,6 +177,13 @@ async def lifespan(app: FastAPI):
             await warm_keys_polling_task
         except asyncio.CancelledError:
             logger.info("Warm keys polling task cancelled")
+    
+    if hardware_nodes_polling_task:
+        hardware_nodes_polling_task.cancel()
+        try:
+            await hardware_nodes_polling_task
+        except asyncio.CancelledError:
+            logger.info("Hardware nodes polling task cancelled")
 
 
 app = FastAPI(lifespan=lifespan)

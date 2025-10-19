@@ -93,11 +93,26 @@ class WarmKeyInfo(BaseModel):
     granted_at: str
 
 
+class HardwareInfo(BaseModel):
+    type: str
+    count: int
+
+
+class MLNodeInfo(BaseModel):
+    local_id: str
+    status: str
+    models: List[str]
+    hardware: List[HardwareInfo]
+    host: str
+    port: str
+
+
 class ParticipantDetailsResponse(BaseModel):
     participant: ParticipantStats
     rewards: List[RewardInfo]
     seed: Optional[SeedInfo]
     warm_keys: List[WarmKeyInfo]
+    ml_nodes: List[MLNodeInfo]
 
 
 class LatestEpochInfo(BaseModel):

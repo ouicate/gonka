@@ -288,6 +288,73 @@ export function ParticipantModal({ participant, epochId, onClose }: ParticipantM
               </div>
             )}
           </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">MLNodes</h3>
+            
+            {loading ? (
+              <div className="text-gray-400 text-sm">Loading MLNodes...</div>
+            ) : details && details.ml_nodes && details.ml_nodes.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {details.ml_nodes.map((node, idx) => (
+                  <div key={idx} className="bg-gray-50 border border-gray-200 rounded p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="font-semibold text-gray-900">{node.local_id}</div>
+                      <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-300 rounded">
+                        {node.status}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Models</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {node.models.length > 0 ? (
+                            node.models.map((model, modelIdx) => (
+                              <span
+                                key={modelIdx}
+                                className="inline-block px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-700 rounded"
+                              >
+                                {model}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400">No models</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hardware</div>
+                        <div className="mt-1">
+                          {node.hardware.length > 0 ? (
+                            <div className="space-y-1">
+                              {node.hardware.map((hw, hwIdx) => (
+                                <div key={hwIdx} className="text-xs text-gray-700">
+                                  {hw.count}x {hw.type}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Hardware not reported</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Network</div>
+                        <div className="mt-1 text-xs font-mono text-gray-700">
+                          {node.host}:{node.port}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm">No MLNodes configured</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

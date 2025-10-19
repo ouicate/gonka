@@ -101,6 +101,26 @@ class CacheDB:
                 ON participant_warm_keys(epoch_id, participant_id)
             """)
             
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS participant_hardware_nodes (
+                    epoch_id INTEGER NOT NULL,
+                    participant_id TEXT NOT NULL,
+                    local_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    models_json TEXT NOT NULL,
+                    hardware_json TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port TEXT NOT NULL,
+                    last_updated TEXT NOT NULL,
+                    PRIMARY KEY (epoch_id, participant_id, local_id)
+                )
+            """)
+            
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_hardware_nodes_participant
+                ON participant_hardware_nodes(epoch_id, participant_id)
+            """)
+            
             await db.commit()
             logger.info(f"Database initialized at {self.db_path}")
     
@@ -477,6 +497,75 @@ class CacheDB:
                     results.append({
                         "grantee_address": row["grantee_address"],
                         "granted_at": row["granted_at"]
+                    })
+                
+                return results
+    
+    async def save_hardware_nodes_batch(
+        self,
+        epoch_id: int,
+        participant_id: str,
+        hardware_nodes: List[Dict[str, Any]]
+    ):
+        last_updated = datetime.utcnow().isoformat()
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                DELETE FROM participant_hardware_nodes
+                WHERE epoch_id = ? AND participant_id = ?
+            """, (epoch_id, participant_id))
+            
+            for node in hardware_nodes:
+                models_json = json.dumps(node.get("models", []))
+                hardware_json = json.dumps(node.get("hardware", []))
+                
+                await db.execute("""
+                    INSERT INTO participant_hardware_nodes 
+                    (epoch_id, participant_id, local_id, status, models_json, hardware_json, host, port, last_updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    epoch_id,
+                    participant_id,
+                    node.get("local_id", ""),
+                    node.get("status", ""),
+                    models_json,
+                    hardware_json,
+                    node.get("host", ""),
+                    node.get("port", ""),
+                    last_updated
+                ))
+            
+            await db.commit()
+            logger.info(f"Saved {len(hardware_nodes)} hardware nodes for participant {participant_id} in epoch {epoch_id}")
+    
+    async def get_hardware_nodes(
+        self,
+        epoch_id: int,
+        participant_id: str
+    ) -> Optional[List[Dict[str, Any]]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            async with db.execute("""
+                SELECT local_id, status, models_json, hardware_json, host, port
+                FROM participant_hardware_nodes
+                WHERE epoch_id = ? AND participant_id = ?
+                ORDER BY local_id ASC
+            """, (epoch_id, participant_id)) as cursor:
+                rows = await cursor.fetchall()
+                
+                if not rows:
+                    return None
+                
+                results = []
+                for row in rows:
+                    results.append({
+                        "local_id": row["local_id"],
+                        "status": row["status"],
+                        "models": json.loads(row["models_json"]),
+                        "hardware": json.loads(row["hardware_json"]),
+                        "host": row["host"],
+                        "port": row["port"]
                     })
                 
                 return results
