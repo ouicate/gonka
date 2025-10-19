@@ -85,6 +85,22 @@ class CacheDB:
                 ON participant_rewards(participant_id)
             """)
             
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS participant_warm_keys (
+                    epoch_id INTEGER NOT NULL,
+                    participant_id TEXT NOT NULL,
+                    grantee_address TEXT NOT NULL,
+                    granted_at TEXT NOT NULL,
+                    last_updated TEXT NOT NULL,
+                    PRIMARY KEY (epoch_id, participant_id, grantee_address)
+                )
+            """)
+            
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_warm_keys_participant
+                ON participant_warm_keys(epoch_id, participant_id)
+            """)
+            
             await db.commit()
             logger.info(f"Database initialized at {self.db_path}")
     
@@ -403,6 +419,64 @@ class CacheDB:
                         "rewarded_coins": row["rewarded_coins"],
                         "claimed": bool(row["claimed"]),
                         "last_updated": row["last_updated"]
+                    })
+                
+                return results
+    
+    async def save_warm_keys_batch(
+        self,
+        epoch_id: int,
+        participant_id: str,
+        warm_keys: List[Dict[str, Any]]
+    ):
+        last_updated = datetime.utcnow().isoformat()
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                DELETE FROM participant_warm_keys
+                WHERE epoch_id = ? AND participant_id = ?
+            """, (epoch_id, participant_id))
+            
+            for warm_key in warm_keys:
+                await db.execute("""
+                    INSERT INTO participant_warm_keys 
+                    (epoch_id, participant_id, grantee_address, granted_at, last_updated)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    epoch_id,
+                    participant_id,
+                    warm_key.get("grantee_address"),
+                    warm_key.get("granted_at"),
+                    last_updated
+                ))
+            
+            await db.commit()
+            logger.info(f"Saved {len(warm_keys)} warm keys for participant {participant_id} in epoch {epoch_id}")
+    
+    async def get_warm_keys(
+        self,
+        epoch_id: int,
+        participant_id: str
+    ) -> Optional[List[Dict[str, Any]]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            async with db.execute("""
+                SELECT grantee_address, granted_at
+                FROM participant_warm_keys
+                WHERE epoch_id = ? AND participant_id = ?
+                ORDER BY granted_at DESC
+            """, (epoch_id, participant_id)) as cursor:
+                rows = await cursor.fetchall()
+                
+                if not rows:
+                    return None
+                
+                results = []
+                for row in rows:
+                    results.append({
+                        "grantee_address": row["grantee_address"],
+                        "granted_at": row["granted_at"]
                     })
                 
                 return results

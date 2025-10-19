@@ -311,13 +311,15 @@ def test_participant_details_response():
     response = ParticipantDetailsResponse(
         participant=participant,
         rewards=rewards,
-        seed=seed
+        seed=seed,
+        warm_keys=[]
     )
     
     assert response.participant.index == "gonka1abc"
     assert len(response.rewards) == 2
     assert response.seed is not None
     assert response.seed.signature == "test_signature"
+    assert response.warm_keys == []
 
 
 def test_participant_details_response_no_seed():
@@ -339,10 +341,12 @@ def test_participant_details_response_no_seed():
     response = ParticipantDetailsResponse(
         participant=participant,
         rewards=[],
-        seed=None
+        seed=None,
+        warm_keys=[]
     )
     
     assert response.participant.index == "gonka1abc"
     assert len(response.rewards) == 0
     assert response.seed is None
+    assert response.warm_keys == []
 

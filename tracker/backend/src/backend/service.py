@@ -9,7 +9,8 @@ from backend.models import (
     InferenceResponse,
     RewardInfo,
     SeedInfo,
-    ParticipantDetailsResponse
+    ParticipantDetailsResponse,
+    WarmKeyInfo
 )
 
 logger = logging.getLogger(__name__)
@@ -506,10 +507,34 @@ class InferenceService:
                             )
                         break
             
+            warm_keys_data = await self.cache_db.get_warm_keys(epoch_id, participant_id)
+            
+            if warm_keys_data is None:
+                logger.info(f"Fetching warm keys inline for participant {participant_id}")
+                try:
+                    warm_keys_raw = await self.client.get_authz_grants(participant_id)
+                    if warm_keys_raw:
+                        await self.cache_db.save_warm_keys_batch(epoch_id, participant_id, warm_keys_raw)
+                        warm_keys_data = warm_keys_raw
+                    else:
+                        warm_keys_data = []
+                except Exception as e:
+                    logger.warning(f"Failed to fetch warm keys for {participant_id}: {e}")
+                    warm_keys_data = []
+            
+            warm_keys = [
+                WarmKeyInfo(
+                    grantee_address=wk["grantee_address"],
+                    granted_at=wk["granted_at"]
+                )
+                for wk in (warm_keys_data or [])
+            ]
+            
             return ParticipantDetailsResponse(
                 participant=participant,
                 rewards=rewards,
-                seed=seed
+                seed=seed,
+                warm_keys=warm_keys
             )
             
         except Exception as e:
@@ -567,4 +592,28 @@ class InferenceService:
             
         except Exception as e:
             logger.error(f"Error polling participant rewards: {e}")
+    
+    async def poll_warm_keys(self):
+        try:
+            logger.info("Polling warm keys")
+            
+            epoch_data = await self.client.get_current_epoch_participants()
+            current_epoch = epoch_data["active_participants"]["epoch_group_id"]
+            participants = epoch_data["active_participants"]["participants"]
+            
+            for participant in participants:
+                participant_id = participant["index"]
+                
+                try:
+                    warm_keys = await self.client.get_authz_grants(participant_id)
+                    await self.cache_db.save_warm_keys_batch(current_epoch, participant_id, warm_keys)
+                    logger.debug(f"Updated {len(warm_keys)} warm keys for {participant_id}")
+                except Exception as e:
+                    logger.debug(f"Failed to fetch warm keys for {participant_id}: {e}")
+                    continue
+            
+            logger.info(f"Completed warm keys polling for {len(participants)} participants")
+            
+        except Exception as e:
+            logger.error(f"Error polling warm keys: {e}")
 

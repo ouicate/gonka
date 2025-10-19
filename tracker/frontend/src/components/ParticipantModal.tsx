@@ -100,6 +100,26 @@ export function ParticipantModal({ participant, epochId, onClose }: ParticipantM
               </div>
             </div>
 
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Warm Keys</label>
+              {loading ? (
+                <div className="mt-1 text-sm text-gray-400">Loading...</div>
+              ) : details && details.warm_keys && details.warm_keys.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {details.warm_keys.map((warmKey, idx) => (
+                    <div key={idx} className="text-sm">
+                      <div className="font-mono text-gray-900 break-all">{warmKey.grantee_address}</div>
+                      <div className="text-xs text-gray-500">
+                        Granted: {new Date(warmKey.granted_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-1 text-sm text-gray-400">No warm keys configured</div>
+              )}
+            </div>
+
             <div className="flex gap-8">
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Weight</label>

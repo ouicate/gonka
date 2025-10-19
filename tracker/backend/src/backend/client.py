@@ -225,4 +225,95 @@ class GonkaClient:
     
     async def get_latest_epoch(self) -> Dict[str, Any]:
         return await self._make_request("/v1/epochs/latest")
+    
+    async def get_authz_grants(self, granter: str) -> List[Dict[str, Any]]:
+        REQUIRED_PERMISSIONS = {
+            "MsgStartInference",
+            "MsgFinishInference",
+            "MsgClaimRewards",
+            "MsgValidation",
+            "MsgSubmitPocBatch",
+            "MsgSubmitPocValidation",
+            "MsgSubmitSeed",
+            "MsgBridgeExchange",
+            "MsgSubmitTrainingKvRecord",
+            "MsgJoinTraining",
+            "MsgJoinTrainingStatus",
+            "MsgTrainingHeartbeat",
+            "MsgSetBarrier",
+            "MsgClaimTrainingTaskForAssignment",
+            "MsgAssignTrainingTask",
+            "MsgSubmitNewUnfundedParticipant",
+            "MsgSubmitHardwareDiff",
+            "MsgInvalidateInference",
+            "MsgRevalidateInference",
+            "MsgSubmitDealerPart",
+            "MsgSubmitVerificationVector",
+            "MsgRequestThresholdSignature",
+            "MsgSubmitPartialSignature",
+            "MsgSubmitGroupKeyValidationSignature",
+        }
+        
+        grants = []
+        offset = 0
+        
+        while True:
+            params = {
+                "pagination.limit": "100",
+                "pagination.offset": str(offset)
+            }
+            
+            try:
+                data = await self._make_request(
+                    f"/chain-api/cosmos/authz/v1beta1/grants/granter/{granter}",
+                    params=params
+                )
+                
+                batch_grants = data.get("grants", [])
+                if not batch_grants:
+                    break
+                
+                grants.extend(batch_grants)
+                
+                if len(batch_grants) < 100:
+                    break
+                
+                offset += 100
+                
+            except Exception as e:
+                logger.warning(f"Failed to fetch authz grants for {granter} at offset {offset}: {e}")
+                break
+        
+        grantee_perms: Dict[str, Dict[str, Any]] = {}
+        for grant in grants:
+            grantee = grant.get("grantee", "")
+            if not grantee:
+                continue
+            
+            authorization = grant.get("authorization", {})
+            msg_url = authorization.get("msg", "")
+            expiration = grant.get("expiration", "")
+            
+            if grantee not in grantee_perms:
+                grantee_perms[grantee] = {
+                    "permissions": set(),
+                    "expiration": expiration
+                }
+            
+            for msg_type in REQUIRED_PERMISSIONS:
+                if msg_type in msg_url:
+                    grantee_perms[grantee]["permissions"].add(msg_type)
+        
+        warm_keys = []
+        for grantee, info in grantee_perms.items():
+            if len(info["permissions"]) >= 24:
+                warm_keys.append({
+                    "grantee_address": grantee,
+                    "granted_at": info["expiration"]
+                })
+        
+        warm_keys.sort(key=lambda x: x["granted_at"], reverse=True)
+        
+        logger.info(f"Found {len(warm_keys)} warm keys for {granter}")
+        return warm_keys
 

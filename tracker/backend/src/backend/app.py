@@ -19,6 +19,7 @@ background_task = None
 jail_polling_task = None
 health_polling_task = None
 rewards_polling_task = None
+warm_keys_polling_task = None
 inference_service_instance = None
 
 
@@ -85,9 +86,22 @@ async def poll_rewards():
         await asyncio.sleep(60)
 
 
+async def poll_warm_keys():
+    await asyncio.sleep(20)
+    
+    while True:
+        try:
+            if inference_service_instance:
+                await inference_service_instance.poll_warm_keys()
+        except Exception as e:
+            logger.error(f"Warm keys polling error: {e}")
+        
+        await asyncio.sleep(300)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global background_task, jail_polling_task, health_polling_task, rewards_polling_task, inference_service_instance
+    global background_task, jail_polling_task, health_polling_task, rewards_polling_task, warm_keys_polling_task, inference_service_instance
     
     inference_urls = os.getenv("INFERENCE_URLS", "http://node2.gonka.ai:8000").split(",")
     inference_urls = [url.strip() for url in inference_urls]
@@ -109,7 +123,8 @@ async def lifespan(app: FastAPI):
     jail_polling_task = asyncio.create_task(poll_jail_status())
     health_polling_task = asyncio.create_task(poll_node_health())
     rewards_polling_task = asyncio.create_task(poll_rewards())
-    logger.info("Background polling tasks started (epoch: 5min, jail: 120s, health: 30s, rewards: 60s)")
+    warm_keys_polling_task = asyncio.create_task(poll_warm_keys())
+    logger.info("Background polling tasks started (epoch: 5min, jail: 120s, health: 30s, rewards: 60s, warm_keys: 5min)")
     
     yield
     
@@ -140,6 +155,13 @@ async def lifespan(app: FastAPI):
             await rewards_polling_task
         except asyncio.CancelledError:
             logger.info("Rewards polling task cancelled")
+    
+    if warm_keys_polling_task:
+        warm_keys_polling_task.cancel()
+        try:
+            await warm_keys_polling_task
+        except asyncio.CancelledError:
+            logger.info("Warm keys polling task cancelled")
 
 
 app = FastAPI(lifespan=lifespan)

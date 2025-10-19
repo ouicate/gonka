@@ -88,10 +88,16 @@ class SeedInfo(BaseModel):
     signature: str
 
 
+class WarmKeyInfo(BaseModel):
+    grantee_address: str
+    granted_at: str
+
+
 class ParticipantDetailsResponse(BaseModel):
     participant: ParticipantStats
     rewards: List[RewardInfo]
     seed: Optional[SeedInfo]
+    warm_keys: List[WarmKeyInfo]
 
 
 class LatestEpochInfo(BaseModel):

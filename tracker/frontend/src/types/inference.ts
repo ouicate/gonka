@@ -46,9 +46,15 @@ export interface SeedInfo {
   signature: string;
 }
 
+export interface WarmKeyInfo {
+  grantee_address: string;
+  granted_at: string;
+}
+
 export interface ParticipantDetailsResponse {
   participant: Participant;
   rewards: RewardInfo[];
   seed: SeedInfo | null;
+  warm_keys: WarmKeyInfo[];
 }
 
