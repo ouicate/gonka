@@ -204,7 +204,9 @@ function App() {
                     <div className="text-2xl font-bold text-gray-900">
                       {data.total_assigned_rewards_gnk !== undefined && data.total_assigned_rewards_gnk !== null 
                         ? `${data.total_assigned_rewards_gnk.toLocaleString()} GNK`
-                        : <span className="text-gray-400 italic">Calculating...</span>
+                        : <span className="text-gray-400 italic">
+                            {loading ? 'Loading...' : data.is_current ? 'Not yet settled' : 'Calculating...'}
+                          </span>
                       }
                     </div>
                   </div>
