@@ -15,6 +15,10 @@ import (
 func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInference) (*types.MsgStartInferenceResponse, error) {
 	var ctx sdk.Context = sdk.UnwrapSDKContext(goCtx)
 	k.LogInfo("StartInference", types.Inferences, "inferenceId", msg.InferenceId, "creator", msg.Creator, "requestedBy", msg.RequestedBy, "model", msg.Model)
+	// Validation for skipped executors: ensure none are ACTIVE
+	if err := k.validateSkippedExecutorsNotActive(goCtx, msg.SkippedExecutors); err != nil {
+		return nil, err
+	}
 
 	transferAgent, found := k.GetParticipant(ctx, msg.Creator)
 	if !found {
@@ -66,6 +70,14 @@ func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInfe
 	if err != nil {
 		return nil, err
 	}
+
+	// Emit event to allow off-chain listeners to reconcile StartInference arrivals
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			"inference_started",
+			sdk.NewAttribute("inference_id", msg.InferenceId),
+		),
+	)
 	k.addTimeout(ctx, inference)
 
 	if inference.IsCompleted() {
@@ -238,4 +250,27 @@ func (k msgServer) GetAccountPubKeysWithGrantees(ctx context.Context, granterAdd
 	}
 	pubKeys[len(pubKeys)-1] = granterPubKey
 	return pubKeys, nil
+}
+
+// validateSkippedExecutorsNotActive checks that all skipped executors are not ACTIVE at the current block.
+func (k msgServer) validateSkippedExecutorsNotActive(goCtx context.Context, skipped []string) error {
+	if len(skipped) == 0 {
+		return nil
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	for _, addr := range skipped {
+		if addr == "" {
+			continue
+		}
+		p, found := k.GetParticipant(ctx, addr)
+		if !found {
+			// Not found: treat as non-ACTIVE; continue
+			continue
+		}
+		if p.Status == types.ParticipantStatus_ACTIVE {
+			k.LogWarn("StartInference: skipped executor is ACTIVE", types.Inferences, "executor", addr)
+			return sdkerrors.Wrapf(types.ErrSkippedExecutorActive, "skipped executor is ACTIVE: %s", addr)
+		}
+	}
+	return nil
 }

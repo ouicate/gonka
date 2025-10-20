@@ -37,7 +37,7 @@ func (k Keeper) GetRandomExecutor(goCtx context.Context, req *types.QueryGetRand
 	k.Logger().Info("GetRandomExecutor: Retrieved epoch group",
 		"model_id", req.Model, "epoch_id", epochGroup.GroupData.EpochIndex)
 
-	participant, err := epochGroup.GetRandomMemberForModel(goCtx, req.Model, filterFn)
+	participant, skipped, err := epochGroup.GetDeterministicRandomMemberForModel(goCtx, req.Model, filterFn, req.InferenceId)
 	if err != nil {
 		k.Logger().Error("GetRandomExecutor: failed to get random member",
 			"model_id", req.Model, "error", err.Error())
@@ -47,9 +47,7 @@ func (k Keeper) GetRandomExecutor(goCtx context.Context, req *types.QueryGetRand
 	k.Logger().Info("GetRandomExecutor: Selected participant",
 		"model_id", req.Model, "participant_address", participant.Address)
 
-	return &types.QueryGetRandomExecutorResponse{
-		Executor: *participant,
-	}, nil
+	return &types.QueryGetRandomExecutorResponse{Executor: *participant, SkippedExecutors: skipped}, nil
 }
 
 func (k Keeper) createFilterFn(goCtx context.Context, modelId string) (func(members []*group.GroupMember) []*group.GroupMember, error) {

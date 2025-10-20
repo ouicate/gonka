@@ -84,6 +84,7 @@ message MsgStartInference {
   int64  request_timestamp = 12;
   string transfer_signature = 14;
   string original_prompt = 15;
+  repeated string skipped_executors = 16;
 }
 
 message MsgStartInferenceResponse {

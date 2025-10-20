@@ -207,13 +207,6 @@ func (k *Keeper) SettleAccounts(ctx context.Context, currentEpochIndex uint64, p
 	}
 	k.AddTokenomicsData(ctx, &types.TokenomicsData{TotalSubsidies: uint64(rewardAmount)})
 
-	k.LogInfo("Checking downtime for participants", types.Settle, "participants", len(allParticipants))
-	for _, participant := range allParticipants {
-		k.LogDebug("Checking downtime for participant", types.Settle, "participant", participant.Address, "missed_requests", participant.CurrentEpochStats.MissedRequests, "inference_count", participant.CurrentEpochStats.InferenceCount)
-		// TODO: Check if it is better to move this function outside the settleAccounts function.
-		k.CheckAndSlashForDowntime(ctx, &participant)
-	}
-
 	for i, participant := range allParticipants {
 		// amount should have the same order as participants
 		amount := amounts[i]

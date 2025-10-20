@@ -16,6 +16,7 @@ var (
 	KeyGracePeriodEndEpoch               = []byte("GracePeriodEndEpoch")
 	KeyBaseWeightRatio                   = []byte("BaseWeightRatio")
 	KeyCollateralPerWeightUnit           = []byte("CollateralPerWeightUnit")
+	KeyDowntimeGraceBlocks               = []byte("DowntimeGraceBlocks")
 	// Vesting parameter keys for TokenomicsParams
 	KeyWorkVestingPeriod     = []byte("WorkVestingPeriod")
 	KeyRewardVestingPeriod   = []byte("RewardVestingPeriod")
@@ -153,6 +154,7 @@ func DefaultCollateralParams() *CollateralParams {
 		GracePeriodEndEpoch:               180,
 		BaseWeightRatio:                   DecimalFromFloat(0.2),
 		CollateralPerWeightUnit:           DecimalFromFloat(1),
+		DowntimeGraceBlocks:               50,
 	}
 }
 
@@ -194,6 +196,7 @@ func (p *CollateralParams) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyGracePeriodEndEpoch, &p.GracePeriodEndEpoch, validateEpoch),
 		paramtypes.NewParamSetPair(KeyBaseWeightRatio, &p.BaseWeightRatio, validateBaseWeightRatio),
 		paramtypes.NewParamSetPair(KeyCollateralPerWeightUnit, &p.CollateralPerWeightUnit, validateCollateralPerWeightUnit),
+		paramtypes.NewParamSetPair(KeyDowntimeGraceBlocks, &p.DowntimeGraceBlocks, validateEpoch),
 	}
 }
 
@@ -394,6 +397,9 @@ func (p *CollateralParams) Validate() error {
 	}
 	if err := validateCollateralPerWeightUnit(p.CollateralPerWeightUnit); err != nil {
 		return errors.Wrap(err, "invalid collateral_per_weight_unit")
+	}
+	if err := validateEpoch(p.DowntimeGraceBlocks); err != nil {
+		return errors.Wrap(err, "invalid downtime_grace_blocks")
 	}
 	return nil
 }

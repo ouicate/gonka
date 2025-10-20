@@ -430,10 +430,14 @@ message QueryInferenceParticipantResponse {
 
 message QueryGetRandomExecutorRequest {
   string model = 1;
+  // Deterministic seed for selection (e.g., inference id)
+  string inference_id = 2;
 }
 
 message QueryGetRandomExecutorResponse {
   Participant executor = 1 [(gogoproto.nullable) = false];
+  // Addresses considered but skipped during deterministic selection
+  repeated string skipped_executors = 2;
 }
 
 message QueryGetEpochGroupDataRequest {

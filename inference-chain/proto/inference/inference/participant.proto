@@ -36,5 +36,6 @@ message CurrentEpochStats {
   uint64 burned_coins = 5;
   uint64 validated_inferences = 6;
   uint64 invalidated_inferences = 7;
+  uint64 first_missed_block = 8;
 }
 

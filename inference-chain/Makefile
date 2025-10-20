@@ -23,28 +23,48 @@ WASMVM_STATIC_DARWIN_URL := https://github.com/CosmWasm/wasmvm/releases/download
 WASMVM_STATIC_LINUX_X64_URL := https://github.com/CosmWasm/wasmvm/releases/download/$(WASMVM_VERSION)/libwasmvm_muslc.x86_64.a
 WASMVM_STATIC_LINUX_ARM64_URL := https://github.com/CosmWasm/wasmvm/releases/download/$(WASMVM_VERSION)/libwasmvm_muslc.aarch64.a
 
+# Cache directory for the wasmvm static library to avoid re-downloading on each local build
+WASMVM_CACHE_DIR ?= $(HOME)/.cache/wasmvm-static
+WASMVM_CACHE_FILE := $(WASMVM_CACHE_DIR)/libwasmvm.a
+
 install:
 	@echo "Installing locally with ldflags..."
 	@go install -ldflags "$(ldflags)" -mod=readonly ./cmd/inferenced/main.go
 
 _build-macos:
 	@echo "Building macOS binary with static wasmvm library..."
-	@echo "Downloading static wasmvm library for macOS..."
-	@mkdir -p /tmp/wasmvm-static
-	@curl -L -o /tmp/wasmvm-static/libwasmvm.a $(WASMVM_STATIC_DARWIN_URL)
+	@echo "Ensuring cached static wasmvm library for macOS..."
+	@mkdir -p $(WASMVM_CACHE_DIR)
+	@if [ ! -f "$(WASMVM_CACHE_FILE)" ]; then \
+		echo "Downloading wasmvm static lib to cache..."; \
+		curl -L -o "$(WASMVM_CACHE_FILE)" $(WASMVM_STATIC_DARWIN_URL); \
+	else \
+		echo "Using cached wasmvm static lib: $(WASMVM_CACHE_FILE)"; \
+	fi
 	@echo "Building with static wasmvm library..."
 	@CGO_ENABLED=1 CC=gcc \
-		CGO_LDFLAGS="-L/tmp/wasmvm-static -lwasmvm" \
+		CGO_LDFLAGS="-L$(WASMVM_CACHE_DIR) -lwasmvm" \
 		go build -ldflags "$(ldflags)" -tags "sys_wasmvm" -o ./build/inferenced ./cmd/inferenced/main.go
 	@echo "Running codesign for macOS..."
 	@codesign --remove-signature ./build/inferenced || true
 	@codesign --force --sign - ./build/inferenced || true
-	@echo "Cleaning up..."
-	@rm -rf /tmp/wasmvm-static
 
 _build-linux:
 	@echo "Building with static wasmvm linking for Linux..."
+	@mkdir -p $(WASMVM_CACHE_DIR)
+	@if [ "$(GOARCH)" = "amd64" ]; then \
+		LIB_URL=$(WASMVM_STATIC_LINUX_X64_URL); \
+	else \
+		LIB_URL=$(WASMVM_STATIC_LINUX_ARM64_URL); \
+	fi; \
+	if [ ! -f "$(WASMVM_CACHE_FILE)" ]; then \
+		echo "Downloading wasmvm static lib to cache..."; \
+		curl -L -o "$(WASMVM_CACHE_FILE)" $$LIB_URL; \
+	else \
+		echo "Using cached wasmvm static lib: $(WASMVM_CACHE_FILE)"; \
+	fi
 	@CGO_ENABLED=1 CC=gcc \
+		CGO_LDFLAGS="-L$(WASMVM_CACHE_DIR) -lwasmvm" \
 		go build -ldflags "$(ldflags) -extldflags '-static'" -tags "muslc" -o ./build/inferenced ./cmd/inferenced/main.go
 
 build:

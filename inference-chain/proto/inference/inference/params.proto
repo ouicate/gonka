@@ -121,6 +121,11 @@ message CollateralParams {
 
   // CollateralPerWeightUnit is the amount of collateral required per unit of weight
   Decimal collateral_per_weight_unit = 6;
+
+  // downtime_grace_blocks is the minimum number of blocks to wait after the
+  // first missed inference before applying a downtime slash. This gates
+  // immediate slashing to avoid punishing transient outages.
+  uint64 downtime_grace_blocks = 7;
 }
 
 // BitcoinRewardParams defines the parameters for Bitcoin-style reward system.

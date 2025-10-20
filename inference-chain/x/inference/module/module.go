@@ -209,6 +209,45 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 		am.LogError("Error updating inference", types.Inferences, "error", err)
 	}
 	executor.CurrentEpochStats.MissedRequests++
+	// Increment missed requests and set FirstMissedBlock if this is the first miss in the epoch
+	if executor.CurrentEpochStats.FirstMissedBlock == 0 {
+		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		executor.CurrentEpochStats.FirstMissedBlock = uint64(sdkCtx.BlockHeight())
+	}
+	// Gate immediate downtime slashing by grace window and participant status
+	{
+		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		params := am.keeper.GetParams(ctx)
+		grace := params.CollateralParams.DowntimeGraceBlocks
+		currentHeight := uint64(sdkCtx.BlockHeight())
+		if executor.Status == types.ParticipantStatus_ACTIVE && executor.CurrentEpochStats.FirstMissedBlock > 0 {
+			if currentHeight >= executor.CurrentEpochStats.FirstMissedBlock+grace {
+				// Evaluate statistical test used for reward (MissedStatTest) and apply collateral slash if test fails
+				totalRequests := executor.CurrentEpochStats.InferenceCount + executor.CurrentEpochStats.MissedRequests
+				missedRequests := executor.CurrentEpochStats.MissedRequests
+				passed, err := calculations.MissedStatTest(int(missedRequests), int(totalRequests))
+				if err == nil && !passed {
+					// Perform downtime collateral slashing using configured fraction
+					slashFraction, err := params.CollateralParams.SlashFractionDowntime.ToLegacyDec()
+					if err == nil {
+						participantAddress, addrErr := sdk.AccAddressFromBech32(executor.Address)
+						if addrErr == nil {
+							am.LogInfo("Immediate downtime slashing via MissedStatTest", types.Tokenomics,
+								"participant", executor.Address,
+								"missed", missedRequests,
+								"total", totalRequests,
+								"first_missed_block", executor.CurrentEpochStats.FirstMissedBlock,
+								"current_height", currentHeight,
+							)
+							_, _ = am.collateralKeeper.Slash(sdkCtx, participantAddress, slashFraction)
+							// Mark executor ineligible for execution until epoch rollover
+							executor.Status = types.ParticipantStatus_INACTIVE
+						}
+					}
+				}
+			}
+		}
+	}
 	err = am.keeper.SetParticipant(ctx, executor)
 	if err != nil {
 		am.LogError("Error updating participant for expired inference", types.Participants, "error", err)

@@ -9,6 +9,7 @@ import (
 	"decentralized-api/internal/bls"
 	"decentralized-api/internal/event_listener/chainevents"
 	"decentralized-api/internal/poc"
+	pserver "decentralized-api/internal/server/public"
 	"decentralized-api/internal/startup"
 	"decentralized-api/internal/validation"
 	"decentralized-api/logging"
@@ -86,6 +87,7 @@ func NewEventListener(
 		&InferenceValidationEventHandler{},
 		&SubmitProposalEventHandler{},
 		&TrainingTaskAssignedEventHandler{},
+		&StartInferenceEventHandler{},
 	}
 
 	bo := NewBlockObserver(configManager)
@@ -448,6 +450,70 @@ func (e *InferenceValidationEventHandler) CanHandle(event *chainevents.JSONRPCRe
 func (e *InferenceValidationEventHandler) Handle(event *chainevents.JSONRPCResponse, el *EventListener) error {
 	if el.isNodeSynced() {
 		el.validator.VerifyInvalidation(event.Result.Events, el.transactionRecorder)
+	}
+	return nil
+}
+
+type StartInferenceEventHandler struct{}
+
+func (e *StartInferenceEventHandler) GetName() string {
+	return "start_inference"
+}
+
+func (e *StartInferenceEventHandler) CanHandle(event *chainevents.JSONRPCResponse) bool {
+	// Detect by explicit chain event emitted on StartInference
+	return len(event.Result.Events["inference_started.inference_id"]) > 0
+}
+
+func (e *StartInferenceEventHandler) Handle(event *chainevents.JSONRPCResponse, el *EventListener) error {
+	if !el.isNodeSynced() {
+		return nil
+	}
+	// Extract inference_id from the explicit event we emit on-chain
+	vals := event.Result.Events["inference_started.inference_id"]
+	if len(vals) == 0 {
+		return nil
+	}
+	inferenceID := vals[0]
+
+	// Reconcile against SQLite KV marker
+	db := el.configManager.SqlDb().GetDb()
+	if db == nil {
+		return nil
+	}
+	if _, ok, _ := apiconfig.KVGetString(context.Background(), db, "inference_seen/"+inferenceID); !ok {
+		// On-chain-first case: WARN and start execution flow using chain data
+		logging.Warn("StartInference arrived before HTTP; proceeding with on-chain-first flow", types.Inferences, "inferenceId", inferenceID)
+
+		// Fetch inference from chain to reconstruct needed fields
+		q := el.transactionRecorder.NewInferenceQueryClient()
+		resp, err := q.Inference(el.transactionRecorder.GetContext(), &types.QueryGetInferenceRequest{Index: inferenceID})
+		if err != nil || resp == nil {
+			logging.Error("Failed to fetch inference for on-chain-first execution", types.Inferences, "inferenceId", inferenceID, "error", err)
+			return nil
+		}
+		inf := resp.Inference
+
+		// Execute and finish using the same pipeline as HTTP executor path
+		go func() {
+			_ = pserver.ExecuteProxyAndFinish(
+				context.Background(),
+				el.nodeBroker,
+				el.configManager,
+				&el.transactionRecorder,
+				inf.Model,
+				[]byte(inf.OriginalPrompt),
+				//TODO: Check if we should somehow get the content type and seed from the inference
+				"application/json",
+				0,
+				inferenceID,
+				inf.TransferredBy,
+				inf.TransferSignature,
+				inf.RequestedBy,
+				inf.RequestTimestamp,
+				nil,
+			)
+		}()
 	}
 	return nil
 }

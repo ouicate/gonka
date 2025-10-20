@@ -6,6 +6,7 @@ import (
 	"decentralized-api/apiconfig"
 	"decentralized-api/broker"
 	"decentralized-api/completionapi"
+	"decentralized-api/cosmosclient"
 	"decentralized-api/logging"
 	"decentralized-api/utils"
 	"encoding/json"
@@ -216,15 +217,23 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	s.bandwidthLimiter.RecordRequest(requestBlockHeight, estimatedKB)
 	defer s.bandwidthLimiter.ReleaseRequest(requestBlockHeight, estimatedKB)
 
-	executor, err := s.getExecutorForRequest(ctx.Request().Context(), request.OpenAiRequest.Model)
+	inferenceUUID := request.AuthKey
+
+	// Mark HTTP-first path in SQLite KV for reconciliation with on-chain StartInference
+	if db := s.configManager.SqlDb().GetDb(); db != nil {
+		_ = apiconfig.KVSetString(ctx.Request().Context(), db, "inference_seen/"+inferenceUUID, strconv.FormatInt(request.Timestamp, 10))
+	}
+
+	//TODO: Should random seed for executor selection be different from just inferenceUUID which is defined by the requester
+	executor, skipped, err := s.getExecutorForRequest(ctx.Request().Context(), request.OpenAiRequest.Model, inferenceUUID)
 	if err != nil {
 		logging.Error("Failed to get executor", types.Inferences, "error", err)
 		return err
 	}
 
+	//TODO: Should we use deterministic seed from inferenceUUID and something from tranfer node?
 	seed := rand.Int31()
-	inferenceUUID := request.AuthKey
-	inferenceRequest, err := createInferenceStartRequest(s, request, seed, request.AuthKey, executor, s.configManager.GetCurrentNodeVersion(), promptTokenCount)
+	inferenceRequest, err := createInferenceStartRequest(s, request, seed, inferenceUUID, executor, s.configManager.GetCurrentNodeVersion(), promptTokenCount, skipped)
 	if err != nil {
 		logging.Error("Failed to create inference start request", types.Inferences, "error", err)
 		return err
@@ -323,7 +332,8 @@ func validateRequest(request *ChatRequest, status *coretypes.ResultStatus, confi
 	return nil
 }
 
-func (s *Server) getPromptTokenCount(text string, model string) (int, error) {
+// getPromptTokenCount posts to node /tokenize to get accurate token count
+func getPromptTokenCount(nodeBroker *broker.Broker, configManager *apiconfig.ConfigManager, text string, model string) (int, error) {
 	type tokenizeRequest struct {
 		Model  string `json:"model"`
 		Prompt string `json:"prompt"`
@@ -332,8 +342,8 @@ func (s *Server) getPromptTokenCount(text string, model string) (int, error) {
 		TokenCount int `json:"count"`
 	}
 
-	response, err := broker.LockNode(s.nodeBroker, model, func(node *broker.Node) (*http.Response, error) {
-		tokenizeUrl, err := url.JoinPath(node.InferenceUrlWithVersion(s.configManager.GetCurrentNodeVersion()), "/tokenize")
+	response, err := broker.LockNode(nodeBroker, model, func(node *broker.Node) (*http.Response, error) {
+		tokenizeUrl, err := url.JoinPath(node.InferenceUrlWithVersion(configManager.GetCurrentNodeVersion()), "/tokenize")
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +381,8 @@ func (s *Server) getPromptTokenCount(text string, model string) (int, error) {
 	return result.TokenCount, nil
 }
 
-func (s *Server) extractPromptTextFromRequest(requestBytes []byte) (string, error) {
+// extractPromptTextFromRequest parses OpenAI-style request and concatenates message contents
+func extractPromptTextFromRequest(requestBytes []byte) (string, error) {
 	var openAiRequest OpenAiRequest
 	err := json.Unmarshal(requestBytes, &openAiRequest)
 	if err != nil {
@@ -398,30 +409,76 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return echo.ErrBadRequest
 	}
 
-	modifiedRequestBody, err := completionapi.ModifyRequestBody(request.Body, int32(seed))
+	if err := ExecuteProxyAndFinish(
+		ctx.Request().Context(),
+		s.nodeBroker,
+		s.configManager,
+		s.recorder,
+		request.OpenAiRequest.Model,
+		request.Body,
+		request.Request.Header.Get("Content-Type"),
+		int32(seed),
+		inferenceId,
+		request.TransferAddress,
+		request.TransferSignature,
+		request.RequesterAddress,
+		request.Timestamp,
+		w,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// dummyWriter is an http.ResponseWriter that discards writes.
+type dummyWriter struct{}
+
+func (d *dummyWriter) Header() http.Header         { return http.Header{} }
+func (d *dummyWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (d *dummyWriter) WriteHeader(statusCode int)  {}
+
+// ExecuteAndFinish runs the completion against a locked executor and posts MsgFinishInference.
+// It reuses the same pipeline as the transfer/executor HTTP path.
+func ExecuteProxyAndFinish(
+	ctx context.Context,
+	nb *broker.Broker,
+	cfg *apiconfig.ConfigManager,
+	recorder cosmosclient.CosmosMessageClient,
+	model string,
+	requestBody []byte,
+	contentType string,
+	seed int32,
+	inferenceId string,
+	transferAddress string,
+	transferSignature string,
+	requesterAddress string,
+	requestTimestamp int64,
+	w http.ResponseWriter,
+) error {
+	modified, err := completionapi.ModifyRequestBody(requestBody, seed)
 	if err != nil {
 		logging.Warn("Unable to modify request body", types.Inferences, "error", err)
 		return err
 	}
 
 	logging.Info("Attempting to lock node for inference", types.Inferences,
-		"inferenceId", inferenceId, "nodeVersion", s.configManager.GetCurrentNodeVersion())
-	resp, err := broker.LockNode(s.nodeBroker, request.OpenAiRequest.Model, func(node *broker.Node) (*http.Response, error) {
+		"inferenceId", inferenceId, "nodeVersion", cfg.GetCurrentNodeVersion())
+	resp, err := broker.LockNode(nb, model, func(node *broker.Node) (*http.Response, error) {
 		logging.Info("Successfully acquired node lock for inference", types.Inferences,
-			"inferenceId", inferenceId, "node", node.Id, "url", node.InferenceUrlWithVersion(s.configManager.GetCurrentNodeVersion()))
+			"inferenceId", inferenceId, "node", node.Id, "url", node.InferenceUrlWithVersion(cfg.GetCurrentNodeVersion()))
 
-		completionsUrl, err := url.JoinPath(node.InferenceUrlWithVersion(s.configManager.GetCurrentNodeVersion()), "/v1/chat/completions")
+		completionsUrl, err := url.JoinPath(node.InferenceUrlWithVersion(cfg.GetCurrentNodeVersion()), "/v1/chat/completions")
 		if err != nil {
 			return nil, err
 		}
 		return http.Post(
 			completionsUrl,
-			request.Request.Header.Get("Content-Type"),
-			bytes.NewReader(modifiedRequestBody.NewBody),
+			contentType,
+			bytes.NewReader(modified.NewBody),
 		)
 	})
 	if err != nil {
-		logging.Error("Failed to get response from inference node", types.Inferences,
+		logging.Error("ExecuteProxyAndFinish: failed to get response from inference node", types.Inferences,
 			"inferenceId", inferenceId, "error", err)
 		return err
 	}
@@ -432,28 +489,41 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := getInferenceErrorMessage(resp)
 		logging.Warn("Inference node response with an error", types.Inferences, "code", resp.StatusCode, "msg", msg)
-		return echo.NewHTTPError(http.StatusInternalServerError, msg)
+		if w != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, msg)
+		}
+		return fmt.Errorf(msg)
 	}
 
-	responseProcessor := completionapi.NewExecutorResponseProcessor(request.InferenceId)
-	logging.Debug("Proxying response from inference node", types.Inferences, "inferenceId", request.InferenceId)
-	proxyResponse(resp, w, true, responseProcessor, inferenceId)
+	responseProcessor := completionapi.NewExecutorResponseProcessor(inferenceId)
+	logging.Debug("Proxying response from inference node", types.Inferences, "inferenceId", inferenceId)
+	writer := w
+	if writer == nil {
+		writer = &dummyWriter{}
+	}
+	proxyResponse(resp, writer, true, responseProcessor, inferenceId)
 
-	logging.Debug("Processing response from inference node", types.Inferences, "inferenceId", request.InferenceId)
+	logging.Debug("Processing response from inference node", types.Inferences, "inferenceId", inferenceId)
 	completionResponse, err := responseProcessor.GetResponse()
-
 	if err != nil || completionResponse == nil {
-		logging.Error("Failed to parse response data into CompletionResponse", types.Inferences, "error", err)
-		return err
+		logging.Error("ExecuteProxyAndFinish: failed to parse completion response", types.Inferences, "error", err)
+		return fmt.Errorf("failed to parse completion response: %w", err)
 	}
 
-	err = s.sendInferenceTransaction(request.InferenceId, completionResponse, request.Body, s.recorder.GetAccountAddress(), request)
-	if err != nil {
-		// Not http.Error, because we assume we already returned everything to the client during proxyResponse execution
-		logging.Error("Failed to send inference transaction", types.Inferences, "error", err)
-		return nil
-	}
-	return nil
+	// Delegate finish logic to shared function to avoid drift
+	return sendInferenceTransaction(
+		nb,
+		cfg,
+		inferenceId,
+		completionResponse,
+		recorder,
+		requestBody,
+		recorder.GetAccountAddress(),
+		transferAddress,
+		transferSignature,
+		requesterAddress,
+		requestTimestamp,
+	)
 }
 
 func (s *Server) getAllowedPubKeys(ctx echo.Context, granterAddress string) ([]string, error) {
@@ -563,24 +633,25 @@ func (s *Server) validateTimestampNonce(request *ChatRequest) error {
 	return nil
 }
 
-func (s *Server) getExecutorForRequest(ctx context.Context, model string) (*ExecutorDestination, error) {
+func (s *Server) getExecutorForRequest(ctx context.Context, model, inferenceId string) (*ExecutorDestination, []string, error) {
 	queryClient := s.recorder.NewInferenceQueryClient()
 	response, err := queryClient.GetRandomExecutor(ctx, &types.QueryGetRandomExecutorRequest{
-		Model: model,
+		Model:       model,
+		InferenceId: inferenceId,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	executor := response.Executor
 	logging.Info("Executor selected", types.Inferences, "address", executor.Address, "url", executor.InferenceUrl)
 	return &ExecutorDestination{
 		Url:     executor.InferenceUrl,
 		Address: executor.Address,
-	}, nil
+	}, response.SkippedExecutors, nil
 }
 
 // calculateSignature calculates a signature for the given components and agent type
-func (s *Server) calculateSignature(payload string, timestamp int64, transferAddress string, executorAddress string, agentType calculations.SignatureType) (string, error) {
+func calculateSignature(recorder cosmosclient.CosmosMessageClient, payload string, timestamp int64, transferAddress string, executorAddress string, agentType calculations.SignatureType) (string, error) {
 	components := calculations.SignatureComponents{
 		Payload:         payload,
 		Timestamp:       timestamp,
@@ -588,7 +659,7 @@ func (s *Server) calculateSignature(payload string, timestamp int64, transferAdd
 		ExecutorAddress: executorAddress,
 	}
 
-	signerAddressStr := s.recorder.GetSignerAddress()
+	signerAddressStr := recorder.GetSignerAddress()
 	signerAddress, err := sdk.AccAddressFromBech32(signerAddressStr)
 	if err != nil {
 		logging.Error("Failed to parse address", types.Inferences, "address", signerAddressStr, "error", err)
@@ -596,7 +667,7 @@ func (s *Server) calculateSignature(payload string, timestamp int64, transferAdd
 	}
 	accountSigner := &cmd.AccountSigner{
 		Addr:    signerAddress,
-		Keyring: s.recorder.GetKeyring(),
+		Keyring: recorder.GetKeyring(),
 	}
 
 	signature, err := calculations.Sign(accountSigner, components, agentType)
@@ -608,7 +679,19 @@ func (s *Server) calculateSignature(payload string, timestamp int64, transferAdd
 	return signature, nil
 }
 
-func (s *Server) sendInferenceTransaction(inferenceId string, response completionapi.CompletionResponse, requestBody []byte, executorAddress string, request *ChatRequest) error {
+func sendInferenceTransaction(
+	nb *broker.Broker,
+	cfg *apiconfig.ConfigManager,
+	inferenceId string,
+	response completionapi.CompletionResponse,
+	recorder cosmosclient.CosmosMessageClient,
+	requestBody []byte,
+	executorAddress string,
+	transferAddress string,
+	transferSignature string,
+	requesterAddress string,
+	requestTimestamp int64,
+) error {
 	responseHash, err := response.GetHash()
 	if err != nil || responseHash == "" {
 		logging.Error("Failed to get responseHash from response", types.Inferences, "error", err)
@@ -633,12 +716,12 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	// If streaming response doesn't have prompt tokens, get accurate count via tokenization
 	if usage.PromptTokens == 0 {
 		logging.Info("Streaming response missing prompt tokens, using tokenization", types.Inferences, "inferenceId", inferenceId)
-		promptText, err := s.extractPromptTextFromRequest(requestBody)
+		promptText, err := extractPromptTextFromRequest(requestBody)
 		if err != nil {
 			logging.Warn("Failed to extract prompt text for tokenization", types.Inferences, "error", err)
 		} else {
 			model, _ := response.GetModel()
-			actualPromptTokens, err := s.getPromptTokenCount(promptText, model)
+			actualPromptTokens, err := getPromptTokenCount(nb, cfg, promptText, model)
 			if err != nil {
 				logging.Warn("Failed to get actual prompt token count", types.Inferences, "error", err)
 			} else {
@@ -655,9 +738,9 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 		return err
 	}
 
-	if s.recorder != nil {
+	if recorder != nil {
 		// Calculate executor signature
-		executorSignature, err := s.calculateSignature(string(request.Body), request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
+		executorSignature, err := calculateSignature(recorder, string(requestBody), requestTimestamp, transferAddress, executorAddress, calculations.ExecutorAgent)
 		if err != nil {
 			return err
 		}
@@ -670,17 +753,17 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			PromptTokenCount:     usage.PromptTokens,
 			CompletionTokenCount: usage.CompletionTokens,
 			ExecutedBy:           executorAddress,
-			TransferredBy:        request.TransferAddress,
-			TransferSignature:    request.TransferSignature,
+			TransferredBy:        transferAddress,
+			TransferSignature:    transferSignature,
 			ExecutorSignature:    executorSignature,
-			RequestTimestamp:     request.Timestamp,
-			RequestedBy:          request.RequesterAddress,
-			OriginalPrompt:       string(request.Body),
+			RequestTimestamp:     requestTimestamp,
+			RequestedBy:          requesterAddress,
+			OriginalPrompt:       string(requestBody),
 			Model:                model,
 		}
 
 		logging.Info("Submitting MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
-		err = s.recorder.FinishInference(message)
+		err = recorder.FinishInference(message)
 		if err != nil {
 			logging.Error("Failed to submit MsgFinishInference", types.Inferences, "inferenceId", inferenceId, "error", err)
 		} else {
@@ -700,7 +783,7 @@ func getPromptHash(requestBytes []byte) (string, string, error) {
 	return promptHash, canonicalJSON, nil
 }
 
-func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, inferenceId string, executor *ExecutorDestination, nodeVersion string, promptTokenCount int) (*inference.MsgStartInference, error) {
+func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, inferenceId string, executor *ExecutorDestination, nodeVersion string, promptTokenCount int, skipped []string) (*inference.MsgStartInference, error) {
 	finalRequest, err := completionapi.ModifyRequestBody(request.Body, seed)
 	if err != nil {
 		return nil, err
@@ -728,8 +811,11 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 		RequestTimestamp: request.Timestamp,
 		OriginalPrompt:   string(request.Body),
 	}
+	if len(skipped) > 0 {
+		transaction.SkippedExecutors = skipped
+	}
 
-	signature, err := s.calculateSignature(string(request.Body), request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
+	signature, err := calculateSignature(s.recorder, string(request.Body), request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
 	if err != nil {
 		return nil, err
 	}
