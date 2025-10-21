@@ -98,7 +98,7 @@ jobs:
           echo "Generated matrix: {\"test_group\":[${TEST_CLASSES}]}"
 
   build-images:
-    runs-on: ubuntu-latest
+    runs-on: integration-test-runner
     steps:
       - name: Check initial disk space
         run: |
