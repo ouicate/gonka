@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from collections import Counter
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -53,11 +54,6 @@ def analyze(distances, top_k_matches_ratios):
 
 
 def plot_distances_and_matches(items, distances, top_k_matches_ratios, title_prefix=""):
-    """
-    Plots two scatter plots side by side:
-      1) Distances vs. # of tokens
-      2) Top-K Matches Ratios vs. # of tokens
-    """
     n_tokens = [len(item.inference_result.results) for item in items]
     
     plt.figure(figsize=(12, 5))
@@ -139,33 +135,264 @@ def find_optimal_bounds_parallel(distances_val, distances_quant, step=0.0001, n_
     return optimal_lower, optimal_upper
 
 
-def plot_classification_results(distances, classifications, lower_bound, upper_bound, title_prefix=""):
+def plot_classification_results(distances, classifications, lower_bound, upper_bound, title_prefix="", languages=None):
     classification_counts = Counter(classifications)
+
+    # Fixed x-axis order; exact label matching only
+    labels = ['accepted', 'questionable', 'fraud']
+
+    counts = [classification_counts.get(l, 0) for l in labels]
 
     plt.figure(figsize=(14, 6))
 
     plt.subplot(1, 2, 1)
-    plt.bar(classification_counts.keys(), classification_counts.values(), color=['green', 'orange', 'red'])
+    plt.bar(labels, counts, color=['green', 'orange', 'red'])
     plt.title(f"{title_prefix} Classification Counts")
     plt.xlabel("Classification")
     plt.ylabel("Count")
 
     plt.subplot(1, 2, 2)
     color_map = {'accepted': 'green', 'questionable': 'orange', 'fraud': 'red'}
-    for classification in classification_counts:
-        idxs = [i for i, c in enumerate(classifications) if c == classification]
-        plt.scatter(
-            idxs, [distances[i] for i in idxs],
-            c=color_map[classification], alpha=0.5,
-            label=f"{classification.capitalize()} ({classification_counts[classification]})"
-        )
 
-    plt.axhline(lower_bound, color='blue', linestyle='--', label='Lower Bound')
-    plt.axhline(upper_bound, color='purple', linestyle='--', label='Upper Bound')
+    marker_size = 36  # slightly larger markers
+    if languages is not None:
+        if len(languages) != len(classifications) or len(distances) != len(classifications):
+            raise ValueError("Lengths of languages, classifications, and distances must match")
+
+        seen_langs = set()
+        unique_languages = []
+        for lang in languages:
+            if lang not in seen_langs:
+                seen_langs.add(lang)
+                unique_languages.append(lang)
+
+        fixed_marker_map = {
+            'sp': '^',  # Spanish -> triangle
+            'en': 'o',  # English -> circle
+            'ch': 's',  # Chinese -> square
+            'ar': 'D',  # Arabic -> diamond
+            'hi': 'P',  # Hindi -> plus-filled
+        }
+        fallback_markers = ['v', '*', 'X', 'h', '<', '>', '1', '2', '3', '4']
+        unknown_langs = sorted([lang for lang in unique_languages if lang not in fixed_marker_map])
+        unknown_marker_map = {lang: fallback_markers[i % len(fallback_markers)] for i, lang in enumerate(unknown_langs)}
+        marker_map = {**fixed_marker_map, **unknown_marker_map}
+
+        for cls in labels:
+            cls_idxs = [i for i, c in enumerate(classifications) if c == cls]
+            if not cls_idxs:
+                continue
+            for lang in unique_languages:
+                lang_cls_idxs = [i for i in cls_idxs if languages[i] == lang]
+                if not lang_cls_idxs:
+                    continue
+                plt.scatter(
+                    lang_cls_idxs,
+                    [distances[i] for i in lang_cls_idxs],
+                    c=color_map[cls],
+                    marker=marker_map[lang],
+                    alpha=0.6,
+                    s=marker_size,
+                )
+
+        class_handles = [
+            Line2D([0], [0], marker='o', color=color_map[cls], linestyle='None', markersize=8,
+                   label=f"{cls.capitalize()} ({classification_counts.get(cls, 0)})")
+            for cls in labels
+        ]
+        language_name_map = {'sp': 'Spanish', 'en': 'English', 'ch': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi'}
+        lang_handles = [
+            Line2D([0], [0], marker=marker_map[lang], color='black', linestyle='None', markersize=8,
+                   label=language_name_map.get(lang, str(lang)))
+            for lang in (['sp', 'en', 'ch', 'ar', 'hi'] if any(l in marker_map for l in ['sp','en','ch','ar','hi']) else unique_languages)
+            if lang in marker_map
+        ]
+        legend1 = plt.legend(handles=class_handles, title='Classification', loc='upper left')
+        plt.gca().add_artist(legend1)
+        plt.legend(handles=lang_handles, title='Languages', loc='upper right')
+    
+    else:
+        for cls in classification_counts:
+            idxs = [i for i, c in enumerate(classifications) if c == cls]
+            plt.scatter(
+                idxs, [distances[i] for i in idxs],
+                c=color_map[cls], alpha=0.5, s=marker_size,
+                label=f"{cls.capitalize()} ({classification_counts[cls]})"
+            )
+
+    plt.axhline(lower_bound, color='blue', linestyle='--', label='_nolegend_')
+    plt.axhline(upper_bound, color='purple', linestyle='--', label='_nolegend_')
+
+    if languages is None:
+        plt.legend(loc='upper right')
     plt.title(f"{title_prefix} Distances Classification")
     plt.xlabel("Item Index")
     plt.ylabel("Distance")
-    plt.legend()
 
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_length_vs_distance_comparison(name, honest_items_dict, honest_distances_dict, fraud_items_dict, fraud_distances_dict, bounds=None):
+    """Create combined length vs distance plot for comparison.
+
+    Arguments are dictionaries mapping group names to lists:
+      - honest_items_dict: {group_name: List[ValidationItem]}
+      - honest_distances_dict: {group_name: List[float]}
+      - fraud_items_dict: {group_name: List[ValidationItem]}
+      - fraud_distances_dict: {group_name: List[float]}
+
+    Visualization:
+      - Honest groups use fixed colors: dark blue, light blue, greenish blue
+      - Fraud groups are colored with different shades of red (dark → light)
+      - Legend lists each group's name colored accordingly (one entry per group)
+
+    Language markers are inferred directly from each item's `language` field and
+    follow the same mapping rules as in plot_classification_results.
+
+    If `bounds` is provided as a tuple (lower, upper), draw horizontal dashed
+    lines at those y-levels (not included in the legend).
+    """
+    # Validate structure and keys
+    honest_keys = list(honest_items_dict.keys())
+    fraud_keys = list(fraud_items_dict.keys())
+
+    if set(honest_keys) != set(honest_distances_dict.keys()):
+        raise ValueError("honest_items_dict and honest_distances_dict must have the same keys")
+    if set(fraud_keys) != set(fraud_distances_dict.keys()):
+        raise ValueError("fraud_items_dict and fraud_distances_dict must have the same keys")
+
+    # Per-group length consistency
+    for k in honest_keys:
+        if len(honest_items_dict[k]) != len(honest_distances_dict[k]):
+            raise ValueError(f"Honest group '{k}' items and distances lengths differ")
+    for k in fraud_keys:
+        if len(fraud_items_dict[k]) != len(fraud_distances_dict[k]):
+            raise ValueError(f"Fraud group '{k}' items and distances lengths differ")
+
+    # Pre-compute lengths per group
+    honest_lengths_dict = {k: [len(item.inference_result.text) for item in honest_items_dict[k]] for k in honest_keys}
+    fraud_lengths_dict = {k: [len(item.inference_result.text) for item in fraud_items_dict[k]] for k in fraud_keys}
+
+    # Setup figure
+    plt.figure(figsize=(10, 6))
+
+    marker_size = 36
+
+    # Compute per-group colors: fixed blues for honest, Reds for fraud
+    honest_palette = ['#0B3D91', '#87CEFA', '#20B2AA']  # dark blue, light blue, greenish blue
+    honest_group_colors_seq = [honest_palette[i % len(honest_palette)] for i in range(max(1, len(honest_keys)))]
+    fraud_group_colors_seq = [plt.cm.Reds(v) for v in np.linspace(0.8, 0.4, max(1, len(fraud_keys)))]
+    honest_color_by_key = {k: honest_group_colors_seq[i] for i, k in enumerate(honest_keys)}
+    fraud_color_by_key = {k: fraud_group_colors_seq[i] for i, k in enumerate(fraud_keys)}
+
+    # Language marker mapping setup: infer from items' language fields
+    def _norm_lang(lang):
+        return str(lang) if lang is not None else 'unk'
+
+    languages_groups = {"honest": {}, "fraud": {}}
+    for k in honest_keys:
+        languages_groups["honest"][k] = [_norm_lang(getattr(item, 'language', None)) for item in honest_items_dict[k]]
+    for k in fraud_keys:
+        languages_groups["fraud"][k] = [_norm_lang(getattr(item, 'language', None)) for item in fraud_items_dict[k]]
+
+    # Build language -> marker map consistent with plot_classification_results
+    seen_langs = set()
+    unique_languages = []
+    for k in honest_keys:
+        for lang in languages_groups["honest"][k]:
+            if lang not in seen_langs:
+                seen_langs.add(lang)
+                unique_languages.append(lang)
+    for k in fraud_keys:
+        for lang in languages_groups["fraud"][k]:
+            if lang not in seen_langs:
+                seen_langs.add(lang)
+                unique_languages.append(lang)
+
+    fixed_marker_map = {
+        'sp': '^',  # Spanish -> triangle
+        'en': 'o',  # English -> circle
+        'ch': 's',  # Chinese -> square
+        'ar': 'D',  # Arabic -> diamond
+        'hi': 'P',  # Hindi -> plus-filled
+    }
+    fallback_markers = ['v', '*', 'X', 'h', '<', '>', '1', '2', '3', '4']
+    unknown_langs = sorted([lang for lang in unique_languages if lang not in fixed_marker_map and lang is not None])
+    unknown_marker_map = {lang: fallback_markers[i % len(fallback_markers)] for i, lang in enumerate(unknown_langs)}
+    # Ensure 'unk' gets a marker as well
+    if 'unk' not in unknown_marker_map and 'unk' not in fixed_marker_map and 'unk' in unique_languages:
+        unknown_marker_map['unk'] = fallback_markers[len(unknown_marker_map) % len(fallback_markers)]
+    marker_map = {**fixed_marker_map, **unknown_marker_map}
+
+    # Plot per group
+    for group_name in ("honest", "fraud"):
+        if group_name == "honest":
+            keys = honest_keys
+            lengths_dict = honest_lengths_dict
+            distances_dict = honest_distances_dict
+        else:
+            keys = fraud_keys
+            lengths_dict = fraud_lengths_dict
+            distances_dict = fraud_distances_dict
+
+        for k in keys:
+            xs = lengths_dict[k]
+            ys = distances_dict[k]
+            if not xs:
+                continue
+            # Select group-specific color
+            group_color = honest_color_by_key[k] if group_name == "honest" else fraud_color_by_key[k]
+            group_langs = languages_groups[group_name][k]
+            # Plot per language within the group
+            for lang in unique_languages:
+                idxs = [i for i, l in enumerate(group_langs) if l == lang]
+                if not idxs:
+                    continue
+                plt.scatter(
+                    [xs[i] for i in idxs],
+                    [ys[i] for i in idxs],
+                    c=group_color,
+                    marker=marker_map[lang],
+                    alpha=0.6,
+                    s=marker_size,
+                    label=None,
+                )
+
+    # Optional bounds lines (do not include in legend)
+    if bounds is not None:
+        if not (isinstance(bounds, (list, tuple)) and len(bounds) == 2):
+            raise ValueError("bounds must be a tuple/list of two floats: (lower, upper)")
+        lower, upper = bounds
+        plt.axhline(lower, color='blue', linestyle='--', label='_nolegend_')
+        plt.axhline(upper, color='purple', linestyle='--', label='_nolegend_')
+
+    # Build per-group color legend (one entry per honest/fraud group)
+    group_handles = []
+    for k in honest_keys:
+        group_handles.append(
+            Line2D([0], [0], marker='o', color=honest_color_by_key[k], linestyle='None', markersize=8, label=f"Honest - {k}")
+        )
+    for k in fraud_keys:
+        group_handles.append(
+            Line2D([0], [0], marker='o', color=fraud_color_by_key[k], linestyle='None', markersize=8, label=f"Fraud - {k}")
+        )
+    legend1 = plt.legend(handles=group_handles, title='Groups', loc='upper left')
+    plt.gca().add_artist(legend1)
+
+    # Language legend (second legend)
+    language_name_map = {'sp': 'Spanish', 'en': 'English', 'ch': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi', 'unk': 'Unknown'}
+    lang_handles = [
+        Line2D([0], [0], marker=marker_map[lang], color='black', linestyle='None', markersize=8,
+               label=language_name_map.get(lang, str(lang)))
+        for lang in (['sp', 'en', 'ch', 'ar', 'hi', 'unk'] if any(l in marker_map for l in ['sp','en','ch','ar','hi','unk']) else unique_languages)
+        if lang in marker_map
+    ]
+    plt.legend(handles=lang_handles, title='Languages', loc='upper right')
+
+    plt.title(f'{name} - Length vs Distance Comparison')
+    plt.xlabel('Length (characters)')
+    plt.ylabel('Distance')
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()

@@ -1,5 +1,6 @@
 import requests
 import math
+import threading
 from typing import (
     Dict,
     Any,
@@ -9,6 +10,8 @@ from typing import (
 )
 
 from pydantic import BaseModel
+import time
+from requests.exceptions import Timeout, RequestException, ConnectionError
 
 
 from typing import Any, Dict, List
@@ -27,6 +30,19 @@ from common.logger import create_logger
 
 
 logger = create_logger(__name__)
+
+# A global registry of locks per output file path to serialize writes
+_output_path_to_lock: Dict[str, threading.Lock] = {}
+_registry_lock = threading.Lock()
+
+def _get_lock_for_path(path: str) -> threading.Lock:
+    if not path:
+        # No path provided; return a dummy lock that does nothing
+        return threading.Lock()
+    with _registry_lock:
+        if path not in _output_path_to_lock:
+            _output_path_to_lock[path] = threading.Lock()
+        return _output_path_to_lock[path]
 
 
 class EnforcedToken(BaseModel):
@@ -106,7 +122,7 @@ def validation(
         "skip_special_tokens": False,
         "repetition_penalty": 1.2,
     }
-    
+
     if enforced_str:
         payload["enforced_str"] = enforced_str
     if enforced_tokens:
@@ -156,19 +172,25 @@ def generate_and_validate(
     )
     validation_result = _extract_logprobs(validation_resp)
     if validation_result.text != inference_result.text:
-        print(
-            f"text sequences don't match\n" +
-            f"inference:\n {inference_result.text}\n" +
-            f"{'-'*10}\n" +
-            f"validation:\n {validation_result.text}\n" +
-            f"{'-'*100}"
+        raise RuntimeError(
+            "Text sequences don't match between inference and validation."
         )
-        exit(-1)
 
-    return experiment_request.to_result(
+    item = experiment_request.to_result(
         inference_result,
         validation_result
     )
+
+    if experiment_request.output_path:
+        lock = _get_lock_for_path(experiment_request.output_path)
+        with lock:
+            try:
+                with open(experiment_request.output_path, 'a') as f:
+                    f.write(item.model_dump_json() + '\n')
+            except Exception as e:
+                logger.error(f"Failed to write result to {experiment_request.output_path}: {e}")
+
+    return item
 
 
 def token_distance(
