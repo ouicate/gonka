@@ -25,7 +25,7 @@ func (k Keeper) GetParticipantsProofByHeight(ctx context.Context, req *types.Que
 	return &types.QueryGetParticipantsProofResponse{ValidatorsProof: &signatures, MerkleProof: &proof}, nil
 }
 
-func (k Keeper) IfProofPending(ctx context.Context, req *types.QueryIsProofPendingRequest) (*types.QueryIsProofPendingResponse, error) {
+func (k Keeper) IsProofPending(ctx context.Context, req *types.QueryIsProofPendingRequest) (*types.QueryIsProofPendingResponse, error) {
 	epochIdPendingProof, found := k.GetPendingProof(ctx, req.ProofHeight)
 	return &types.QueryIsProofPendingResponse{
 		Pending:             found,

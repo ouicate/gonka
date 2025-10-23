@@ -305,11 +305,7 @@ func (el *EventListener) processEvent(event *chainevents.JSONRPCResponse, worker
 		}
 
 		// Update BlockObserver with latest height and sync status
-		height, err := strconv.ParseInt(blockInfo.Block.Header.Height, 10, 64)
-		if err != nil {
-			logging.Error("failed to parse block height", types.Stages, "height", blockInfo.Block.Header.Height, "err", err)
-			return
-		}
+		height := int64(blockInfo.Block.Header.Height)
 		el.blockObserver.updateStatus(height, el.isNodeSynced())
 
 		// Process using the new dispatcher

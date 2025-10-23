@@ -59,7 +59,6 @@ func ToContractsBlockProof(src *types.BlockProof) *contracts.BlockProof {
 		out.Commits[i] = &contracts.CommitInfo{
 			ValidatorAddress: c.ValidatorAddress,
 			ValidatorPubKey:  c.ValidatorPubKey,
-			// VotingPower:      c.VotingPower,
 		}
 	}
 	return out

@@ -54,10 +54,9 @@ service Msg {
   rpc SubmitParticipantsProof          (MsgSubmitParticipantsProof         ) returns (MsgSubmitParticipantsProofResponse           );
   rpc SubmitMissingParticipantsProofData   (MsgSubmitActiveParticipantsProofData) returns (MsgSubmitActiveParticipantsProofDataResponse);
 }
-
 // MsgUpdateParams is the Msg/UpdateParams request type.
 message MsgUpdateParams {
-  option (cosmos.msg.v1.signer) =                             "authority";
+  option (cosmos.msg.v1.signer) = "authority";
   option           (amino.name) = "inference/x/inference/MsgUpdateParams";
 
   // authority is the address that controls the module (defaults to x/gov unless overwritten).
@@ -75,15 +74,15 @@ message MsgUpdateParamsResponse {}
 
 message MsgStartInference {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator        = 1;
-  string inference_id   = 2;
-  string prompt_hash    = 3;
+  string creator = 1;
+  string inference_id = 2;
+  string prompt_hash = 3;
   string prompt_payload = 4;
-  string model          = 6;
-  string requested_by   = 7;
-  string assigned_to    = 8;
-  string node_version   = 9;
-  uint64 max_tokens     = 10;
+  string model = 6;
+  string requested_by = 7;
+  string assigned_to = 8;
+  string node_version = 9;
+  uint64 max_tokens = 10;
   uint64 prompt_token_count = 11;
   int64  request_timestamp = 12;
   string transfer_signature = 14;
@@ -96,20 +95,20 @@ message MsgStartInferenceResponse {
 
 message MsgFinishInference {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator                = 1;
-  string inference_id           = 2;
-  string response_hash          = 3;
-  string response_payload       = 4;
-  uint64 prompt_token_count     = 5;
+  string creator = 1;
+  string inference_id = 2;
+  string response_hash = 3;
+  string response_payload = 4;
+  uint64 prompt_token_count = 5;
   uint64 completion_token_count = 6;
-  string executed_by            = 7;
-  string transferred_by         = 8;
-  int64  request_timestamp      = 9;
-  string transfer_signature     = 10;
-  string executor_signature     = 11;
-  string requested_by           = 12;
-  string original_prompt        = 13;
-  string model                  = 14;
+  string executed_by = 7;
+  string transferred_by = 8;
+  int64  request_timestamp = 9;
+  string transfer_signature = 10;
+  string executor_signature = 11;
+  string requested_by = 12;
+  string original_prompt = 13;
+  string model = 14;
 }
 
 message MsgFinishInferenceResponse {
@@ -118,15 +117,15 @@ message MsgFinishInferenceResponse {
 
 message MsgSubmitNewParticipant {
   option (cosmos.msg.v1.signer) = "creator";
-           string creator       = 1;
-           string url           = 2;
-           string validator_key = 3;
-           string worker_key    = 4;
+  string creator = 1;
+  string url = 2;
+  string validator_key = 3;
+  string worker_key = 4;
 }
 
 message MsgSubmitNewParticipantResponse {
   string participant_index = 1;
-  string status            = 2;
+  string status = 2;
 }
 
 message MsgValidation {
@@ -144,19 +143,19 @@ message MsgValidationResponse {}
 
 message MsgSubmitNewUnfundedParticipant {
   option (cosmos.msg.v1.signer) = "creator";
-           string creator       = 1;
-           string address       = 2;
-           string url           = 3;
-           string pub_key       = 4;
-           string validator_key = 5;
-           string worker_key    = 6;
+  string creator = 1;
+  string address = 2;
+  string url = 3;
+  string pub_key = 4;
+  string validator_key = 5;
+  string worker_key = 6;
 }
 
 message MsgSubmitNewUnfundedParticipantResponse {}
 
 message MsgInvalidateInference {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator      = 1;
+  string creator = 1;
   string inference_id = 2;
   string invalidator = 3;
 }
@@ -165,7 +164,7 @@ message MsgInvalidateInferenceResponse {}
 
 message MsgRevalidateInference {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator      = 1;
+  string creator = 1;
   string inference_id = 2;
   string invalidator = 3;
 }
@@ -174,9 +173,9 @@ message MsgRevalidateInferenceResponse {}
 
 message MsgClaimRewards {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator          = 1;
-  int64  seed             = 2;
-  uint64 epoch_index      = 3;
+  string creator = 1;
+  int64  seed = 2;
+  uint64 epoch_index = 3;
 }
 
 message MsgClaimRewardsResponse {
@@ -186,29 +185,29 @@ message MsgClaimRewardsResponse {
 
 message MsgSubmitPocBatch {
   option (cosmos.msg.v1.signer) = "creator";
-           string creator                      = 1;
-           int64  poc_stage_start_block_height = 2;
-           string batch_id                     = 3;
-  repeated int64  nonces                       = 4;
-  repeated double dist                         = 5;
-           string node_id                      = 6;
+  string creator = 1;
+  int64  poc_stage_start_block_height = 2;
+  string batch_id = 3;
+  repeated int64  nonces = 4;
+  repeated double dist = 5;
+  string node_id = 6;
 }
 
 message MsgSubmitPocBatchResponse {}
 
 message MsgSubmitPocValidation {
   option (cosmos.msg.v1.signer) = "creator";
-           string creator                      =  1;
-           string participant_address          =  2;
-           int64  poc_stage_start_block_height =  3;
-  repeated int64  nonces                       =  4;
-  repeated double dist                         =  5;
-  repeated double received_dist                =  6;
-           double r_target                     =  7;
-           double fraud_threshold              =  8;
-           int64  n_invalid                    =  9;
-           double probability_honest           = 10;
-           bool   fraud_detected               = 11;
+  string creator = 1;
+  string participant_address = 2;
+  int64  poc_stage_start_block_height = 3;
+  repeated int64  nonces = 4;
+  repeated double dist = 5;
+  repeated double received_dist = 6;
+  double r_target = 7;
+  double fraud_threshold = 8;
+  int64  n_invalid = 9;
+  double probability_honest = 10;
+  bool   fraud_detected = 11;
 }
 
 message MsgSubmitPocValidationResponse {}
@@ -225,7 +224,7 @@ message MsgSubmitSeedResponse {}
 message MsgSubmitUnitOfComputePriceProposal {
   option (cosmos.msg.v1.signer) = "creator";
   string creator = 1;
-  uint64 price   = 2;
+  uint64 price = 2;
 }
 
 message MsgSubmitUnitOfComputePriceProposalResponse {}
@@ -248,9 +247,9 @@ message MsgRegisterModelResponse {}
 
 message MsgCreateTrainingTask {
   option (cosmos.msg.v1.signer) = "creator";
-           string                    creator            = 1;
+  string                    creator = 1;
   repeated TrainingHardwareResources hardware_resources = 2;
-           TrainingConfig            config             = 3;
+  TrainingConfig            config = 3;
 }
 
 message MsgCreateTrainingTaskResponse {
@@ -259,9 +258,9 @@ message MsgCreateTrainingTaskResponse {
 
 message MsgSubmitHardwareDiff {
   option (cosmos.msg.v1.signer) = "creator";
-           string       creator       = 1;
+  string       creator = 1;
   repeated HardwareNode newOrModified = 2;
-  repeated HardwareNode removed       = 3;
+  repeated HardwareNode removed = 3;
 }
 
 message MsgSubmitHardwareDiffResponse {}
@@ -276,8 +275,8 @@ message MsgClaimTrainingTaskForAssignmentResponse {}
 
 message MsgAssignTrainingTask {
   option (cosmos.msg.v1.signer) = "creator";
-           string               creator   = 1;
-           uint64               task_id   = 2;
+  string               creator = 1;
+  uint64               task_id = 2;
   repeated TrainingTaskAssignee assignees = 3;
 }
 
@@ -285,9 +284,9 @@ message MsgAssignTrainingTaskResponse {}
 
 message MsgCreatePartialUpgrade {
   option (cosmos.msg.v1.signer) = "authority";
-  string authority       = 1;
-  uint64 height          = 2;
-  string nodeVersion     = 3;
+  string authority = 1;
+  uint64 height = 2;
+  string nodeVersion = 3;
   string apiBinariesJson = 4;
 }
 
@@ -295,11 +294,11 @@ message MsgCreatePartialUpgradeResponse {}
 
 message MsgSubmitTrainingKvRecord {
   option (cosmos.msg.v1.signer) = "creator";
-  string creator     = 1;
-  uint64 taskId      = 2;
+  string creator = 1;
+  uint64 taskId = 2;
   string participant = 3;
-  string key         = 4;
-  string value       = 5;
+  string key = 4;
+  string value = 5;
 }
 
 message MsgSubmitTrainingKvRecordResponse {}
@@ -307,7 +306,7 @@ message MsgSubmitTrainingKvRecordResponse {}
 message MsgJoinTraining {
   option (cosmos.msg.v1.signer) = "creator";
   string              creator = 1;
-  JoinTrainingRequest req     = 2;
+  JoinTrainingRequest req = 2;
 }
 
 message MsgJoinTrainingResponse {
@@ -317,7 +316,7 @@ message MsgJoinTrainingResponse {
 message MsgTrainingHeartbeat {
   option (cosmos.msg.v1.signer) = "creator";
   string           creator = 1;
-  HeartbeatRequest req     = 2;
+  HeartbeatRequest req = 2;
 }
 
 message MsgTrainingHeartbeatResponse {
@@ -327,7 +326,7 @@ message MsgTrainingHeartbeatResponse {
 message MsgSetBarrier {
   option (cosmos.msg.v1.signer) = "creator";
   string            creator = 1;
-  SetBarrierRequest req     = 2;
+  SetBarrierRequest req = 2;
 }
 
 message MsgSetBarrierResponse {
@@ -337,7 +336,7 @@ message MsgSetBarrierResponse {
 message MsgJoinTrainingStatus {
   option (cosmos.msg.v1.signer) = "creator";
   string              creator = 1;
-  JoinTrainingRequest req     = 2;
+  JoinTrainingRequest req = 2;
 }
 
 message MsgJoinTrainingStatusResponse {

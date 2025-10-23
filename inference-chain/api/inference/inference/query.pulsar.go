@@ -71431,7 +71431,7 @@ var file_inference_inference_query_proto_rawDesc = []byte{
 	0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65,
 	0x6e, 0x63, 0x65, 0x2f, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x61, 0x74, 0x6f, 0x72, 0x73, 0x5f, 0x70,
 	0x72, 0x6f, 0x6f, 0x66, 0x2f, 0x7b, 0x70, 0x72, 0x6f, 0x6f, 0x66, 0x5f, 0x68, 0x65, 0x69, 0x67,
-	0x68, 0x74, 0x7d, 0x12, 0xc2, 0x01, 0x0a, 0x0e, 0x49, 0x66, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x50,
+	0x68, 0x74, 0x7d, 0x12, 0xc2, 0x01, 0x0a, 0x0e, 0x49, 0x73, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x50,
 	0x65, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x12, 0x2f, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e,
 	0x63, 0x65, 0x2e, 0x69, 0x6e, 0x66, 0x65, 0x72, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x51, 0x75, 0x65,
 	0x72, 0x79, 0x49, 0x73, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x50, 0x65, 0x6e, 0x64, 0x69, 0x6e, 0x67,
@@ -71796,7 +71796,7 @@ var file_inference_inference_query_proto_depIdxs = []int32{
 	129, // 145: inference.inference.Query.TrainingAllowList:input_type -> inference.inference.QueryTrainingAllowListRequest
 	133, // 146: inference.inference.Query.GetBlockProofByHeight:input_type -> inference.inference.QueryBlockProofRequest
 	135, // 147: inference.inference.Query.GetParticipantsProofByHeight:input_type -> inference.inference.QueryGetParticipantsProofRequest
-	137, // 148: inference.inference.Query.IfProofPending:input_type -> inference.inference.QueryIsProofPendingRequest
+	137, // 148: inference.inference.Query.IsProofPending:input_type -> inference.inference.QueryIsProofPendingRequest
 	1,   // 149: inference.inference.Query.Params:output_type -> inference.inference.QueryParamsResponse
 	3,   // 150: inference.inference.Query.Inference:output_type -> inference.inference.QueryGetInferenceResponse
 	5,   // 151: inference.inference.Query.InferenceAll:output_type -> inference.inference.QueryAllInferenceResponse
@@ -71862,7 +71862,7 @@ var file_inference_inference_query_proto_depIdxs = []int32{
 	130, // 211: inference.inference.Query.TrainingAllowList:output_type -> inference.inference.QueryTrainingAllowListResponse
 	134, // 212: inference.inference.Query.GetBlockProofByHeight:output_type -> inference.inference.QueryBlockProofResponse
 	136, // 213: inference.inference.Query.GetParticipantsProofByHeight:output_type -> inference.inference.QueryGetParticipantsProofResponse
-	138, // 214: inference.inference.Query.IfProofPending:output_type -> inference.inference.QueryIsProofPendingResponse
+	138, // 214: inference.inference.Query.IsProofPending:output_type -> inference.inference.QueryIsProofPendingResponse
 	149, // [149:215] is the sub-list for method output_type
 	83,  // [83:149] is the sub-list for method input_type
 	83,  // [83:83] is the sub-list for extension type_name

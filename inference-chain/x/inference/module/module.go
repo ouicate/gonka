@@ -191,7 +191,7 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 	}
 
 	target := currentHeight - 1
-	upcomingEpochId, found := am.keeper.GetPendingProof(ctx, target)
+	upcomingEpochIndex, found := am.keeper.GetPendingProof(ctx, target)
 	if !found {
 		return
 	}
@@ -279,7 +279,7 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 		AppHashHex:           strings.ToUpper(hex.EncodeToString(appHashForTarget)),
 		TotalVotingPower:     totalPower,
 		Commits:              commits,
-		EpochId:              upcomingEpochId,
+		EpochIndex:           upcomingEpochIndex,
 	}
 
 	if err := am.keeper.SetBlockProof(sdkCtx, proof); err != nil {

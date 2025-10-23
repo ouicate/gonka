@@ -3,6 +3,7 @@ package event_listener
 import (
 	"decentralized-api/chainphase"
 	"decentralized-api/internal/event_listener/chainevents"
+	"fmt"
 	"github.com/productscience/inference/x/inference/types"
 	"testing"
 	"time"
@@ -122,6 +123,6 @@ func TestParseNewBlockInfo(t *testing.T) {
 	blockInfo, err := parseFinalizedBlock(mockEvent)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "12345", blockInfo.Block.Header.Height)
+	assert.Equal(t, "12345", fmt.Sprintf("%v", blockInfo.Block.Header.Height))
 	assert.Equal(t, "ABCDEF123456", blockInfo.BlockId.Hash.String())
 }

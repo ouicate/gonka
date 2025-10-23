@@ -26,10 +26,10 @@ func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error
 		found            bool
 	)
 
-	if proof.EpochId == 0 {
-		prevParticipants, found = k.GetActiveParticipants(ctx, proof.EpochId)
+	if proof.EpochIndex == 0 {
+		prevParticipants, found = k.GetActiveParticipants(ctx, proof.EpochIndex)
 	} else {
-		epoch := proof.EpochId - 1
+		epoch := proof.EpochIndex - 1
 		prevParticipants, found = k.GetActiveParticipants(ctx, epoch)
 	}
 

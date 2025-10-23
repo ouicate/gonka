@@ -84,7 +84,7 @@ const (
 	Query_TrainingAllowList_FullMethodName                         = "/inference.inference.Query/TrainingAllowList"
 	Query_GetBlockProofByHeight_FullMethodName                     = "/inference.inference.Query/GetBlockProofByHeight"
 	Query_GetParticipantsProofByHeight_FullMethodName              = "/inference.inference.Query/GetParticipantsProofByHeight"
-	Query_IfProofPending_FullMethodName                            = "/inference.inference.Query/IfProofPending"
+	Query_IsProofPending_FullMethodName                            = "/inference.inference.Query/IsProofPending"
 )
 
 // QueryClient is the client API for Query service.
@@ -199,7 +199,7 @@ type QueryClient interface {
 	TrainingAllowList(ctx context.Context, in *QueryTrainingAllowListRequest, opts ...grpc.CallOption) (*QueryTrainingAllowListResponse, error)
 	GetBlockProofByHeight(ctx context.Context, in *QueryBlockProofRequest, opts ...grpc.CallOption) (*QueryBlockProofResponse, error)
 	GetParticipantsProofByHeight(ctx context.Context, in *QueryGetParticipantsProofRequest, opts ...grpc.CallOption) (*QueryGetParticipantsProofResponse, error)
-	IfProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error)
+	IsProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error)
 }
 
 type queryClient struct {
@@ -795,9 +795,9 @@ func (c *queryClient) GetParticipantsProofByHeight(ctx context.Context, in *Quer
 	return out, nil
 }
 
-func (c *queryClient) IfProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error) {
+func (c *queryClient) IsProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error) {
 	out := new(QueryIsProofPendingResponse)
-	err := c.cc.Invoke(ctx, Query_IfProofPending_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Query_IsProofPending_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -916,7 +916,7 @@ type QueryServer interface {
 	TrainingAllowList(context.Context, *QueryTrainingAllowListRequest) (*QueryTrainingAllowListResponse, error)
 	GetBlockProofByHeight(context.Context, *QueryBlockProofRequest) (*QueryBlockProofResponse, error)
 	GetParticipantsProofByHeight(context.Context, *QueryGetParticipantsProofRequest) (*QueryGetParticipantsProofResponse, error)
-	IfProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error)
+	IsProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error)
 	mustEmbedUnimplementedQueryServer()
 }
 
@@ -1119,8 +1119,8 @@ func (UnimplementedQueryServer) GetBlockProofByHeight(context.Context, *QueryBlo
 func (UnimplementedQueryServer) GetParticipantsProofByHeight(context.Context, *QueryGetParticipantsProofRequest) (*QueryGetParticipantsProofResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetParticipantsProofByHeight not implemented")
 }
-func (UnimplementedQueryServer) IfProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method IfProofPending not implemented")
+func (UnimplementedQueryServer) IsProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsProofPending not implemented")
 }
 func (UnimplementedQueryServer) mustEmbedUnimplementedQueryServer() {}
 
@@ -2305,20 +2305,20 @@ func _Query_GetParticipantsProofByHeight_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Query_IfProofPending_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Query_IsProofPending_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryIsProofPendingRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(QueryServer).IfProofPending(ctx, in)
+		return srv.(QueryServer).IsProofPending(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Query_IfProofPending_FullMethodName,
+		FullMethod: Query_IsProofPending_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(QueryServer).IfProofPending(ctx, req.(*QueryIsProofPendingRequest))
+		return srv.(QueryServer).IsProofPending(ctx, req.(*QueryIsProofPendingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2591,8 +2591,8 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Query_GetParticipantsProofByHeight_Handler,
 		},
 		{
-			MethodName: "IfProofPending",
-			Handler:    _Query_IfProofPending_Handler,
+			MethodName: "IsProofPending",
+			Handler:    _Query_IsProofPending_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

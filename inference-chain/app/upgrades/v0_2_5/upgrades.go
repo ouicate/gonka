@@ -125,8 +125,11 @@ func CreateUpgradeHandler(
 		}
 		fmt.Printf("OrderMigrations: %v\n", mm.OrderMigrations)
 
-		configurator.RegisterMigration(types.ModuleName, 4, func(ctx sdk.Context) error {
-			k.SetActiveParticipants(ctx, activeParticipantsEpoch0Test)
+		configurator.RegisterMigration(types.ModuleName, 7, func(ctx sdk.Context) error {
+			// add missing participants for epoch 0 (genesis epoch)
+			k.SetActiveParticipants(ctx, activeParticipantsEpoch0Test) // TODO fix me to real participants!
+
+			// grant permissions to send new type of transactions to all hosts to submit proofs
 			authorization1 := authztypes.NewGenericAuthorization(sdk.MsgTypeURL(&types.MsgSubmitParticipantsProof{}))
 			authorization2 := authztypes.NewGenericAuthorization(sdk.MsgTypeURL(&types.MsgSubmitActiveParticipantsProofData{}))
 

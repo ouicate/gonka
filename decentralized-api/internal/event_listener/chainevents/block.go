@@ -1,7 +1,9 @@
 package chainevents
 
 import (
+	"encoding/json"
 	"github.com/cometbft/cometbft/types"
+	"strconv"
 	"time"
 )
 
@@ -22,7 +24,7 @@ type Header struct {
 	ConsensusHash      string        `json:"consensus_hash"`
 	DataHash           string        `json:"data_hash"`
 	EvidenceHash       string        `json:"evidence_hash"`
-	Height             string        `json:"height"`
+	Height             StringInt64   `json:"height"`
 	LastBlockId        types.BlockID `json:"last_block_id"`
 	LastCommitHash     string        `json:"last_commit_hash"`
 	LastResultsHash    string        `json:"last_results_hash"`
@@ -33,6 +35,28 @@ type Header struct {
 	Version            struct {
 		Block string `json:"block"`
 	} `json:"version"`
+}
+
+type StringInt64 int64
+
+func (s *StringInt64) UnmarshalJSON(data []byte) error {
+	// Remove quotes if present
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		v, err := strconv.ParseInt(str, 10, 64)
+		if err != nil {
+			return err
+		}
+		*s = StringInt64(v)
+		return nil
+	}
+	// Fallback: try to unmarshal directly as int64
+	var v int64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*s = StringInt64(v)
+	return nil
 }
 
 type LastCommit struct {

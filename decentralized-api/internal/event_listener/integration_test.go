@@ -414,7 +414,7 @@ func (setup *IntegrationTestSetup) simulateBlock(height int64) error {
 	// Now call to chain mock will return new blockHeight
 	setup.advanceBlockHeight(height)
 	blockInfo := chainevents.FinalizedBlock{
-		Block:   chainevents.Block{Header: chainevents.Header{Height: fmt.Sprintf("%v", height)}},
+		Block:   chainevents.Block{Header: chainevents.Header{Height: chainevents.StringInt64(height)}},
 		BlockId: cmttypes.BlockID{Hash: bytes.HexBytes(fmt.Sprintf("hash-%d", height))},
 	}
 	return setup.Dispatcher.ProcessNewBlock(context.Background(), blockInfo, height-1)

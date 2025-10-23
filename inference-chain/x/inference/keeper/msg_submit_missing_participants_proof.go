@@ -121,7 +121,7 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	if err := s.Keeper.SetBlockProof(ctx, types.BlockProof{
 		CreatedAtBlockHeight: int64(msg.BlockHeight),
 		AppHashHex:           hex.EncodeToString(msg.BlockProof.AppHash),
-		EpochId:              msg.EpochId,
+		EpochIndex:           msg.EpochId,
 		Commits:              commits,
 	}); err != nil {
 		s.logger.Error("error setting block proof", "block height", int64(msg.BlockHeight), "err", err)

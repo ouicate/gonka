@@ -176,11 +176,7 @@ func (d *OnNewBlockDispatcher) ProcessNewBlock(ctx context.Context, blockInfo ch
 		return err
 	}
 
-	height, err := strconv.ParseInt(blockInfo.Block.Header.Height, 10, 64)
-	if err != nil {
-		logging.Error("failed to parse block height", types.Stages, "height", blockInfo.Block.Header.Height, "err", err)
-		return err
-	}
+	height := int64(blockInfo.Block.Header.Height)
 
 	// 2. Query network for current state (sync status, epoch params)
 	networkInfo, err := d.queryNetworkInfo(ctx)
@@ -327,7 +323,7 @@ func (d *OnNewBlockDispatcher) verifyParticipantsChain(ctx context.Context, curH
 	}
 }
 
-// Creates proof for genesis block. Is called only ones and only on genesis node
+// Creates proof for genesis block. Is called only once and only on genesis node
 // It is needed, because dapi container starts later, than blockchain container and dapi misses 1-2 first blocks by subscription
 func (el *OnNewBlockDispatcher) collectGenesisBlockProof() error {
 	if !el.configManager.GetChainNodeConfig().IsGenesis || el.isGenesisBlockProcessed {
@@ -500,7 +496,7 @@ func (el *OnNewBlockDispatcher) collectBlockProofs(block chainevents.FinalizedBl
 
 	logging.Debug("Check if proof pending", types.ParticipantsVerification, "height", height)
 
-	pendingProofResp, err := el.transactionRecorder.NewInferenceQueryClient().IfProofPending(context.Background(), &types.QueryIsProofPendingRequest{ProofHeight: height})
+	pendingProofResp, err := el.transactionRecorder.NewInferenceQueryClient().IsProofPending(context.Background(), &types.QueryIsProofPendingRequest{ProofHeight: height})
 	if err != nil {
 		logging.Error("Failed to check if proof is pending", types.ParticipantsVerification, "height", height, "error", err)
 		return

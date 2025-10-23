@@ -6836,7 +6836,7 @@ func init() {
 func init() { proto.RegisterFile("inference/inference/query.proto", fileDescriptor_cf0cfe3b0e1cc5bd) }
 
 var fileDescriptor_cf0cfe3b0e1cc5bd = []byte{
-	// 5886 bytes of a gzipped FileDescriptorProto
+	// 5884 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x7d, 0x5b, 0x6c, 0x1c, 0x47,
 	0x76, 0xb6, 0x9b, 0x43, 0x5d, 0x58, 0xa2, 0x28, 0xaa, 0x2c, 0x5b, 0xf4, 0x48, 0xa2, 0xe4, 0x92,
 	0xbc, 0xba, 0x58, 0xe6, 0x58, 0x77, 0xcb, 0x92, 0x28, 0x91, 0xd4, 0xd5, 0xb2, 0x64, 0x6a, 0x74,
@@ -7198,13 +7198,13 @@ var fileDescriptor_cf0cfe3b0e1cc5bd = []byte{
 	0xa4, 0x36, 0xcd, 0xae, 0xc0, 0x2a, 0xa5, 0x88, 0x09, 0x52, 0xec, 0x2b, 0x55, 0x6a, 0x2f, 0xcd,
 	0xb6, 0x2a, 0x37, 0x6f, 0x45, 0xfe, 0x97, 0xb0, 0xda, 0x6a, 0x94, 0x4f, 0xb4, 0x86, 0x7f, 0xac,
 	0xa1, 0xdd, 0x32, 0xca, 0x54, 0x80, 0xe1, 0x54, 0xd1, 0xe3, 0x9c, 0x18, 0x65, 0x2b, 0x67, 0x1b,
-	0x97, 0xc9, 0xd0, 0x2a, 0xc7, 0x42, 0x48, 0x72, 0xb9, 0x92, 0xe0, 0xbe, 0xa7, 0xa1, 0xb1, 0x1b,
-	0x8b, 0x51, 0x5a, 0x94, 0x8a, 0x09, 0x22, 0x65, 0x60, 0xa9, 0x98, 0x20, 0x72, 0xc6, 0x55, 0xb9,
-	0x4d, 0x4f, 0xec, 0x9c, 0x43, 0x06, 0x62, 0xf6, 0xb5, 0x4f, 0x3e, 0x9b, 0xd4, 0x7e, 0xf8, 0xd9,
-	0xa4, 0xf6, 0xd3, 0xcf, 0x26, 0xb5, 0x5f, 0xff, 0x7c, 0xf2, 0x89, 0x1f, 0x7e, 0x3e, 0xf9, 0xc4,
-	0xdf, 0x7e, 0x3e, 0xf9, 0xc4, 0x5b, 0xa7, 0x5a, 0xa6, 0xb7, 0xd4, 0x5b, 0x98, 0x6a, 0xd8, 0xed,
-	0xec, 0xa6, 0x1e, 0x47, 0x47, 0xef, 0x4a, 0x97, 0xba, 0x0b, 0x1b, 0xd9, 0x7f, 0x14, 0x77, 0xe2,
-	0xff, 0x02, 0x00, 0x00, 0xff, 0xff, 0xa4, 0xbc, 0x89, 0xfd, 0xe1, 0x72, 0x00, 0x00,
+	0x97, 0xc9, 0xd0, 0x2a, 0xc7, 0x42, 0x48, 0x72, 0xb9, 0x92, 0xe0, 0xbe, 0xa7, 0xa1, 0xb1, 0x38,
+	0x2d, 0x4a, 0xc5, 0x04, 0x91, 0x32, 0xb0, 0x54, 0x4c, 0x10, 0x39, 0xe3, 0xaa, 0xdc, 0xa6, 0x27,
+	0x76, 0xce, 0x21, 0x03, 0x31, 0xfb, 0xda, 0x27, 0x9f, 0x4d, 0x6a, 0x3f, 0xfc, 0x6c, 0x52, 0xfb,
+	0xe9, 0x67, 0x93, 0xda, 0xaf, 0x7f, 0x3e, 0xf9, 0xc4, 0x0f, 0x3f, 0x9f, 0x7c, 0xe2, 0x6f, 0x3f,
+	0x9f, 0x7c, 0xe2, 0xad, 0x53, 0x2d, 0xd3, 0x5b, 0xea, 0x2d, 0x4c, 0x35, 0xec, 0x76, 0x76, 0x53,
+	0x8f, 0xa3, 0xa3, 0x77, 0xa5, 0x4b, 0xdd, 0x85, 0x8d, 0xec, 0x3f, 0x8a, 0x3b, 0xf1, 0x7f, 0x01,
+	0x00, 0x00, 0xff, 0xff, 0x4c, 0x65, 0xe8, 0xe0, 0xe1, 0x72, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -7327,7 +7327,7 @@ type QueryClient interface {
 	TrainingAllowList(ctx context.Context, in *QueryTrainingAllowListRequest, opts ...grpc.CallOption) (*QueryTrainingAllowListResponse, error)
 	GetBlockProofByHeight(ctx context.Context, in *QueryBlockProofRequest, opts ...grpc.CallOption) (*QueryBlockProofResponse, error)
 	GetParticipantsProofByHeight(ctx context.Context, in *QueryGetParticipantsProofRequest, opts ...grpc.CallOption) (*QueryGetParticipantsProofResponse, error)
-	IfProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error)
+	IsProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error)
 }
 
 type queryClient struct {
@@ -7923,9 +7923,9 @@ func (c *queryClient) GetParticipantsProofByHeight(ctx context.Context, in *Quer
 	return out, nil
 }
 
-func (c *queryClient) IfProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error) {
+func (c *queryClient) IsProofPending(ctx context.Context, in *QueryIsProofPendingRequest, opts ...grpc.CallOption) (*QueryIsProofPendingResponse, error) {
 	out := new(QueryIsProofPendingResponse)
-	err := c.cc.Invoke(ctx, "/inference.inference.Query/IfProofPending", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/inference.inference.Query/IsProofPending", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -8042,7 +8042,7 @@ type QueryServer interface {
 	TrainingAllowList(context.Context, *QueryTrainingAllowListRequest) (*QueryTrainingAllowListResponse, error)
 	GetBlockProofByHeight(context.Context, *QueryBlockProofRequest) (*QueryBlockProofResponse, error)
 	GetParticipantsProofByHeight(context.Context, *QueryGetParticipantsProofRequest) (*QueryGetParticipantsProofResponse, error)
-	IfProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error)
+	IsProofPending(context.Context, *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error)
 }
 
 // UnimplementedQueryServer can be embedded to have forward compatible implementations.
@@ -8244,8 +8244,8 @@ func (*UnimplementedQueryServer) GetBlockProofByHeight(ctx context.Context, req 
 func (*UnimplementedQueryServer) GetParticipantsProofByHeight(ctx context.Context, req *QueryGetParticipantsProofRequest) (*QueryGetParticipantsProofResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetParticipantsProofByHeight not implemented")
 }
-func (*UnimplementedQueryServer) IfProofPending(ctx context.Context, req *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method IfProofPending not implemented")
+func (*UnimplementedQueryServer) IsProofPending(ctx context.Context, req *QueryIsProofPendingRequest) (*QueryIsProofPendingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsProofPending not implemented")
 }
 
 func RegisterQueryServer(s grpc1.Server, srv QueryServer) {
@@ -9422,20 +9422,20 @@ func _Query_GetParticipantsProofByHeight_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Query_IfProofPending_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Query_IsProofPending_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryIsProofPendingRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(QueryServer).IfProofPending(ctx, in)
+		return srv.(QueryServer).IsProofPending(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/inference.inference.Query/IfProofPending",
+		FullMethod: "/inference.inference.Query/IsProofPending",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(QueryServer).IfProofPending(ctx, req.(*QueryIsProofPendingRequest))
+		return srv.(QueryServer).IsProofPending(ctx, req.(*QueryIsProofPendingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -9706,8 +9706,8 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Query_GetParticipantsProofByHeight_Handler,
 		},
 		{
-			MethodName: "IfProofPending",
-			Handler:    _Query_IfProofPending_Handler,
+			MethodName: "IsProofPending",
+			Handler:    _Query_IsProofPending_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

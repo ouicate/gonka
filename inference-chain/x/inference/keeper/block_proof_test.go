@@ -31,7 +31,7 @@ func TestBlockProof(t *testing.T) {
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
 			TotalVotingPower:     100,
-			EpochId:              1,
+			EpochIndex:           1,
 		})
 		assert.ErrorIs(t, err, keeper.ErrEmptyCommits)
 	})
@@ -41,7 +41,7 @@ func TestBlockProof(t *testing.T) {
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
 			TotalVotingPower:     100,
-			EpochId:              1,
+			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
 					ValidatorPubKey: "some_key",
@@ -56,7 +56,7 @@ func TestBlockProof(t *testing.T) {
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
 			TotalVotingPower:     100,
-			EpochId:              1,
+			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
 					ValidatorAddress: "901ADC33D3A63CBF9EF17B8CB5F04F99087D47E0",
@@ -73,7 +73,7 @@ func TestBlockProof(t *testing.T) {
 			CreatedAtBlockHeight: height,
 			AppHashHex:           "apphash-10",
 			TotalVotingPower:     100,
-			EpochId:              1,
+			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
 					ValidatorAddress: "901ADC33D3A63CBF9EF17B8CB5F04F99087D47E0",

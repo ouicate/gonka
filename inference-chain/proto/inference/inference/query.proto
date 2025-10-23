@@ -383,7 +383,7 @@ service Query {
     option (google.api.http).get = "/productscience/inference/inference/validators_proof/{proof_height}";
   }
 
-  rpc IfProofPending(QueryIsProofPendingRequest) returns (QueryIsProofPendingResponse){
+  rpc IsProofPending(QueryIsProofPendingRequest) returns (QueryIsProofPendingResponse){
     option (google.api.http).get = "/productscience/inference/inference/participants_proof/{proof_height}";
   }
 
@@ -521,7 +521,6 @@ message PoCBatchesWithParticipants {
 
 message QueryGetCurrentEpochRequest {}
 
-// DEPRECATED: ambiguous query, re-check what it expect as epoch: id, poc_start_block_height, or epoch_group_id
 message QueryGetCurrentEpochResponse {
   uint64 epoch = 1;
 }
