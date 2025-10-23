@@ -1,11 +1,11 @@
-# Invalid Participant Exclusion – Execution Plan (Updated: use collection directly, no helpers)
+# Invalid Participant Exclusion – Execution Plan
 
-This plan implements the InvalidatedParticipants feature using the collections API directly at call sites — no keeper helper methods. Steps list concrete file touch‑points, acceptance criteria, and unit testing tasks.
+This plan implements the ExcludedParticipants feature using the collections API directly at call sites — no keeper helper methods. Steps list concrete file touch‑points, acceptance criteria, and unit testing tasks.
 
 Notes and decisions from the spec review:
-- New chain RPC: QueryInvalidatedParticipants(epoch_id). If epoch_id == 0, default to the current epoch.
-- Reason is a free‑form string.
-- DAPI must not modify signed bytes; instead, set Weight = 0 in the JSON DTO for any invalidated participant. Keep ActiveParticipantsBytes unchanged.
+- New chain RPC: QueryExcludedParticipants(epoch_id). If epoch_id == 0, default to the current epoch.
+- Reason is a free‑form string; include EffectiveHeight (block height when added to the exclusion list).
+- DAPI must not modify signed bytes; return a separate top‑level excludedParticipants list in the GetActiveParticipants response; do not add per‑participant flags. Keep ActiveParticipantsBytes unchanged.
 - Physically remove invalidated participants from all model EpochGroup memberships (current epoch only).
 - Focus on unit tests only (no integration tests in this task).
 
@@ -25,18 +25,18 @@ Verification
 
 ---
 
-## 1) Proto: InvalidatedParticipants types and query
+## 1) Proto: ExcludedParticipants types and query
 Files
-- inference-chain/proto/inference/inference/invalidated_participant.proto (new)
+- inference-chain/proto/inference/inference/excluded_participant.proto (new)
 - inference-chain/proto/inference/inference/query.proto (edit)
 
 Implementation
-- [ ] TODO: Add invalidated_participant.proto with:
-  - message InvalidatedParticipant { string address = 1; uint64 epoch_id = 2; string reason = 3; }
+- [ ] TODO: Add excluded_participant.proto with:
+  - message ExcludedParticipant { string address = 1; uint64 epoch_id = 2; string reason = 3; uint64 effective_height = 4; }
 - [ ] TODO: In query.proto, add:
-  - rpc InvalidatedParticipants(QueryInvalidatedParticipantsRequest) returns (QueryInvalidatedParticipantsResponse) { GET /productscience/inference/inference/invalidated_participants/{epoch_id} }
-  - message QueryInvalidatedParticipantsRequest { uint64 epoch_id = 1; }
-  - message QueryInvalidatedParticipantsResponse { repeated InvalidatedParticipant items = 1; }
+  - rpc ExcludedParticipants(QueryExcludedParticipantsRequest) returns (QueryExcludedParticipantsResponse) { GET /productscience/inference/inference/excluded_participants/{epoch_id} }
+  - message QueryExcludedParticipantsRequest { uint64 epoch_id = 1; }
+  - message QueryExcludedParticipantsResponse { repeated ExcludedParticipant items = 1; }
 - [ ] TODO: Ensure appropriate go_package and imports registered.
 - [ ] TODO: Generate protobufs: from inference-chain dir, run: `ignite generate proto-go`
 
@@ -51,7 +51,7 @@ Files
 
 Implementation
 - [ ] TODO: Register new collection in Keeper:
-  - InvalidatedParticipants: collections.Map[collections.Pair[uint64, sdk.AccAddress], types.InvalidatedParticipant]
+  - ExcludedParticipants: collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
 - [ ] NOTE: No helper methods (no Add/Is/List). Call sites must read/write the collection directly.
 
 Unit tests
@@ -59,9 +59,9 @@ Unit tests
 
 ---
 
-## 3) Query server: InvalidatedParticipants (direct collection access)
+## 3) Query server: ExcludedParticipants (direct collection access)
 Files
-- inference-chain/x/inference/keeper/query_invalidated_participants.go (new)
+- inference-chain/x/inference/keeper/query_excluded_participants.go (new)
 
 Implementation
 - [ ] TODO: Implement gRPC method:
@@ -70,7 +70,7 @@ Implementation
 - [ ] TODO: Wire in module AppModule RegisterServices if needed (usually auto via proto codegen scaffolding).
 
 Unit tests
-- [ ] TODO: query_invalidated_participants_test.go – happy path, epoch_id==0 defaulting, empty list
+- [ ] TODO: query_excluded_participants_test.go – happy path, epoch_id==0 defaulting, empty list
 - [ ] TODO: Run: `cd inference-chain && go test ./x/inference/...`
 
 ---
@@ -81,7 +81,7 @@ Files
 
 Implementation
 - [ ] TODO: In InvalidateInference, after calculating executor.Status, detect transition original->INVALID and write directly:
-  - k.InvalidatedParticipants.Set(ctx, collections.Join(effectiveEpoch.Index, addr), types.InvalidatedParticipant{ Address: addr, EpochId: effectiveEpoch.Index, Reason: reason })
+  - k.ExcludedParticipants.Set(ctx, collections.Join(effectiveEpoch.Index, addr), types.ExcludedParticipant{ Address: addr, EpochId: effectiveEpoch.Index, Reason: reason /* 'invalidated' */, EffectiveHeight: uint64(ctx.BlockHeight()) })
 - [ ] TODO: Ensure idempotency (Set on same key overwrites)
 
 Unit tests
@@ -90,12 +90,12 @@ Unit tests
 
 ---
 
-## 5) Epoch lifecycle: clear per‑epoch invalidations at epoch switch (direct remove)
+## 5) Epoch lifecycle: clear per‑epoch exclusions at epoch switch (direct remove)
 Files
 - inference-chain/x/inference/module/module.go (edit moveUpcomingToEffectiveGroup)
 
 Implementation
-- [ ] TODO: At the same place ActiveInvalidations is cleared, iterate InvalidatedParticipants prefix for prior epoch and delete entries
+- [ ] TODO: At the same place ActiveInvalidations is cleared, iterate ExcludedParticipants prefix for prior epoch and delete entries
 
 Unit tests
 - [ ] TODO: module test – seed entries, simulate epoch switch, verify collection cleared
@@ -118,15 +118,16 @@ Unit tests
 
 ---
 
-## 7) Executor selection: exclude invalidated at read/selection time (defense‑in‑depth)
+## 7) Executor selection: select directly from EpochGroup members (no invalidation filtering)
 Files
 - inference-chain/x/inference/keeper/query_get_random_executor.go (edit)
 
 Implementation
-- [ ] TODO: In both branches of createFilterFn (inference and PoC), obtain the effective epoch id and filter out members whose addresses are present in InvalidatedParticipants (scan prefix set for that epoch)
+- [ ] TODO: Ensure GetRandomExecutor selects from the EpochGroup membership as-is; do not perform any invalidation-based filtering in createFilterFn or elsewhere.
+- [ ] NOTE: Invalidated participants must be fully removed from the EpochGroup parent and all model sub-groups at invalidation time (see step 6), so no filtering is required.
 
 Unit tests
-- [ ] TODO: Add a test ensuring GetRandomExecutor never returns an invalidated participant
+- [ ] TODO: Add a test ensuring GetRandomExecutor never returns an invalidated participant (because the member has been removed from the EpochGroup)
 - [ ] TODO: Run: `cd inference-chain && go test ./x/inference/...`
 
 ---
@@ -136,7 +137,7 @@ Files
 - inference-chain/x/inference/module/module.go (review+possible edit)
 
 Implementation
-- [ ] TODO: Before registering validators/power, deterministically drop invalidated participants (or ensure Weight=0 path leads to zero power). Keep logic deterministic and map‑free iteration.
+- [ ] TODO: Before registering validators/power, deterministically drop only participants whose invalidation status is true for the current epoch. Participants excluded for other reasons must retain governance voting and Tendermint consensus power. Do not use the ExcludedParticipants list for this decision. Keep logic deterministic and map‑free iteration.
 
 Unit tests
 - [ ] TODO: Add a unit test that an invalidated participant has zero Tendermint power and no governance voting weight
@@ -144,17 +145,17 @@ Unit tests
 
 ---
 
-## 9) DAPI: set Weight=0 for invalidated participants in DTO
+## 9) DAPI: add top-level excludedParticipants in GetActiveParticipants response
 Files
 - decentralized-api/internal/server/public/get_participants_handler.go (edit)
 - decentralized-api/internal/server/public/entities.go (verify DTO)
 
 Implementation
-- [ ] TODO: After unmarshalling ActiveParticipants for a given epoch, query chain QueryInvalidatedParticipants(epoch). Build a set of invalidated addresses.
-- [ ] TODO: For each participant in activeParticipants.Participants, if address is in the set, set participant.Weight = 0 in the JSON DTO only. Do NOT modify ActiveParticipantsBytes or ProofOps.
+- [ ] TODO: After unmarshalling ActiveParticipants for a given epoch, query chain QueryExcludedParticipants(epoch) and build the excludedParticipants list from all returned entries (no filtering by reason).
+- [ ] TODO: Add this list as a separate top-level field excludedParticipants in the JSON response. Do NOT add per-participant flags and do NOT modify ActiveParticipantsBytes or ProofOps.
 
 Unit tests
-- [ ] TODO: Add a unit test asserting that invalidated participants have Weight=0 in JSON, while bytes/proof remain unchanged
+- [ ] TODO: Add a unit test asserting that the response includes a top-level excludedParticipants list (for the current epoch) and that ActiveParticipantsBytes and ProofOps remain unchanged
 - [ ] TODO: Run: `cd decentralized-api && go test ./...`
 
 ---
@@ -176,8 +177,9 @@ Verification
 ---
 
 ## Acceptance Criteria
-- Chain exposes QueryInvalidatedParticipants(epoch_id) with epoch_id==0 mapping to current epoch; returns address+epoch_id+reason.
-- Invalidated participants are recorded upon status transition to INVALID, cleared on epoch switch, and physically removed from all model EpochGroups for the current epoch.
-- Random executor and any model membership dependent logic never select invalidated participants.
-- DAPI JSON sets Weight=0 for invalidated participants while preserving the signed ActiveParticipantsBytes and proofs.
+- Chain exposes QueryExcludedParticipants(epoch_id) with epoch_id==0 mapping to current epoch; returns address+epoch_id+reason+effective_height.
+- On invalidation status transition to INVALID, an ExcludedParticipants entry is recorded for the current epoch; entries are cleared on epoch switch; and the participant is physically removed from all model EpochGroups for the current epoch.
+- GetRandomExecutor selects from EpochGroup membership without any invalidation-based filtering; invalidated participants cannot be selected because they are fully removed from the EpochGroup (parent and sub-groups) at invalidation time.
+- Consensus/governance power removal is driven by invalidation status only; ExcludedParticipants list is not consulted for this decision.
+- DAPI JSON includes a top‑level excludedParticipants list for the current epoch while preserving the signed ActiveParticipantsBytes and proofs (no per‑participant flags or weight changes).
 - All existing and new unit tests pass; no data migrations; deterministic behavior maintained.

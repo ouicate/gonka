@@ -24,15 +24,16 @@ Additionally, when a participant is marked as invalid, we need to ensure and tes
 
 ## **Proposed Solution**
 
-### 1. **Introduce a New Query and data structure: `InvalidatedParticipants`**
+### 1. **Introduce a New Query and data structure: `ExcludedParticipants`**
 
-* A new chain query will return a list of **invalidated participants for the current epoch** only.
+* A new chain query will return a list of **excluded participants for the current epoch** only.
 * This query will include:
     * Participant identifier
-    * Epoch index for when they are invalidated
-    * Reason for invalidation (e.g., bad inference, wrong model, configuration issue)
+    * EffectiveHeight — the block height at which the participant was added to the exclusion list
+    * Epoch index for when they are excluded
+    * Reason for exclusion (e.g., invalidation due to bad inference, wrong model, configuration issue; maintenance; operator request)
 * No cryptographic proof is necessary (for now) as it’s only relevant to the current epoch and used for filtering.
-* The list will be added to whenever a participant is marked invalid by the validation algorithms
+* The list will be added to whenever a participant is added to the exclusion list
 * There should be no need for specific pruning
 * There should be no write access to the list via queries or other endpoints.
 
@@ -40,21 +41,22 @@ Additionally, when a participant is marked as invalid, we need to ensure and tes
 
 * When querying for active participants via the DAPI:
 
-    * Also query `InvalidatedParticipants`
-    * Add an "invalidated" field for the value.
-    * We will rely on updated clients to exclude these now invalidated participants
-    * (We cannot filter at this level as clients still need the cryptographically secured list)
+    * Return a separate top-level field named `invalidatedParticipants` containing the list of all invalidated participants for the current epoch.
+    * Do not add per-participant "invalidated" flags to the active participants list.
+    * Clients must use this top-level list to filter invalidated participants from the cryptographically secured active list at selection time.
+    * (We cannot mutate the cryptographically secured list itself.)
 
 ### 3. **Recursive Removal from All Model Group Memberships**
 
 * An invalidated participant must be **removed from all models they serve**, not just the model they were invalidated for.
 * Treat invalidation as a **global disqualification** from participation for the epoch.
 
-### 4. **Ensure Invalid Participants Have No Voting or Consensus Power**
+### 4. **Ensure Invalidated Participants Have No Voting or Consensus Power**
 
-* Remove consensus-related influence (this is already done, but not properly verified in tests)
+* Only participants whose exclusion reason is "invalidated" are stripped of consensus-related influence
     * No voting rights in governance
     * No consensus power in Tendermint
+* Participants excluded for other reasons remain with their voting and consensus power intact
 
 ---
 
@@ -62,11 +64,14 @@ Additionally, when a participant is marked as invalid, we need to ensure and tes
 
 * The invalidation mechanism was previously disabled during development and was under tested. Now that the full behavior is enabled:
 
-    * Ensure that invalid participants are:
-        * Properly listed in the `InvalidatedParticipants` query
-        * Excluded from all responsibilities
-        * Not receiving rewards, work, or assignments
-        * Removed from voting and consensus mechanisms
+    * Ensure that participants are:
+        * Properly listed in the `ExcludedParticipants` query with `EffectiveHeight` and `reason`
+        * Reflected by the DAPI as a top-level `invalidatedParticipants` list for the current epoch
+        * For invalidated participants only:
+            * Excluded from tasks, routing, and all model group memberships
+            * Not receiving rewards, work, or assignments
+            * Removed from voting and consensus mechanisms
+    * Ensure that participants excluded for non-invalidation reasons retain voting and consensus power
 * Extend **Testermint** tests to cover these scenarios
 
 ---
@@ -74,12 +79,13 @@ Additionally, when a participant is marked as invalid, we need to ensure and tes
 ## **Client & Consumer Requirements**
 
 * All example clients (and production consumers) must:
-    * Update to use the **filter the list** from DAPI to exclude invalid participants when selecting an endpoint
+    * Use the top-level `invalidatedParticipants` list from the DAPI GetActiveParticipants response to filter out invalidated participants when selecting an endpoint
 
 ---
 
 ## **Terminology Clarification**
 
-* **Invalidated Participant**: A participant that has been deemed untrustworthy for the current epoch due to failed validations, model misalignment, or malicious behavior.
+* **Excluded Participant**: A participant present in the on-chain `ExcludedParticipants` list for the current epoch. Each entry includes a `reason` and an `EffectiveHeight` indicating when the exclusion took effect. Reasons can include invalidation (due to bad inference, wrong model, configuration issue), temporary maintenance, operator request, etc.
+* **Invalidated Participant**: A subset of excluded participants that have been deemed untrustworthy for the current epoch due to failed validations, model misalignment, or malicious behavior. Only this subset loses voting rights and consensus power.
 * **Active Participant**: A participant still cryptographically listed as active, but may need filtering at runtime if they’re invalidated.
 
