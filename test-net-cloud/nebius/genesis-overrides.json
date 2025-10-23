@@ -75,7 +75,9 @@
         "poc_validation_duration": "20",
         "set_new_validators_delay": "30",
         "inference_validation_cutoff": "20",
-        "default_unit_of_compute_price": "100"
+        "default_unit_of_compute_price": "100",
+          "inference_pruning_max": "0",
+          "poc_pruning_max": "0"
         },
         "bandwidth_limits_params": {
           "estimated_limits_per_block_kb": "10752",
