@@ -33,6 +33,10 @@ func (k Keeper) ComputeParticipantStatus(ctx context.Context, participant types.
 // computeStatusWithParams mirrors the former calculateStatus function and is kept private
 // to this file. It allows unit-testing with injected params if needed.
 func computeStatusWithParams(validationParameters *types.ValidationParams, participant types.Participant) (status types.ParticipantStatus, reason ParticipantStatusReason) {
+	// Genesis only (for tests)
+	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
+		return types.ParticipantStatus_ACTIVE, NoReason
+	}
 	// If we have consecutive failures with a likelihood of less than 1 in a million times, we're assuming bad
 	falsePositiveRate := validationParameters.FalsePositiveRate.ToFloat()
 	if probabilityOfConsecutiveFailures(falsePositiveRate, participant.ConsecutiveInvalidInferences) < 0.000001 {
