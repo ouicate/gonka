@@ -6,6 +6,7 @@ import (
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
+	"github.com/shopspring/decimal"
 )
 
 // UpdateParticipantStatus is the single entry point for changing a participant's status.
@@ -53,10 +54,23 @@ func (k Keeper) invalidateParticipant(ctx context.Context, participant *types.Pa
 	k.recordExclusion(ctx, participant, reason)
 
 	// 3) TODO: Multiply EpochsCompleted by the ReputationPreserve
-	//participant.EpochsCompleted = 0
+	participant.EpochsCompleted = multiply(participant.EpochsCompleted, params.ValidationParams.InvalidReputationPreserve)
 
 	// 4) Remove from current-epoch EpochGroup memberships
 	return k.removeFromEpochGroups(ctx, participant, reason)
+}
+
+func multiply(completed uint32, preserve *types.Decimal) uint32 {
+	if preserve == nil {
+		return completed
+	}
+	pd := preserve.ToDecimal()
+	if pd.LessThan(decimal.Zero) || pd.GreaterThan(decimal.NewFromInt(1)) {
+		return completed
+	}
+	toDecimal := preserve.ToDecimal()
+	result := decimal.NewFromInt32(int32(completed)).Mul(toDecimal)
+	return uint32(result.Round(0).IntPart())
 }
 
 func (k Keeper) removeFromEpochGroups(ctx context.Context, participant *types.Participant, reason ParticipantStatusReason) error {
