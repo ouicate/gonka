@@ -12,6 +12,7 @@ import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertNotNull
+import com.productscience.assertions.assertThat
 
 @Timeout(value = 15, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -165,7 +166,7 @@ class ValidationTests : TestermintTest() {
         )
 
         val validation = lateValidator.submitMessage(validationMessage)
-        assertThat(validation.code).isZero()
+        assertThat(validation).isSuccess()
         val afterCoinsOwed =
             lateValidator.api.getParticipants().first { it.id == lateValidator.node.getColdAddress() }.coinsOwed
         assertThat(afterCoinsOwed).isEqualTo(beforeCoinsOwed)
@@ -177,7 +178,7 @@ class ValidationTests : TestermintTest() {
             epochIndex = seed.epochIndex,
         )
         val reclaim = lateValidator.submitMessage(claim)
-        assertThat(reclaim.code).isZero()
+        assertThat(reclaim).isSuccess()
         val afterClaimBalance = lateValidator.node.getSelfBalance()
         assertThat(afterClaimBalance).isGreaterThan(beforeClaimBalance)
     }
@@ -269,12 +270,10 @@ data class InferenceTestHelper(
     fun runFullInference(): InferencePayload {
         val startMessage = getStartInference()
         val response = genesis.submitMessage(startMessage)
-        println(response)
-        assertThat(response.code).isZero()
+        assertThat(response).isSuccess()
         val finishMessage = getFinishInference()
         val response2 = genesis.submitMessage(finishMessage)
-        println(response)
-        assertThat(response2.code).isZero()
+        assertThat(response2).isSuccess()
         val inference = genesis.node.getInference(finishMessage.inferenceId)?.inference
         assertNotNull(inference)
         return inference
