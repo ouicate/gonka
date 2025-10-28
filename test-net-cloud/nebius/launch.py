@@ -62,6 +62,8 @@ def load_config_from_env(hf_home: str = None):
         "SYNC_WITH_SNAPSHOTS": "true",
         "SNAPSHOT_INTERVAL": "200",
         "IS_TEST_NET": "true",
+        "DAPI_API__GENESIS_APP_HASH_HEX": "",
+        "IS_GENESIS":"",
     }
     
     config = default_config.copy()
