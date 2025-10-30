@@ -35,3 +35,6 @@ See analysis in `qwen30B_analysis.ipynb`:
 - `qwen_30B_fraud_classification.png` - Fraud detection illustration
 - `qwen_30B_honest_classification.png` - Honest classification illustration
 
+## Data
+
+All the relevant data, including deployment configs could be found in [drive](https://drive.google.com/drive/folders/1JqZ4wFsOr-RRZStk5bhnWppiV5g_-SpY?usp=sharing) 
