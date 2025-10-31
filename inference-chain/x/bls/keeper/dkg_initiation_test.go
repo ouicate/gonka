@@ -11,7 +11,7 @@ import (
 )
 
 func TestAssignSlots(t *testing.T) {
-	k, _ := keepertest.BlsKeeper(t)
+	k, ctx := keepertest.BlsKeeper(t)
 
 	tests := []struct {
 		name          string
@@ -159,7 +159,7 @@ func TestAssignSlots(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := k.AssignSlots(tt.participants, tt.totalSlots)
+			result, err := k.AssignSlots(ctx, tt.participants, tt.totalSlots)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -213,7 +213,7 @@ func TestAssignSlots(t *testing.T) {
 }
 
 func TestAssignSlotsWithDecimalWeights(t *testing.T) {
-	k, _ := keepertest.BlsKeeper(t)
+	k, ctx := keepertest.BlsKeeper(t)
 
 	// Test with decimal weights that don't sum to a round number
 	participants := []types.ParticipantWithWeightAndKey{
@@ -234,7 +234,7 @@ func TestAssignSlotsWithDecimalWeights(t *testing.T) {
 		},
 	}
 
-	result, err := k.AssignSlots(participants, 1000)
+	result, err := k.AssignSlots(ctx, participants, 1000)
 	require.NoError(t, err)
 	require.Len(t, result, 3)
 
