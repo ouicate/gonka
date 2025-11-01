@@ -72,6 +72,7 @@ QWEN3_30B_FP8 = ModelPreset(
     precision='fp8',
     dtype='float16',
     additional_args=[
+        '--enforce-eager',
         '--gpu-memory-utilization', '0.95',
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'hermes',
@@ -84,6 +85,7 @@ QWEN3_30B_INT4 = ModelPreset(
     precision='int4',
     dtype='float16',
     additional_args=[
+        '--enforce-eager',
         '--gpu-memory-utilization', '0.95',
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'hermes',

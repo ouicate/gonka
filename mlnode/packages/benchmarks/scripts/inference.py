@@ -14,12 +14,12 @@ from transformers import AutoTokenizer
 from validation.runner import run_validation
 from validation.prompts import preload_all_language_prompts, slice_mixed_language_prompts_with_langs
 from validation.data import ModelInfo, RequestParams, ServerConfig, RunParams, InferenceValidationRun
-from model_presets import QWEN3_30B_INT4, QWEN3_30B_FP8, QWEN3_235B_FP8, QWEN3_235B_INT4
-from model_presets import DEEPSEEK_R1_0528_FP8, DEEPSEEK_R1_0528_INT4
+from validation.model_presets import QWEN3_30B_INT4, QWEN3_30B_FP8
+
 
 N_PROMPTS = 1000
 run_params_high_temp = RunParams(
-    exp_name='deepseek_repro',
+    exp_name='qwen30B',
     output_path='../data/inference_results',
     n_prompts=N_PROMPTS,
     timeout=1800,
@@ -38,47 +38,94 @@ def get_run_params(temp, prompts):
     params.n_prompts = prompts
     return params
 
-model_qwen3_fp8 = QWEN3_30B_FP8
-model_qwen3_int4 = QWEN3_30B_INT4
-model_qwen235b_fp8 = QWEN3_235B_FP8
-model_qwen235b_int4 = QWEN3_235B_INT4
-model_deepseek_r1_fp8 = DEEPSEEK_R1_0528_FP8
-model_deepseek_r1_int4 = DEEPSEEK_R1_0528_INT4
 
-server_8h200_1 = ServerConfig(
-    ip='45.135.56.10',
-    inference_port='30961',
-    node_port='23687',
-    gpu='8xH200',
+server_1xH100_1 = ServerConfig(
+    ip='208.64.254.166',
+    inference_port='26919',
+    node_port='32605',
+    gpu='1xH100',
 )
 
-server_8h200_2 = ServerConfig(
-    ip='64.62.194.210',
-    inference_port='19704',
-    node_port='31128',
-    gpu='8xH200',
+server_1xH100_2 = ServerConfig(
+    ip='80.188.223.202',
+    inference_port='17083',
+    node_port='17867',
+    gpu='1xH100',
+)
+
+server_1xH100_3 = ServerConfig(
+    ip='80.188.223.202',
+    inference_port='17295',
+    node_port='17852',
+    gpu='1xH100',
+)
+
+server_2x3090_1 = ServerConfig(
+    ip='72.49.201.130',
+    inference_port='46726',
+    node_port='47177',
+    gpu='2x3090',
+)
+
+server_2x3090_2 = ServerConfig(
+    ip='24.124.32.70',
+    inference_port='49622',
+    node_port='49615',
+    gpu='2x3090',
 )
 
 
 langs = ("en", "sp","ch", "hi", "ar")
 runs = [
+    # Config 1: Fradulent INT4 on 1xH100 vs FP8 on 1xH100
     InferenceValidationRun(
-        model_inference=model_deepseek_r1_fp8,
-        model_validation=model_deepseek_r1_fp8,
-        server_inference=server_8h200_1,
-        server_validation=server_8h200_2,
+        model_inference=QWEN3_30B_INT4,
+        model_validation=QWEN3_30B_FP8,
+        server_inference=server_1xH100_1,
+        server_validation=server_1xH100_2,
+        run_inference=get_run_params(0.7, N_PROMPTS//5),
+        run_validation=get_run_params(0.7, N_PROMPTS//5),
+        max_workers=10,
+    ),
+    # Config 2: Fradulent INT4 on 2x3090 vs FP8 on 1xH100
+    InferenceValidationRun(
+        model_inference=QWEN3_30B_INT4,
+        model_validation=QWEN3_30B_FP8,
+        server_inference=server_2x3090_1,
+        server_validation=server_1xH100_3,
+        run_inference=get_run_params(0.7, N_PROMPTS//5),
+        run_validation=get_run_params(0.7, N_PROMPTS//5),
+        max_workers=10,
+    ),
+    # Config 3: Honest FP8 on 1xH100 vs FP8 on 1xH100
+    InferenceValidationRun(
+        model_inference=QWEN3_30B_FP8,
+        model_validation=QWEN3_30B_FP8,
+        server_inference=server_1xH100_1,
+        server_validation=server_1xH100_2,
         run_inference=get_run_params(0.99, N_PROMPTS),
         run_validation=get_run_params(0.99, N_PROMPTS),
-        max_workers=50,
+        max_workers=10,
     ),
+    # Config 4: Honest FP8 on 2x3090 vs FP8 on 1xH100
     InferenceValidationRun(
-        model_inference=model_deepseek_r1_int4,
-        model_validation=model_deepseek_r1_fp8,
-        server_inference=server_8h200_1,
-        server_validation=server_8h200_2,
-        run_inference=get_run_params(0.6, N_PROMPTS//5),
-        run_validation=get_run_params(0.6, N_PROMPTS//5),
-        max_workers=50,
+        model_inference=QWEN3_30B_FP8,
+        model_validation=QWEN3_30B_FP8,
+        server_inference=server_2x3090_1,
+        server_validation=server_1xH100_3,
+        run_inference=get_run_params(0.99, N_PROMPTS//5),
+        run_validation=get_run_params(0.99, N_PROMPTS//5),
+        max_workers=10,
+    ),
+    # Config 5: Honest FP8 on 2x3090 vs FP8 on 2x3090
+    InferenceValidationRun(
+        model_inference=QWEN3_30B_FP8,
+        model_validation=QWEN3_30B_FP8,
+        server_inference=server_2x3090_1,
+        server_validation=server_2x3090_2,
+        run_inference=get_run_params(0.99, N_PROMPTS//5),
+        run_validation=get_run_params(0.99, N_PROMPTS//5),
+        max_workers=10,
     ),
 ]
 
@@ -160,11 +207,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# vllm serve chriswritescode/Qwen3-235B-A22B-Instruct-2507-INT4-W4A16 \
-#   --tensor-parallel-size 4 \
-#   --max-model-len 3000 \
-#   --gpu-memory-utilization 0.95 \
-#   --port 8000
-#   --enforce-eager
-#   --enable-expert-parallel
