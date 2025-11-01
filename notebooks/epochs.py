@@ -487,3 +487,43 @@ def set_consensus_weight(
             p.consensus_weight = 0
     
     return participants
+
+
+def validate_epoch_group(epoch_group: EpochGroup, prefix=""):
+    valiators_from_chain = epoch_group.get_validators_from_chain()
+    total_consensus_weight = epoch_group.get_total_consensus_weight()
+    total_consensus_weight_on_chain = sum(valiators_from_chain.values())
+    
+    print(f"{prefix}Epoch {epoch_group.epoch_id:3d} | {len(epoch_group.participants):3d} participants | {total_consensus_weight:6d} | {total_consensus_weight_on_chain:6d}")
+    missing_participants = []
+    not_matching_participants = []
+    for participant in epoch_group.participants:
+        if participant.operator_address not in valiators_from_chain:
+            missing_participants.append((participant.operator_address, participant.weight))
+            continue
+
+        validator_voting_power = valiators_from_chain[participant.operator_address]
+
+        if int(validator_voting_power) != participant.consensus_weight:
+
+            not_matching_participants.append((participant.operator_address, participant.consensus_weight, validator_voting_power))
+    
+    if missing_participants:
+        print(f"{prefix}  {len(missing_participants)} not found on chain:")
+        for addr, weight in missing_participants:
+            print(f"{prefix}    - {addr} | {weight:5d}")
+    if not_matching_participants:
+        print(f"{prefix}  {len(not_matching_participants)} not matching:")
+        for addr, weight, validator_voting_power in not_matching_participants:
+            is_guardian = addr in GENESIS_GUARDIAN_ADDRESSES
+            if not is_guardian:
+                continue
+            print(f"{prefix}    - guardian {addr} {weight} != {validator_voting_power}")
+
+        for addr, weight, validator_voting_power in not_matching_participants:
+            is_guardian = addr in GENESIS_GUARDIAN_ADDRESSES
+            if is_guardian:
+                continue
+            print(f"{prefix}    - {addr} {weight} != {validator_voting_power}")
+
+    return not_matching_participants, missing_participants
