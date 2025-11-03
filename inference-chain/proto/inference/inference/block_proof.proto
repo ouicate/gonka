@@ -15,6 +15,7 @@ option (gogoproto.unmarshaler_all)      = true;
 message CommitInfo {
   string validator_address = 1;
   string validator_pub_key = 2;
+  int64 power = 3;
 }
 
 message BlockProof {

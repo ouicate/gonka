@@ -192,10 +192,10 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 
 	target := currentHeight - 1
 	upcomingEpochIndex, found := am.keeper.GetPendingProof(ctx, target)
+
 	if !found {
 		return
 	}
-
 	header := sdkCtx.BlockHeader()
 	appHashForTarget := header.GetAppHash()
 	voteInfos := sdkCtx.VoteInfos()
