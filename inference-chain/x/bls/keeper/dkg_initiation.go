@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"fmt"
+	"sort"
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -93,7 +94,7 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 		return nil, fmt.Errorf("no participants provided")
 	}
 
-	// Calculate total weight to normalize
+	// 1. Calculate total weight to normalize percentage values into ratios.
 	totalWeight := math.LegacyZeroDec()
 	for _, p := range participants {
 		totalWeight = totalWeight.Add(p.PercentageWeight)
@@ -103,43 +104,121 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 		return nil, fmt.Errorf("total weight is zero")
 	}
 
-	blsParticipants := make([]types.BLSParticipantInfo, 0, len(participants))
-	currentSlot := uint32(0)
+	// 2. Sort by address so every node processes participants in exactly the same order.
+	sortedParticipants := make([]types.ParticipantWithWeightAndKey, len(participants))
+	copy(sortedParticipants, participants)
+	sort.Slice(sortedParticipants, func(i, j int) bool {
+		return sortedParticipants[i].Address < sortedParticipants[j].Address
+	})
 
-	for i, participant := range participants {
-		// Calculate number of slots for this participant
-		participantRatio := participant.PercentageWeight.Quo(totalWeight)
-		participantSlots := participantRatio.MulInt64(int64(totalSlots)).TruncateInt64()
+	// Count how many participants actually carry weight; we must be able to give each of them >= 1 slot.
+	nonZeroCount := 0
+	for _, p := range sortedParticipants {
+		if !p.PercentageWeight.IsZero() {
+			nonZeroCount++
+		}
+	}
 
-		// Handle last participant to ensure all slots are assigned
-		if i == len(participants)-1 {
-			participantSlots = int64(totalSlots) - int64(currentSlot)
+	if nonZeroCount > int(totalSlots) {
+		return nil, fmt.Errorf("cannot assign at least one slot to each non-zero weight participant: %d participants, %d slots", nonZeroCount, totalSlots)
+	}
+
+	// 3. Allocate floor(ratio * totalSlots) slots to each participant and remember the fractional remainders.
+	assigned := make([]int64, len(sortedParticipants))
+	remainders := make([]math.LegacyDec, len(sortedParticipants))
+	assignedTotal := int64(0)
+
+	for i, participant := range sortedParticipants {
+		if participant.PercentageWeight.IsZero() {
+			continue
 		}
 
-		if participantSlots <= 0 {
-			k.Logger().Warn(
-				"Participant assigned zero or negative slots",
-				"address", participant.Address,
-				"weight", participant.PercentageWeight.String(),
-				"totalWeight", totalWeight.String(),
-				"totalSlots", totalSlots,
-			)
-			ctx.EventManager().EmitEvent(
-				sdk.NewEvent(
-					"bls.participant_no_slots",
-					sdk.NewAttribute("address", participant.Address),
-					sdk.NewAttribute("weight", participant.PercentageWeight.String()),
-					sdk.NewAttribute("total_weight", totalWeight.String()),
-					sdk.NewAttribute("total_slots", fmt.Sprintf("%d", totalSlots)),
-				),
-			)
+		ratio := participant.PercentageWeight.Quo(totalWeight)
+		slotDec := ratio.MulInt64(int64(totalSlots))
+		floor := slotDec.TruncateInt64()
+		remainder := slotDec.Sub(math.LegacyNewDec(floor))
+		if remainder.IsNegative() {
+			remainder = math.LegacyZeroDec()
+		}
+
+		assigned[i] = floor
+		remainders[i] = remainder
+		assignedTotal += floor
+	}
+
+	// Remaining slots are distributed by largest remainder, breaking ties by address.
+	remaining := int64(totalSlots) - assignedTotal
+	if remaining < 0 {
+		return nil, fmt.Errorf("slot assignment error: floor allocations exceed total slots")
+	}
+
+	if remaining > 0 {
+		indices := make([]int, 0, len(sortedParticipants))
+		for i, p := range sortedParticipants {
+			if p.PercentageWeight.IsZero() {
+				continue
+			}
+			indices = append(indices, i)
+		}
+
+		sort.SliceStable(indices, func(i, j int) bool {
+			ri := remainders[indices[i]]
+			rj := remainders[indices[j]]
+			switch {
+			case ri.Equal(rj):
+				return sortedParticipants[indices[i]].Address < sortedParticipants[indices[j]].Address
+			default:
+				return ri.GT(rj)
+			}
+		})
+
+		for _, idx := range indices {
+			if remaining == 0 {
+				break
+			}
+			assigned[idx]++
+			remaining--
+		}
+	}
+
+	// 4. Ensure every non-zero-weight participant has at least one slot.
+	for i, p := range sortedParticipants {
+		if p.PercentageWeight.IsZero() {
+			continue
+		}
+		if assigned[i] > 0 {
+			continue
+		}
+
+		donor := findDonorIndex(assigned, remainders, sortedParticipants)
+		if donor == -1 {
+			return nil, fmt.Errorf("unable to assign at least one slot to participant %s", p.Address)
+		}
+
+		assigned[donor]--
+		assigned[i]++
+	}
+
+	// 5. Final validation: slot counts should sum to totalSlots.
+	checkTotal := int64(0)
+	for _, cnt := range assigned {
+		checkTotal += cnt
+	}
+	if checkTotal != int64(totalSlots) {
+		return nil, fmt.Errorf("slot assignment mismatch: expected %d, got %d", totalSlots, checkTotal)
+	}
+
+	// 6. Build the BLS participant list with contiguous slot ranges.
+	blsParticipants := make([]types.BLSParticipantInfo, 0, len(sortedParticipants))
+	currentSlot := uint32(0)
+	for i, participant := range sortedParticipants {
+		slotCount := assigned[i]
+		if slotCount <= 0 {
 			continue
 		}
 
 		startIndex := currentSlot
-		endIndex := currentSlot + uint32(participantSlots) - 1
-
-		// Ensure we don't exceed total slots
+		endIndex := startIndex + uint32(slotCount) - 1
 		if endIndex >= totalSlots {
 			endIndex = totalSlots - 1
 		}
@@ -148,19 +227,19 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 			Address:            participant.Address,
 			PercentageWeight:   participant.PercentageWeight,
 			Secp256K1PublicKey: participant.Secp256k1PublicKey,
-			SlotStartIndex:     startIndex,
-			SlotEndIndex:       endIndex,
+			SlotStartIndex:     start,
+			SlotEndIndex:       end,
 		}
 
 		blsParticipants = append(blsParticipants, blsParticipant)
-		currentSlot = endIndex + 1
+		currentSlot = end + 1
 
 		k.Logger().Debug(
 			"Assigned slots to participant",
 			"address", participant.Address,
 			"weight", participant.PercentageWeight.String(),
-			"slots", fmt.Sprintf("[%d, %d]", startIndex, endIndex),
-			"slot_count", participantSlots,
+			"slots", fmt.Sprintf("[%d, %d]", start, end),
+			"slot_count", slotCount,
 		)
 	}
 
@@ -170,6 +249,41 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 	}
 
 	return blsParticipants, nil
+}
+
+func findDonorIndex(assigned []int64, remainders []math.LegacyDec, participants []types.ParticipantWithWeightAndKey) int {
+	donor := -1
+	for i, p := range participants {
+		if p.PercentageWeight.IsZero() {
+			continue
+		}
+		if assigned[i] <= 1 {
+			continue
+		}
+		if donor == -1 {
+			donor = i
+			continue
+		}
+
+		if assigned[i] > assigned[donor] {
+			donor = i
+			continue
+		}
+		if assigned[i] == assigned[donor] {
+			ri := remainders[i]
+			rd := remainders[donor]
+			if !ri.Equal(rd) {
+				if ri.LT(rd) {
+					donor = i
+				}
+				continue
+			}
+			if participants[i].Address < participants[donor].Address {
+				donor = i
+			}
+		}
+	}
+	return donor
 }
 
 // SetEpochBLSData stores EpochBLSData in the state
