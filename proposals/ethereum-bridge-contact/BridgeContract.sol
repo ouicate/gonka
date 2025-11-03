@@ -205,7 +205,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
         bytes calldata validationSig
     ) external onlyOwner onlyAdminControl {
         // Verify sequential submission
-        if (epochId != epochMeta.latestEpochId + 1) {
+        if (epochId >= epochMeta.latestEpochId + 1) {
             revert InvalidEpochSequence();
         }
 
@@ -214,12 +214,13 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
 
         // Verify validation signature against previous epoch (if not genesis)
         GroupKey memory newGroupKeyStruct = _bytesToGroupKey(groupPublicKey);
-        if (epochId > 1) {
-            GroupKey memory prevGroupKeyStruct = epochGroupKeys[epochId - 1];
-            require(!_isGroupKeyEmpty(prevGroupKeyStruct), "Previous epoch not found");
-            
-            require(_verifyTransitionSignature(prevGroupKeyStruct, newGroupKeyStruct, validationSig, epochId - 1), "Invalid transition signature");
-        }
+        // This section is commented out to allow the administrator to restore the contract in cases where the chain skipped BLS signatures for an epoch
+        // if (epochId > 1) {
+        //    GroupKey memory prevGroupKeyStruct = epochGroupKeys[epochId - 1];
+        //    require(!_isGroupKeyEmpty(prevGroupKeyStruct), "Previous epoch not found");
+        //    
+        //    require(_verifyTransitionSignature(prevGroupKeyStruct, newGroupKeyStruct, validationSig, epochId - 1), "Invalid transition signature");
+        //}
 
         // Store only the group public key
         epochGroupKeys[epochId] = newGroupKeyStruct;
