@@ -4,7 +4,7 @@ go 1.23.2
 
 require (
 	github.com/cometbft/cometbft v0.38.17
-	github.com/gonka-ai/gonka-utils/go v0.0.0-20251031164130-050eebb085ee
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20251103194014-9c8cbdd890ee
 	github.com/productscience/inference v0.0.0-00010101000000-000000000000
 )
 

@@ -30,7 +30,7 @@ func TestBlockProof(t *testing.T) {
 		err := k.SetBlockProof(ctx, types.BlockProof{
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
-			TotalVotingPower:     100,
+			TotalPower:           100,
 			EpochIndex:           1,
 		})
 		assert.ErrorIs(t, err, keeper.ErrEmptyCommits)
@@ -40,7 +40,7 @@ func TestBlockProof(t *testing.T) {
 		err := k.SetBlockProof(ctx, types.BlockProof{
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
-			TotalVotingPower:     100,
+			TotalPower:           100,
 			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
@@ -55,7 +55,7 @@ func TestBlockProof(t *testing.T) {
 		err := k.SetBlockProof(ctx, types.BlockProof{
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
-			TotalVotingPower:     100,
+			TotalPower:           100,
 			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
@@ -72,7 +72,7 @@ func TestBlockProof(t *testing.T) {
 		proof := types.BlockProof{
 			CreatedAtBlockHeight: height,
 			AppHashHex:           "apphash-10",
-			TotalVotingPower:     100,
+			TotalPower:           100,
 			EpochIndex:           1,
 			Commits: []*types.CommitInfo{
 				{
@@ -89,7 +89,7 @@ func TestBlockProof(t *testing.T) {
 		assert.True(t, found)
 		assert.Equal(t, proof.CreatedAtBlockHeight, got.CreatedAtBlockHeight)
 		assert.Equal(t, proof.AppHashHex, got.AppHashHex)
-		assert.Equal(t, proof.TotalVotingPower, got.TotalVotingPower)
+		assert.Equal(t, proof.TotalPower, got.TotalPower)
 
 		err = k.SetBlockProof(ctx, proof)
 		assert.NoError(t, err)

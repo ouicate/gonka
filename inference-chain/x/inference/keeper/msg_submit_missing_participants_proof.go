@@ -8,6 +8,7 @@ import (
 	"github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/gonka-ai/gonka-utils/go/contracts"
 	"github.com/gonka-ai/gonka-utils/go/utils"
 	"github.com/productscience/common"
 	"github.com/productscience/inference/x/inference/epochgroup"
@@ -105,8 +106,7 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	results := epochgroup.ComputeResultsForMembers(members)
 	results = s.ApplyEarlyNetworkProtection(ctx, results)
 
-	prevParticipantsData := make(map[string]commitData)
-	prevParticipantsAddrAndKey := make(map[string]string)
+	prevParticipantsData := make(map[string]*contracts.CommitInfo)
 	totalPower := int64(0)
 	for _, participant := range prevParticipants.Participants {
 		if participant.ValidatorKey == "" {
@@ -126,15 +126,14 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 			totalPower += res.Power
 		}
 
-		prevParticipantsData[strings.ToUpper(addrHex)] = commitData{
-			pk:     participant.ValidatorKey,
-			weight: weight,
+		prevParticipantsData[strings.ToUpper(addrHex)] = &contracts.CommitInfo{
+			ValidatorAddress: "",
+			ValidatorPubKey:  participant.ValidatorKey,
+			VotingPower:      weight,
 		}
-
-		prevParticipantsAddrAndKey[strings.ToUpper(addrHex)] = participant.ValidatorKey
 	}
 
-	if err := verifyGivenProofs(msg, prevParticipantsAddrAndKey); err != nil {
+	if err := verifyGivenProofs(msg, prevParticipantsData); err != nil {
 		s.logger.Error("error verifying  proofs", "block height", int64(msg.BlockHeight), "err", err)
 		return nil, err
 	}
@@ -149,10 +148,10 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 		}
 		commits[i] = &types.CommitInfo{
 			ValidatorAddress: sign.ValidatorAddressHex,
-			ValidatorPubKey:  data.pk,
-			Power:            data.weight,
+			ValidatorPubKey:  data.ValidatorPubKey,
+			Power:            data.VotingPower,
 		}
-		totalVotedPower += data.weight
+		totalVotedPower += data.VotingPower
 	}
 
 	minPowerNeed := float64(totalPower) / 100.0 * 51.0 // need at least 51% validators signed
@@ -191,7 +190,7 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	return &types.MsgSubmitActiveParticipantsProofDataResponse{}, nil
 }
 
-func verifyGivenProofs(msg *types.MsgSubmitActiveParticipantsProofData, participantsData map[string]string) error {
+func verifyGivenProofs(msg *types.MsgSubmitActiveParticipantsProofData, participantsData map[string]*contracts.CommitInfo) error {
 	for _, sign := range msg.CurrentBlockValidatorsProof.Signatures {
 		if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
 			return errors.New("validator address not found in previous participants")

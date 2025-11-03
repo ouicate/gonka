@@ -52,7 +52,8 @@ func ToContractsBlockProof(src *types.BlockProof) *contracts.BlockProof {
 	out := &contracts.BlockProof{
 		CreatedAtBlockHeight: src.CreatedAtBlockHeight,
 		AppHashHex:           src.AppHashHex,
-		TotalVotingPower:     src.TotalVotingPower,
+		TotalPower:           src.TotalPower,
+		TotalVotedPower:      src.TotalVotedPower,
 		Commits:              make([]*contracts.CommitInfo, len(src.Commits)),
 	}
 	for i, c := range src.Commits {

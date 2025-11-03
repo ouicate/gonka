@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/gonka-ai/gonka-utils/go/contracts"
 	externalutils "github.com/gonka-ai/gonka-utils/go/utils"
 	"github.com/productscience/common"
 	"github.com/productscience/inference/x/inference/types"
@@ -29,9 +30,13 @@ func (k Keeper) SetValidatorsProof(ctx context.Context, proof types.ValidatorsPr
 		return fmt.Errorf("block proof not found for height %v", height)
 	}
 
-	validatorsData := make(map[string]string)
+	validatorsData := make(map[string]*contracts.CommitInfo)
 	for _, commit := range blockProof.Commits {
-		validatorsData[commit.ValidatorAddress] = commit.ValidatorPubKey
+		validatorsData[commit.ValidatorAddress] = &contracts.CommitInfo{
+			ValidatorAddress: commit.ValidatorAddress,
+			ValidatorPubKey:  commit.ValidatorPubKey,
+			VotingPower:      commit.Power,
+		}
 	}
 
 	out := common.ToContractsValidatorsProof(&proof)
