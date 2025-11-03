@@ -3,6 +3,7 @@ package epochgroup
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -350,31 +351,7 @@ func (eg *EpochGroup) GetComputeResults(ctx context.Context) ([]keeper.ComputeRe
 		return nil, err
 	}
 
-	var computeResults []keeper.ComputeResult
-
-	for _, member := range members {
-		pubKeyBytes, err := base64.StdEncoding.DecodeString(member.Member.Metadata)
-		if err != nil {
-			eg.Logger.LogError("Error decoding pubkey", types.EpochGroup, "error", err)
-			continue
-		}
-		// The VALIDATOR key (ed25519), never to be confused with the account key (secp256k1 key)
-		pubKey := ed25519.PubKey{Key: pubKeyBytes}
-
-		accAddr, err := sdk.AccAddressFromBech32(member.Member.Address)
-		if err != nil {
-			eg.Logger.LogError("Error decoding account address", types.EpochGroup, "error", err)
-			continue
-		}
-		valOperatorAddr := sdk.ValAddress(accAddr).String()
-
-		computeResults = append(computeResults, keeper.ComputeResult{
-			Power:           getWeight(member),
-			ValidatorPubKey: &pubKey,
-			OperatorAddress: valOperatorAddr,
-		})
-	}
-
+	computeResults := ComputeResultsForMembers(members)
 	return computeResults, nil
 }
 
@@ -520,4 +497,47 @@ func (eg *EpochGroup) getOrCreateSubGroup(ctx context.Context, modelId string) (
 	}
 
 	return eg.CreateSubGroup(ctx, model)
+}
+
+func ComputeResultsForMembers(members []*group.GroupMember) []keeper.ComputeResult {
+	var computeResults []keeper.ComputeResult
+	for _, member := range members {
+		pubKeyBytes, err := base64.StdEncoding.DecodeString(member.Member.Metadata)
+		if err != nil {
+			continue
+		}
+		// The VALIDATOR key (ed25519), never to be confused with the account key (secp256k1 key)
+		pubKey := ed25519.PubKey{Key: pubKeyBytes}
+
+		accAddr, err := sdk.AccAddressFromBech32(member.Member.Address)
+		if err != nil {
+			continue
+		}
+		valOperatorAddr := sdk.ValAddress(accAddr).String()
+
+		computeResults = append(computeResults, keeper.ComputeResult{
+			Power:           getWeight(member),
+			ValidatorPubKey: &pubKey,
+			OperatorAddress: valOperatorAddr,
+		})
+	}
+	return computeResults
+}
+
+func ParticipantsToMembers(participants []*types.ActiveParticipant) []*group.GroupMember {
+	members := make([]*group.GroupMember, 0)
+	for _, participant := range participants {
+		if participant.ValidatorKey == "" {
+			continue
+		}
+		members = append(members, &group.GroupMember{
+			Member: &group.Member{
+				Address:  participant.Index,
+				Weight:   fmt.Sprintf("%v", participant.Weight),
+				Metadata: participant.ValidatorKey,
+				AddedAt:  time.Time{},
+			},
+		})
+	}
+	return members
 }

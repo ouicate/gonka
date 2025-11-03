@@ -27,6 +27,7 @@ require (
 	cosmossdk.io/x/nft v0.1.0
 	cosmossdk.io/x/upgrade v0.1.1
 	github.com/CosmWasm/wasmd v0.50.0
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/bufbuild/buf v1.34.0
 	github.com/cometbft/cometbft v0.38.17
 	github.com/consensys/gnark-crypto v0.18.0

@@ -1,11 +1,10 @@
-package inference
+package keeper
 
 import (
 	"context"
 	"fmt"
 
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
-	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,7 +16,7 @@ type GenesisGuardianEnhancementResult struct {
 }
 
 // ShouldApplyGenesisGuardianEnhancement checks if network maturity and guardian identification conditions are met
-func ShouldApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper, totalNetworkPower int64, computeResults []stakingkeeper.ComputeResult) bool {
+func (k Keeper) ShouldApplyGenesisGuardianEnhancement(ctx context.Context, totalNetworkPower int64, computeResults []stakingkeeper.ComputeResult) bool {
 	// Enhancement only applies if feature is enabled
 	if !k.GetGenesisGuardianEnabled(ctx) {
 		return false
@@ -56,7 +55,7 @@ func ShouldApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper,
 
 // ApplyGenesisGuardianEnhancement applies distributed enhancement to genesis guardians
 // This system only applies to staking powers when network is immature
-func ApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper, computeResults []stakingkeeper.ComputeResult) *GenesisGuardianEnhancementResult {
+func (k Keeper) ApplyGenesisGuardianEnhancement(ctx context.Context, computeResults []stakingkeeper.ComputeResult) *GenesisGuardianEnhancementResult {
 	if len(computeResults) == 0 {
 		return &GenesisGuardianEnhancementResult{
 			ComputeResults: computeResults,
@@ -72,7 +71,7 @@ func ApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper, compu
 	}
 
 	// Check if enhancement should be applied
-	if !ShouldApplyGenesisGuardianEnhancement(ctx, k, totalNetworkPower, computeResults) {
+	if !k.ShouldApplyGenesisGuardianEnhancement(ctx, totalNetworkPower, computeResults) {
 		// Return original results unchanged
 		return &GenesisGuardianEnhancementResult{
 			ComputeResults: computeResults,
@@ -82,7 +81,7 @@ func ApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper, compu
 	}
 
 	// Apply enhancement
-	enhancedResults, enhancedTotalPower := calculateEnhancedPower(ctx, k, computeResults, totalNetworkPower)
+	enhancedResults, enhancedTotalPower := k.calculateEnhancedPower(ctx, computeResults, totalNetworkPower)
 
 	// Detect if enhancement was applied by comparing total power
 	wasEnhanced := enhancedTotalPower != totalNetworkPower
@@ -95,7 +94,7 @@ func ApplyGenesisGuardianEnhancement(ctx context.Context, k keeper.Keeper, compu
 }
 
 // calculateEnhancedPower computes distributed enhanced power across multiple genesis guardians
-func calculateEnhancedPower(ctx context.Context, k keeper.Keeper, computeResults []stakingkeeper.ComputeResult, totalNetworkPower int64) ([]stakingkeeper.ComputeResult, int64) {
+func (k Keeper) calculateEnhancedPower(ctx context.Context, computeResults []stakingkeeper.ComputeResult, totalNetworkPower int64) ([]stakingkeeper.ComputeResult, int64) {
 	// Get genesis guardian addresses
 	genesisGuardianAddresses := k.GetGenesisGuardianAddresses(ctx)
 	if len(genesisGuardianAddresses) == 0 {
@@ -165,7 +164,7 @@ func calculateEnhancedPower(ctx context.Context, k keeper.Keeper, computeResults
 }
 
 // ValidateGuardianEnhancementResults ensures enhancement was applied correctly
-func ValidateGuardianEnhancementResults(original []stakingkeeper.ComputeResult, enhanced []stakingkeeper.ComputeResult, enhancedTotalPower int64) error {
+func (k Keeper) ValidateGuardianEnhancementResults(original []stakingkeeper.ComputeResult, enhanced []stakingkeeper.ComputeResult, enhancedTotalPower int64) error {
 	// Check participant count consistency
 	if len(original) != len(enhanced) {
 		return fmt.Errorf("participant count mismatch: original=%d, enhanced=%d", len(original), len(enhanced))

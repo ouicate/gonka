@@ -23,7 +23,6 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/productscience/inference/testenv"
@@ -201,7 +200,7 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 	voteInfos := sdkCtx.VoteInfos()
 
 	var (
-		totalPower       int64
+		totalVotedPower  int64
 		prevParticipants types.ActiveParticipants
 	)
 
@@ -229,11 +228,11 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 	// get validator's consensus key and voting power and match with known participants by validator (consensus) key
 	commits := make([]*types.CommitInfo, 0, len(voteInfos))
 	type data struct {
-		pk     ed25519.PubKey
-		weight int64
+		pk ed25519.PubKey
 	}
 
 	vals := make(map[string]data)
+	// for each participant convert validator key (consensus key) to consensus addr
 	for _, v := range prevParticipants.Participants {
 		if v.ValidatorKey == "" {
 			am.LogWarn("validator cons pub key is empty", types.ParticipantsVerification)
@@ -254,9 +253,10 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 
 		addr := strings.ToUpper(pk.Address().String())
 		am.LogDebug("participant address", types.ParticipantsVerification, "consensus_addr_hex", addr)
-		vals[addr] = data{pk: pk, weight: v.Weight}
+		vals[addr] = data{pk: pk}
 	}
 
+	// match consensus addr from previous step with Commit
 	for _, v := range voteInfos {
 		var pubKey string
 		addr := strings.ToUpper(hex.EncodeToString(v.Validator.Address))
@@ -270,14 +270,26 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 		commits = append(commits, &types.CommitInfo{
 			ValidatorAddress: addr,
 			ValidatorPubKey:  pubKey,
+			Power:            v.Validator.Power,
 		})
-		totalPower += v.Validator.Power
+		totalVotedPower += v.Validator.Power
+	}
+
+	// calculate, which total would be if all participants would vote
+	members := epochgroup.ParticipantsToMembers(prevParticipants.Participants)
+	results := epochgroup.ComputeResultsForMembers(members)
+	results = am.keeper.ApplyEarlyNetworkProtection(ctx, results)
+
+	var totalPower int64
+	for _, result := range results {
+		totalPower += result.Power
 	}
 
 	proof := types.BlockProof{
 		CreatedAtBlockHeight: target,
 		AppHashHex:           strings.ToUpper(hex.EncodeToString(appHashForTarget)),
-		TotalVotingPower:     totalPower,
+		TotalVotedPower:      totalVotedPower,
+		TotalPower:           totalPower,
 		Commits:              commits,
 		EpochIndex:           upcomingEpochIndex,
 	}
@@ -433,7 +445,7 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		am.LogInfo("EpochGroupChanged", types.EpochGroup, "computeResult", computeResult, "error", err)
 
 		// Apply early network protection if conditions are met
-		finalComputeResult := am.applyEarlyNetworkProtection(ctx, computeResult)
+		finalComputeResult := am.keeper.ApplyEarlyNetworkProtection(ctx, computeResult)
 
 		_, err = am.keeper.Staking.SetComputeValidators(ctx, finalComputeResult, testenv.IsTestNet())
 		if err != nil {
@@ -785,55 +797,6 @@ func (am AppModule) applyEpochPowerCapping(ctx context.Context, activeParticipan
 	}
 
 	return result.CappedParticipants
-}
-
-// applyEarlyNetworkProtection applies genesis guardian enhancement to compute results before validator set updates
-// This system only applies when network is immature (below maturity threshold)
-func (am AppModule) applyEarlyNetworkProtection(ctx context.Context, computeResults []stakingkeeper.ComputeResult) []stakingkeeper.ComputeResult {
-	// Apply genesis guardian enhancement (only when network immature)
-	result := ApplyGenesisGuardianEnhancement(ctx, am.keeper, computeResults)
-
-	// Log enhancement application results
-	originalTotal := int64(0)
-	for _, cr := range computeResults {
-		originalTotal += cr.Power
-	}
-
-	if result.WasEnhanced {
-		genesisGuardianAddresses := am.keeper.GetGenesisGuardianAddresses(ctx)
-
-		// Count enhanced guardians and calculate their individual powers
-		enhancedGuardians := []string{}
-		guardianPowers := []int64{}
-		guardianAddressMap := make(map[string]bool)
-		for _, address := range genesisGuardianAddresses {
-			guardianAddressMap[address] = true
-		}
-
-		for _, cr := range result.ComputeResults {
-			if guardianAddressMap[cr.OperatorAddress] {
-				enhancedGuardians = append(enhancedGuardians, cr.OperatorAddress)
-				guardianPowers = append(guardianPowers, cr.Power)
-			}
-		}
-
-		am.LogInfo("Genesis guardian enhancement applied to staking powers", types.EpochGroup,
-			"originalTotalPower", originalTotal,
-			"enhancedTotalPower", result.TotalPower,
-			"participantCount", len(computeResults),
-			"guardianCount", len(enhancedGuardians),
-			"enhancedGuardians", enhancedGuardians,
-			"guardianPowers", guardianPowers)
-	} else {
-		genesisGuardianAddresses := am.keeper.GetGenesisGuardianAddresses(ctx)
-		am.LogInfo("Genesis guardian enhancement evaluated but not applied to staking powers", types.EpochGroup,
-			"totalPower", originalTotal,
-			"participantCount", len(computeResults),
-			"configuredGuardianCount", len(genesisGuardianAddresses),
-			"reason", "network mature, insufficient participants, or no genesis guardians found")
-	}
-
-	return result.ComputeResults
 }
 
 // IsOnePerModuleType implements the depinject.OnePerModuleType interface.

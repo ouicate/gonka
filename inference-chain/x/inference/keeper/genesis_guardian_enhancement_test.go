@@ -1,11 +1,10 @@
-package inference_test
+package keeper_test
 
 import (
 	"testing"
 
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	keepertest "github.com/productscience/inference/testutil/keeper"
-	inference "github.com/productscience/inference/x/inference/module"
 	"github.com/productscience/inference/x/inference/types"
 	"github.com/stretchr/testify/require"
 )
@@ -43,8 +42,8 @@ func TestApplyGenesisGuardianEnhancement_ImmatureNetwork(t *testing.T) {
 	}
 	// Total: 4500 < 10M threshold (immature network)
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.True(t, result.WasEnhanced, "Should apply enhancement for immature network")
 
@@ -98,8 +97,8 @@ func TestApplyGenesisGuardianEnhancement_MatureNetwork(t *testing.T) {
 	}
 	// Total: 11M > 10M threshold (mature network)
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced, "Should NOT apply enhancement for mature network")
 	require.Equal(t, computeResults, result.ComputeResults, "Results should be unchanged")
@@ -136,8 +135,8 @@ func TestApplyGenesisGuardianEnhancement_FeatureDisabled(t *testing.T) {
 		{OperatorAddress: "validator2", Power: 2000},
 	}
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced, "Should not enhance when feature is disabled")
 	require.Equal(t, computeResults, result.ComputeResults, "Results should be unchanged")
@@ -173,8 +172,8 @@ func TestApplyGenesisGuardianEnhancement_NoGenesisValidator(t *testing.T) {
 		{OperatorAddress: "validator2", Power: 2000},
 	}
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced, "Should not enhance without genesis validator")
 	require.Equal(t, computeResults, result.ComputeResults, "Results should be unchanged")
@@ -210,8 +209,8 @@ func TestApplyGenesisGuardianEnhancement_GenesisValidatorNotFound(t *testing.T) 
 		{OperatorAddress: "validator2", Power: 2000},
 	}
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced, "Should not enhance if genesis validator not found")
 	require.Equal(t, computeResults, result.ComputeResults, "Results should be unchanged")
@@ -246,8 +245,8 @@ func TestApplyGenesisGuardianEnhancement_SingleParticipant(t *testing.T) {
 		{OperatorAddress: "genesis_validator", Power: 1000},
 	}
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-	err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+	err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced, "Single participant should not be enhanced")
 	require.Equal(t, computeResults, result.ComputeResults, "Results should be unchanged")
@@ -257,8 +256,8 @@ func TestApplyGenesisGuardianEnhancement_SingleParticipant(t *testing.T) {
 func TestApplyGenesisGuardianEnhancement_EmptyInput(t *testing.T) {
 	k, ctx, _ := keepertest.InferenceKeeperReturningMocks(t)
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, []stakingkeeper.ComputeResult{})
-	err := inference.ValidateGuardianEnhancementResults([]stakingkeeper.ComputeResult{}, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, []stakingkeeper.ComputeResult{})
+	err := k.ValidateGuardianEnhancementResults([]stakingkeeper.ComputeResult{}, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.False(t, result.WasEnhanced)
 	require.Equal(t, int64(0), result.TotalPower)
@@ -325,8 +324,8 @@ func TestApplyGenesisGuardianEnhancement_DifferentMultipliers(t *testing.T) {
 			}
 			// Other participants total: 2000 + 1500 = 3500
 
-			result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
-			err := inference.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
+			result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
+			err := k.ValidateGuardianEnhancementResults(computeResults, result.ComputeResults, result.TotalPower)
 			require.NoError(t, err)
 			require.True(t, result.WasEnhanced, "Should apply enhancement")
 			require.Equal(t, tt.expectedTotalPower, result.TotalPower)
@@ -375,8 +374,8 @@ func TestApplyGenesisGuardianEnhancement_ValidatorIdentityPreserved(t *testing.T
 		{OperatorAddress: "validator3", Power: 1500},
 	}
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, originalResults)
-	err := inference.ValidateGuardianEnhancementResults(originalResults, result.ComputeResults, result.TotalPower)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, originalResults)
+	err := k.ValidateGuardianEnhancementResults(originalResults, result.ComputeResults, result.TotalPower)
 	require.NoError(t, err)
 	require.True(t, result.WasEnhanced)
 
@@ -431,7 +430,7 @@ func TestApplyGenesisGuardianEnhancement_TwoGuardians(t *testing.T) {
 	// Enhancement calculation: 3500 * 0.52 = 1820
 	// Since 1820 < 2000 (guardian total), enhancement should be skipped
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
 	require.False(t, result.WasEnhanced, "Should NOT apply enhancement when guardians already have enough power")
 
 	// Find guardian powers in results - they should remain unchanged
@@ -492,7 +491,7 @@ func TestApplyGenesisGuardianEnhancement_ThreeGuardians(t *testing.T) {
 	// Enhancement calculation: 3500 * 0.52 = 1820
 	// Since 1820 < 2000 (guardian total), enhancement should be skipped
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
 	require.False(t, result.WasEnhanced, "Should NOT apply enhancement when guardians already have enough power")
 
 	// Find guardian powers in results - they should remain unchanged
@@ -550,7 +549,7 @@ func TestApplyGenesisGuardianEnhancement_PartialGuardians(t *testing.T) {
 	// Total: 4700, Guardian total: 1200, Others: 3500
 	// Expected enhancement per guardian (2 found): (3500 * 0.52) / 2 = 910
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
 	require.True(t, result.WasEnhanced, "Should apply enhancement even with partial guardians")
 
 	// Find guardian powers in results
@@ -608,7 +607,7 @@ func TestApplyGenesisGuardianEnhancement_SingleGuardianFallback(t *testing.T) {
 	// Total: 4500, Others: 3500
 	// Expected enhancement: 3500 * 0.52 = 1820 (same as original single validator behavior)
 
-	result := inference.ApplyGenesisGuardianEnhancement(ctx, k, computeResults)
+	result := k.ApplyGenesisGuardianEnhancement(ctx, computeResults)
 	require.True(t, result.WasEnhanced, "Should apply enhancement for immature network")
 
 	// Find guardian power in results

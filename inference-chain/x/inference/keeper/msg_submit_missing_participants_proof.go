@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"github.com/cometbft/cometbft/proto/tendermint/version"
@@ -9,6 +10,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gonka-ai/gonka-utils/go/utils"
 	"github.com/productscience/common"
+	"github.com/productscience/inference/x/inference/epochgroup"
 	"github.com/productscience/inference/x/inference/types"
 	"strings"
 )
@@ -20,6 +22,11 @@ var (
 	ErrInvalidHashInBlockProof   = errors.New("invalid hash by block proof")
 	ErrParticipantsNotFound      = errors.New("participants not found")
 )
+
+type commitData struct {
+	pk     string
+	weight int64
+}
 
 func (s msgServer) SubmitParticipantsProof(goCtx context.Context, msg *types.MsgSubmitParticipantsProof) (*types.MsgSubmitParticipantsProofResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -94,33 +101,75 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 		return nil, ErrParticipantsNotFound
 	}
 
-	participantsData := make(map[string]string)
+	members := epochgroup.ParticipantsToMembers(prevParticipants.Participants)
+	results := epochgroup.ComputeResultsForMembers(members)
+	results = s.ApplyEarlyNetworkProtection(ctx, results)
+
+	prevParticipantsData := make(map[string]commitData)
+	prevParticipantsAddrAndKey := make(map[string]string)
+	totalPower := int64(0)
 	for _, participant := range prevParticipants.Participants {
+		if participant.ValidatorKey == "" {
+			continue
+		}
+
 		addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
 		if err != nil {
 			return nil, err
 		}
-		participantsData[strings.ToUpper(addrHex)] = participant.ValidatorKey
+
+		var weight int64
+		for _, res := range results {
+			if base64.StdEncoding.EncodeToString(res.ValidatorPubKey.Bytes()) == participant.ValidatorKey {
+				weight = res.Power
+			}
+			totalPower += res.Power
+		}
+
+		prevParticipantsData[strings.ToUpper(addrHex)] = commitData{
+			pk:     participant.ValidatorKey,
+			weight: weight,
+		}
+
+		prevParticipantsAddrAndKey[strings.ToUpper(addrHex)] = participant.ValidatorKey
 	}
 
-	if err := verifyGivenProofs(msg, participantsData); err != nil {
+	if err := verifyGivenProofs(msg, prevParticipantsAddrAndKey); err != nil {
 		s.logger.Error("error verifying  proofs", "block height", int64(msg.BlockHeight), "err", err)
 		return nil, err
 	}
 
 	// success, store proofs
 	commits := make([]*types.CommitInfo, len(msg.CurrentBlockValidatorsProof.Signatures))
+	totalVotedPower := int64(0)
 	for i, sign := range msg.CurrentBlockValidatorsProof.Signatures {
-		pubKey := participantsData[sign.ValidatorAddressHex]
+		data, ok := prevParticipantsData[sign.ValidatorAddressHex]
+		if !ok {
+			continue
+		}
 		commits[i] = &types.CommitInfo{
 			ValidatorAddress: sign.ValidatorAddressHex,
-			ValidatorPubKey:  pubKey,
+			ValidatorPubKey:  data.pk,
+			Power:            data.weight,
 		}
+		totalVotedPower += data.weight
+	}
+
+	minPowerNeed := float64(totalPower) / 100.0 * 51.0 // need at least 51% validators signed
+	if float64(totalVotedPower) < minPowerNeed {
+		s.logger.
+			With("height", int64(msg.BlockHeight)).
+			With("totalVotedPower", totalVotedPower).
+			With("totalPower", totalPower).
+			Error("voted power too low")
+		return nil, errors.New("voted power too low")
 	}
 
 	if err := s.Keeper.SetBlockProof(ctx, types.BlockProof{
 		CreatedAtBlockHeight: int64(msg.BlockHeight),
 		AppHashHex:           hex.EncodeToString(msg.BlockProof.AppHash),
+		TotalVotedPower:      totalVotedPower,
+		TotalPower:           totalPower,
 		EpochIndex:           msg.EpochId,
 		Commits:              commits,
 	}); err != nil {
