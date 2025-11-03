@@ -227,18 +227,18 @@ func (k Keeper) AssignSlots(ctx sdk.Context, participants []types.ParticipantWit
 			Address:            participant.Address,
 			PercentageWeight:   participant.PercentageWeight,
 			Secp256K1PublicKey: participant.Secp256k1PublicKey,
-			SlotStartIndex:     start,
-			SlotEndIndex:       end,
+			SlotStartIndex:     startIndex,
+			SlotEndIndex:       endIndex,
 		}
 
 		blsParticipants = append(blsParticipants, blsParticipant)
-		currentSlot = end + 1
+		currentSlot = endIndex + 1
 
 		k.Logger().Debug(
 			"Assigned slots to participant",
 			"address", participant.Address,
 			"weight", participant.PercentageWeight.String(),
-			"slots", fmt.Sprintf("[%d, %d]", start, end),
+			"slots", fmt.Sprintf("[%d, %d]", startIndex, endIndex),
 			"slot_count", slotCount,
 		)
 	}
