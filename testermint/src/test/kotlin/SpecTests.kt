@@ -66,7 +66,7 @@ class TxMessageSerializationTests {
                         creator = "creator",
                         inferenceId = "fjdsafdsa",
                         promptHash = "",
-                        promptPayload = "test"
+                        originalPrompt = "test"
                     )
                 ),
                 memo = "",

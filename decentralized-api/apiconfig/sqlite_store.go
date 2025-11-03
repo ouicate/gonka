@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS kv_config (
   created_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now'))
 );
 
+-- Off-chain prompt payloads for inferences (transfer/executor redundancy)
+CREATE TABLE IF NOT EXISTS inference_prompt_payloads (
+  inference_id TEXT PRIMARY KEY,
+  prompt_payload TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  request_timestamp INTEGER NOT NULL,
+  stored_by TEXT NOT NULL, -- 'transfer' or 'executor'
+  created_at DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_inference_prompt_payloads_created_at ON inference_prompt_payloads(created_at);
+CREATE INDEX IF NOT EXISTS idx_inference_prompt_payloads_stored_by ON inference_prompt_payloads(stored_by);
+
 CREATE TABLE IF NOT EXISTS seed_info (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   type TEXT NOT NULL, -- 'current', 'previous', 'upcoming'

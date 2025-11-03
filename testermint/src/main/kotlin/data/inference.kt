@@ -94,7 +94,6 @@ data class MsgStartInference(
     val creator: String = "",
     val inferenceId: String,
     val promptHash: String,
-    val promptPayload: String,
     val model: String = "",
     val requestedBy: String = "",
     val assignedTo: String = "",
@@ -103,7 +102,7 @@ data class MsgStartInference(
     val promptTokenCount: Long = 0,
     val requestTimestamp: Long = 0,
     val transferSignature: String = "",
-    val originalPrompt: String = promptPayload,
+    val originalPrompt: String = "",
 ) : TxMessage
 
 data class MsgFinishInference(

@@ -9,6 +9,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/utils"
 	"decentralized-api/logging"
+	apiutils "decentralized-api/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -568,9 +569,31 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 		return nil, errors.New("Inference is not finished. id = " + inference.InferenceId)
 	}
 
+	// Obtain prompt payload: prefer on-chain if present, else fetch off-chain from executor then transfer
+	promptPayload := inference.PromptPayload
+	if promptPayload == "" {
+		if p, ok := s.fetchPromptOffChain(inference.InferenceId, inference.ExecutedBy); ok {
+			promptPayload = p
+		} else if p2, ok2 := s.fetchPromptOffChain(inference.InferenceId, inference.TransferredBy); ok2 {
+			promptPayload = p2
+		} else {
+			return &InvalidInferenceResult{inference.InferenceId, "prompt-unavailable", nil}, nil
+		}
+	}
+
+	// Verify prompt hash integrity when available
+	if inference.PromptHash != "" && promptPayload != "" {
+		if canonical, err := apiutils.CanonicalizeJSON([]byte(promptPayload)); err == nil {
+			computed := apiutils.GenerateSHA256Hash(canonical)
+			if computed != inference.PromptHash {
+				return &InvalidInferenceResult{inference.InferenceId, "prompt-hash-mismatch", fmt.Errorf("computed %s != on-chain %s", computed, inference.PromptHash)}, nil
+			}
+		}
+	}
+
 	var requestMap map[string]interface{}
-	if err := json.Unmarshal([]byte(inference.PromptPayload), &requestMap); err != nil {
-		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal inference.PromptPayload.", err}, nil
+	if err := json.Unmarshal([]byte(promptPayload), &requestMap); err != nil {
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal prompt payload.", err}, nil
 	}
 
 	originalResponse, err := unmarshalResponse(&inference)
@@ -633,6 +656,52 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 	}
 
 	return compareLogits(originalLogits, validationLogits, baseResult), nil
+}
+
+// fetchPromptOffChain retrieves prompt payload from a participant's public API using the prompt endpoint.
+// Returns (payload, true) on success; (_, false) otherwise.
+func (s *InferenceValidator) fetchPromptOffChain(inferenceID string, participantAddress string) (string, bool) {
+	if participantAddress == "" {
+		return "", false
+	}
+	queryClient := s.recorder.NewInferenceQueryClient()
+	resp, err := queryClient.Participant(s.recorder.GetContext(), &types.QueryGetParticipantRequest{Index: participantAddress})
+	if err != nil || resp == nil || resp.Participant.InferenceUrl == "" {
+		return "", false
+	}
+	return fetchPromptFromURL(resp.Participant.InferenceUrl, inferenceID, s.recorder.GetAddress())
+}
+
+// fetchPromptFromURL builds the prompt URL from base and inferenceID and performs the GET with required headers.
+// Returns (payload, true) on success; (_, false) otherwise.
+func fetchPromptFromURL(baseURL string, inferenceID string, validatorAddress string) (string, bool) {
+	// Build URL: {baseURL}/v1/inferences/{id}/prompt
+	promptURL, err := url.JoinPath(baseURL, "/v1/inferences/", inferenceID, "/prompt")
+	if err != nil {
+		return "", false
+	}
+	req, err := http.NewRequest(http.MethodGet, promptURL, nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set(apiutils.XValidatorAddressHeader, validatorAddress)
+	req.Header.Set(apiutils.AuthorizationHeader, validatorAddress)
+	req.Header.Set(apiutils.XTimestampHeader, fmt.Sprintf("%d", time.Now().UnixNano()))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", false
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil || len(body) == 0 {
+		return "", false
+	}
+	return string(body), true
 }
 
 func unmarshalResponse(inference *types.Inference) (completionapi.CompletionResponse, error) {

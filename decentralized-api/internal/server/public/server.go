@@ -56,6 +56,9 @@ func NewServer(
 	g.POST("chat/completions", s.postChat)
 	g.GET("chat/completions/:id", s.getChatById)
 
+	// Prompt retrieval for validators
+	g.GET("inferences/:id/prompt", s.getPromptHandler)
+
 	g.GET("participants/:address", s.getInferenceParticipantByAddress)
 	g.GET("participants", s.getAllParticipants)
 	g.POST("participants", s.submitNewParticipantHandler)

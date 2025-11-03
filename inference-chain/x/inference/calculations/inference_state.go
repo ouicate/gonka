@@ -69,7 +69,6 @@ func ProcessStartInference(
 	currentInference.TransferredBy = startMessage.Creator
 	currentInference.TransferSignature = startMessage.TransferSignature
 	currentInference.PromptHash = startMessage.PromptHash
-	currentInference.PromptPayload = startMessage.PromptPayload
 	currentInference.OriginalPrompt = startMessage.OriginalPrompt
 	if currentInference.PromptTokenCount == 0 {
 		currentInference.PromptTokenCount = startMessage.PromptTokenCount

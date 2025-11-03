@@ -16,7 +16,6 @@ func NewMsgStartInference(creator string, inferenceId string, promptHash string,
 		Creator:       creator,
 		InferenceId:   inferenceId,
 		PromptHash:    promptHash,
-		PromptPayload: promptPayload,
 		RequestedBy:   requestedBy,
 	}
 }
@@ -40,11 +39,8 @@ func (msg *MsgStartInference) ValidateBasic() error {
 	if strings.TrimSpace(msg.Model) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "model is required")
 	}
-	if strings.TrimSpace(msg.PromptHash) == "" {
+    if strings.TrimSpace(msg.PromptHash) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "prompt_hash is required")
-	}
-	if strings.TrimSpace(msg.PromptPayload) == "" {
-		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "prompt_payload is required")
 	}
 	if strings.TrimSpace(msg.OriginalPrompt) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "original_prompt is required")

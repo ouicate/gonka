@@ -287,7 +287,7 @@ data class InferenceTestHelper(
             creator = genesisAddress,
             inferenceId = devSignature,
             promptHash = "not_verified",
-            promptPayload = request,
+            originalPrompt = request,
             model = model,
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,

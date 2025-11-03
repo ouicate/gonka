@@ -219,14 +219,14 @@ func NewMockInferenceHelper(t *testing.T) (*MockInferenceHelper, keeper.Keeper, 
 }
 
 func (h *MockInferenceHelper) StartInference(
-	promptPayload string, model string, requestTimestamp int64, maxTokens uint64) (*types.Inference, error) {
+	originalPrompt string, model string, requestTimestamp int64, maxTokens uint64) (*types.Inference, error) {
 	h.Mocks.BankKeeper.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil)
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockRequester.GetBechAddress()).Return(h.MockRequester)
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockTransferAgent.GetBechAddress()).Return(h.MockTransferAgent).AnyTimes()
 	h.Mocks.AuthzKeeper.EXPECT().GranterGrants(gomock.Any(), gomock.Any()).Return(&authztypes.QueryGranterGrantsResponse{Grants: []*authztypes.GrantAuthorization{}}, nil).AnyTimes()
 
 	components := calculations.SignatureComponents{
-		Payload:         promptPayload,
+		Payload:         originalPrompt,
 		Timestamp:       requestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: h.MockExecutor.address,
@@ -242,11 +242,10 @@ func (h *MockInferenceHelper) StartInference(
 	startInferenceMsg := &types.MsgStartInference{
 		InferenceId:       inferenceId,
 		PromptHash:        "promptHash",
-		PromptPayload:     promptPayload,
 		RequestedBy:       h.MockRequester.address,
 		Creator:           h.MockTransferAgent.address,
 		Model:             model,
-		OriginalPrompt:    promptPayload,
+		OriginalPrompt:    originalPrompt,
 		RequestTimestamp:  requestTimestamp,
 		TransferSignature: taSignature,
 		AssignedTo:        h.MockExecutor.address,
@@ -259,7 +258,6 @@ func (h *MockInferenceHelper) StartInference(
 		Index:               inferenceId,
 		InferenceId:         inferenceId,
 		PromptHash:          "promptHash",
-		PromptPayload:       promptPayload,
 		RequestedBy:         h.MockRequester.address,
 		Status:              types.InferenceStatus_STARTED,
 		Model:               model,
@@ -271,7 +269,7 @@ func (h *MockInferenceHelper) StartInference(
 		TransferredBy:       h.MockTransferAgent.address,
 		TransferSignature:   taSignature,
 		RequestTimestamp:    requestTimestamp,
-		OriginalPrompt:      promptPayload,
+		OriginalPrompt:      originalPrompt,
 		PerTokenPrice:       calculations.PerTokenCost, // Set expected dynamic pricing value
 	}
 	return h.previousInference, nil
@@ -287,7 +285,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockTransferAgent.GetBechAddress()).Return(h.MockTransferAgent).AnyTimes()
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockExecutor.GetBechAddress()).Return(h.MockExecutor).AnyTimes()
 	components := calculations.SignatureComponents{
-		Payload:         h.previousInference.PromptPayload,
+		Payload:         h.previousInference.OriginalPrompt,
 		Timestamp:       h.previousInference.RequestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: h.MockExecutor.address,
@@ -328,7 +326,6 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 		Index:                    inferenceId,
 		InferenceId:              inferenceId,
 		PromptHash:               h.previousInference.PromptHash,
-		PromptPayload:            h.previousInference.PromptPayload,
 		RequestedBy:              h.MockRequester.address,
 		Status:                   types.InferenceStatus_FINISHED,
 		ResponseHash:             "responseHash",

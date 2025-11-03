@@ -6,6 +6,7 @@ import (
 	"decentralized-api/apiconfig"
 	"decentralized-api/broker"
 	"decentralized-api/completionapi"
+	"decentralized-api/internal/storage"
 	"decentralized-api/logging"
 	"decentralized-api/utils"
 	"encoding/json"
@@ -404,6 +405,24 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return err
 	}
 
+	// Persist prompt payload off-chain for redundancy (executor copy)
+	if s != nil && s.configManager != nil && s.configManager.SqlDb() != nil && s.configManager.SqlDb().GetDb() != nil {
+		if promptHash, promptPayload, err := getPromptHash(modifiedRequestBody.NewBody); err == nil {
+			_ = storage.SavePromptPayload(
+				context.Background(),
+				s.configManager.SqlDb().GetDb(),
+				storage.PromptPayloadRecord{
+					InferenceID:      inferenceId,
+					PromptPayload:    promptPayload,
+					PromptHash:       promptHash,
+					Model:            request.OpenAiRequest.Model,
+					RequestTimestamp: request.Timestamp,
+					StoredBy:         "executor",
+				},
+			)
+		}
+	}
+
 	logging.Info("Attempting to lock node for inference", types.Inferences,
 		"inferenceId", inferenceId, "nodeVersion", s.configManager.GetCurrentNodeVersion())
 	resp, err := broker.LockNode(s.nodeBroker, request.OpenAiRequest.Model, func(node *broker.Node) (*http.Response, error) {
@@ -709,6 +728,21 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	if err != nil {
 		return nil, err
 	}
+	// Persist prompt payload off-chain for validator retrieval (transfer copy)
+	if s != nil && s.configManager != nil && s.configManager.SqlDb() != nil && s.configManager.SqlDb().GetDb() != nil {
+		_ = storage.SavePromptPayload(
+			context.Background(),
+			s.configManager.SqlDb().GetDb(),
+			storage.PromptPayloadRecord{
+				InferenceID:      inferenceId,
+				PromptPayload:    promptPayload,
+				PromptHash:       promptHash,
+				Model:            request.OpenAiRequest.Model,
+				RequestTimestamp: request.Timestamp,
+				StoredBy:         "transfer",
+			},
+		)
+	}
 	maxTokens := 0
 	if request.OpenAiRequest.MaxCompletionTokens > 0 {
 		maxTokens = int(request.OpenAiRequest.MaxCompletionTokens)
@@ -718,7 +752,6 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	transaction := &inference.MsgStartInference{
 		InferenceId:      inferenceId,
 		PromptHash:       promptHash,
-		PromptPayload:    promptPayload,
 		RequestedBy:      request.RequesterAddress,
 		Model:            request.OpenAiRequest.Model,
 		AssignedTo:       executor.Address,

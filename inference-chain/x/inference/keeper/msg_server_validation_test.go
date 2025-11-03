@@ -190,12 +190,11 @@ func TestMsgServer_ValidatorCannotBeExecutor(t *testing.T) {
 
 func createCompletedInference(t *testing.T, ms types.MsgServer, ctx context.Context, mocks *keeper2.InferenceMocks) {
 	_, err := ms.StartInference(ctx, &types.MsgStartInference{
-		InferenceId:   "inferenceId",
-		PromptHash:    "promptHash",
-		PromptPayload: "promptPayload",
-		RequestedBy:   testutil.Requester,
-		Creator:       testutil.Creator,
-		Model:         "Qwen/QwQ-32B",
+		InferenceId: "inferenceId",
+		PromptHash:  "promptHash",
+		RequestedBy: testutil.Requester,
+		Creator:     testutil.Creator,
+		Model:       "Qwen/QwQ-32B",
 	})
 	require.NoError(t, err)
 	_, err = ms.FinishInference(ctx, &types.MsgFinishInference{

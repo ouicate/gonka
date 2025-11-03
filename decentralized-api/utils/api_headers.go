@@ -8,4 +8,5 @@ const (
 	XTimestampHeader        = "X-Timestamp"
 	XTransferAddressHeader  = "X-Transfer-Address"
 	XTASignatureHeader      = "X-TA-Signature"
+	XValidatorAddressHeader = "X-Validator-Address"
 )

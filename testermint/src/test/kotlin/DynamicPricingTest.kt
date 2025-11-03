@@ -186,7 +186,7 @@ class DynamicPricingTest : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature,
             promptHash = "not_verified",
-            promptPayload = inferenceRequest,
+            originalPrompt = inferenceRequest,
             model = defaultModel,
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,

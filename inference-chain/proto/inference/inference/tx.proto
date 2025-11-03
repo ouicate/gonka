@@ -74,7 +74,6 @@ message MsgStartInference {
   string creator = 1;
   string inference_id = 2;
   string prompt_hash = 3;
-  string prompt_payload = 4;
   string model = 6;
   string requested_by = 7;
   string assigned_to = 8;

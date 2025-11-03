@@ -14,6 +14,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/event_listener/chainevents"
 	"decentralized-api/internal/poc"
+	"decentralized-api/internal/storage"
 	"decentralized-api/internal/validation"
 	"decentralized-api/logging"
 
@@ -346,6 +347,32 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 		logging.Info("DapiStage:IsSetNewValidatorsStage", types.Stages, "blockHeight", blockHeight, "blockHash", blockHash)
 		go func() {
 			d.randomSeedManager.ChangeCurrentSeed()
+		}()
+
+		// Prune off-chain prompt payloads on epoch boundary based on chain retention
+		go func() {
+			ep := d.phaseTracker.GetEpochParams()
+			if ep == nil || d.configManager == nil || d.configManager.SqlDb() == nil || d.configManager.SqlDb().GetDb() == nil {
+				return
+			}
+			retentionEpochs := ep.InferencePruningEpochThreshold
+			if retentionEpochs == 0 {
+				return
+			}
+			// Approximate epoch duration via average 5s per block
+			avgSecondsPerBlock := int64(6)
+			epochLenSeconds := int64(ep.EpochLength) * avgSecondsPerBlock
+			if epochLenSeconds <= 0 {
+				return
+			}
+			retentionSeconds := int64(retentionEpochs) * epochLenSeconds
+			cutoff := time.Now().Add(-time.Duration(retentionSeconds) * time.Second)
+			ctx := context.Background()
+			if deleted, err := storage.DeletePromptPayloadsOlderThan(ctx, d.configManager.SqlDb().GetDb(), cutoff); err != nil {
+				logging.Warn("Failed to prune prompt payloads", types.Inferences, "error", err)
+			} else if deleted > 0 {
+				logging.Info("Pruned off-chain prompt payloads", types.Inferences, "deleted", deleted, "cutoff", cutoff)
+			}
 		}()
 	}
 

@@ -90,7 +90,6 @@ func TestMsgServer_OutOfOrderInference(t *testing.T) {
 	_, err = ms.StartInference(ctx, &types.MsgStartInference{
 		InferenceId:       inferenceId,
 		PromptHash:        "promptHash",
-		PromptPayload:     payload,
 		RequestedBy:       testutil.Requester,
 		Creator:           testutil.Creator,
 		Model:             "model1",
@@ -107,7 +106,8 @@ func TestMsgServer_OutOfOrderInference(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, types.InferenceStatus_FINISHED, savedInference.Status)
 	require.Equal(t, "promptHash", savedInference.PromptHash)
-	require.Equal(t, "promptPayload", savedInference.PromptPayload)
+	// PromptPayload is not set by Start anymore
+	require.Equal(t, "", savedInference.PromptPayload)
 	require.Equal(t, testutil.Requester, savedInference.RequestedBy)
 	require.Equal(t, "model1", savedInference.Model)
 
