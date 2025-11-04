@@ -335,6 +335,10 @@ func (b *Broker) GetChainBridge() BrokerChainBridge {
 	return b.chainBridge
 }
 
+func (b *Broker) GetRecorder() cosmosclient.CosmosMessageClient {
+	return b.chainBridge.(*BrokerChainBridgeImpl).client
+}
+
 func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan *apiconfig.InferenceNodeConfig {
 	if node == nil {
 		return nil
