@@ -3,7 +3,8 @@
 This is a proposal to add the [Qwen3-30B-A3B-Instruct-2507-FP8](https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507-FP8) model to the Gonka inference network. It is a 30B MoE LLM with 3B active parameters quantized to FP8.
 
 Key points:
-- Requiring $\geq$ 48GB of VRAM, it is deployable on 2 x RT3090 / 1 x H100, equivalent or higher grade GPUs.
+- Requiring $\geq$ 48GB of VRAM, it is deployable on 2 x RT3090 / 1 x H100, equivalent or higher grade GPUs. 
+    - For the minimum of 48GB of VRAM the max context length is `100000`.
 - All experiments were conducted using MLNode v3.0.8.
 - Validation threshold computation overview:
     - Inferences validation is tested against INT-4 quantized version [Qwen3-30B-A3B-Instruct-2507-AWQ-4bit](https://huggingface.co/cpatonn/Qwen3-30B-A3B-Instruct-2507-AWQ-4bit).
@@ -16,6 +17,7 @@ Key points:
 - It supports tool calling with `hermes` tool call parser, so the model is suggested to be deployed with with the following parameters:
     ```python
     additional_args=[
+        '--max-model-len', '100000',
         '--enable-auto-tool-choice',  # Optional: enables automatic tool choice
         '--tool-call-parser', 'hermes',  # Optional: specifies the Hermes tool call parser
     ]
