@@ -3,11 +3,11 @@ package keeper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
-	"cosmossdk.io/store/prefix"
-	"github.com/cosmos/cosmos-sdk/runtime"
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -66,36 +66,24 @@ func (k Keeper) validateWrappedTokenForTradeInternal(ctx context.Context, contra
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
 	// Step 1: Find the wrapped token contract in our registry
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	store := prefix.NewStore(storeAdapter, []byte(TokenContractKeyPrefix))
-
-	// Iterate through all token contracts to find the one with matching CW20 contract
-	iterator := store.Iterator(nil, nil)
-	defer iterator.Close()
-
-	var wrappedContract *types.BridgeWrappedTokenContract
-	for ; iterator.Valid(); iterator.Next() {
-		var contract types.BridgeWrappedTokenContract
-		err := k.cdc.Unmarshal(iterator.Value(), &contract)
-		if err != nil {
-			// Log the error but continue processing other contracts
-			k.LogError("Bridge exchange: Failed to unmarshal wrapped token contract in validation",
-				types.Messages,
-				"key", string(iterator.Key()),
-				"error", err)
-			continue
+	reference, err := k.WrappedContractReverseIndex.Get(sdkCtx, contractAddr)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return false, nil, fmt.Errorf("wrapped token contract not found in registry")
 		}
-
-		// Check if this external token contract maps to the queried CW20 contract
-		if strings.ToLower(contract.WrappedContractAddress) == contractAddr {
-			wrappedContract = &contract
-			break
-		}
+		k.LogError("Bridge exchange: Failed to lookup wrapped contract reference",
+			types.Messages,
+			"contract", contractAddr,
+			"error", err)
+		return false, nil, fmt.Errorf("failed to lookup wrapped token reference: %w", err)
 	}
 
-	if wrappedContract == nil {
+	wrapped, found := k.GetWrappedTokenContract(sdkCtx, reference.ChainId, reference.ContractAddress)
+	if !found {
 		return false, nil, fmt.Errorf("wrapped token contract not found in registry")
 	}
+
+	wrappedContract := &wrapped
 
 	// Step 2: Verify that the wrapped token contract was created through the chain (minter is module)
 	if !k.verifyContractMinter(sdkCtx, contractAddr) {
@@ -103,8 +91,7 @@ func (k Keeper) validateWrappedTokenForTradeInternal(ctx context.Context, contra
 	}
 
 	// Step 3: Verify that the wrapped token has registered metadata
-	_, found := k.GetTokenMetadata(sdkCtx, wrappedContract.ChainId, wrappedContract.ContractAddress)
-	if !found {
+	if _, metadataFound := k.GetTokenMetadata(sdkCtx, wrappedContract.ChainId, wrappedContract.ContractAddress); !metadataFound {
 		return false, nil, fmt.Errorf("token metadata not found for chain %s, contract %s", wrappedContract.ChainId, wrappedContract.ContractAddress)
 	}
 

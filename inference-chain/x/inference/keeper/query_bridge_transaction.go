@@ -3,8 +3,7 @@ package keeper
 import (
 	"context"
 
-	"cosmossdk.io/store/prefix"
-	"github.com/cosmos/cosmos-sdk/runtime"
+	"cosmossdk.io/collections"
 	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/productscience/inference/x/inference/types"
 	"google.golang.org/grpc/codes"
@@ -34,30 +33,20 @@ func (k Keeper) BridgeTransactions(goCtx context.Context, req *types.QueryAllBri
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(goCtx))
-	bridgeStore := prefix.NewStore(storeAdapter, []byte(BridgeTransactionKeyPrefix))
-
-	var bridgeTransactions []*types.BridgeTransaction
-	pageRes, err := query.Paginate(bridgeStore, req.Pagination, func(key []byte, value []byte) error {
-		var bridgeTx types.BridgeTransaction
-		if err := k.cdc.Unmarshal(value, &bridgeTx); err != nil {
-			return err
-		}
-		bridgeTransactions = append(bridgeTransactions, &bridgeTx)
-		return nil
-	})
-
+	bridgeTransactions, pageRes, err := query.CollectionPaginate(
+		goCtx,
+		k.BridgeTransactionsMap,
+		req.Pagination,
+		func(_ collections.Triple[string, string, string], v types.BridgeTransaction) (types.BridgeTransaction, error) {
+			return v, nil
+		},
+	)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	txs := make([]types.BridgeTransaction, len(bridgeTransactions))
-	for i, tx := range bridgeTransactions {
-		txs[i] = *tx
-	}
-
 	return &types.QueryAllBridgeTransactionsResponse{
-		BridgeTransactions: txs,
+		BridgeTransactions: bridgeTransactions,
 		Pagination:         pageRes,
 	}, nil
 }

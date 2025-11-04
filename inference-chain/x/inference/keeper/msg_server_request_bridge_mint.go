@@ -54,7 +54,7 @@ func (k msgServer) RequestBridgeMint(goCtx context.Context, msg *types.MsgReques
 	if !ok {
 		return nil, fmt.Errorf("invalid amount format: %s", msg.Amount)
 	}
-	nativeCoins := sdk.NewCoins(sdk.NewCoin("ugonka", amountInt))
+	nativeCoins := sdk.NewCoins(sdk.NewCoin(types.BaseCoin, amountInt))
 
 	// 4. Transfer native tokens to bridge escrow account (atomic operation)
 	err = k.TransferToEscrow(ctx, userAddr, nativeCoins)

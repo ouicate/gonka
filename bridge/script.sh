@@ -12,6 +12,29 @@ GETH_DISCOVERY_PORT=${GETH_DISCOVERY_PORT:-$GETH_P2P_PORT}
 PRYSM_P2P_TCP_PORT=${PRYSM_P2P_TCP_PORT:-13000}
 PRYSM_P2P_UDP_PORT=${PRYSM_P2P_UDP_PORT:-12000}
 
+require_env_vars() {
+    missing=false
+    for var_name in "$@"; do
+        eval "value=\${$var_name:-}"
+        if [ -z "$value" ]; then
+            echo "Error: required environment variable $var_name is not set" >&2
+            missing=true
+        fi
+    done
+    if [ "$missing" = "true" ]; then
+        echo "Exiting because required environment variables are missing." >&2
+        exit 1
+    fi
+}
+
+require_env_vars \
+    JWT_SECRET_PATH \
+    GETH_DATA_DIR \
+    PRYSM_DATA_DIR \
+    BRIDGE_POSTBLOCK \
+    BRIDGE_GETADDRESSES \
+    BEACON_STATE_URL
+
 # Create log directories
 mkdir -p /var/log/geth /var/log/prysm
 # Define Prysm log file paths (raw and formatted)
@@ -21,16 +44,16 @@ PRYSM_FORMATTED_LOG=/var/log/prysm/beacon.log
 echo "Initializing Ethereum Bridge Service Version 0.1.0"
 
 # Generate JWT secret if it doesn't exist
-if [ ! -f $JWT_SECRET_PATH ]; then
-    openssl rand -hex 32 > $JWT_SECRET_PATH
+if [ ! -f "$JWT_SECRET_PATH" ]; then
+    openssl rand -hex 32 > "$JWT_SECRET_PATH"
     echo "Generated new JWT secret"
 fi
 
 # Handle persistent Geth data
-if [ -d "$PERSISTENT_DB_DIR" ] && [ -n "$(ls -A $PERSISTENT_DB_DIR)" ]; then
+if [ -n "$PERSISTENT_DB_DIR" ] && [ -d "$PERSISTENT_DB_DIR" ] && [ -n "$(ls -A "$PERSISTENT_DB_DIR")" ]; then
     echo "Copying Geth data from persistent storage..."
     # Copy contents directly to the mounted directory
-    cp -r $PERSISTENT_DB_DIR/geth/. $GETH_DATA_DIR/
+    cp -r "$PERSISTENT_DB_DIR/geth/." "$GETH_DATA_DIR/"
     echo "Copied Geth data to $GETH_DATA_DIR/"
 fi
 
@@ -153,7 +176,6 @@ start_geth() {
          --http.port $GETH_HTTP_PORT \
          --http.api "eth,net,engine" \
           --ipcdisable \
-         --bridge.apibase $BRIDGE_API_BASE \
          --bridge.postblock $BRIDGE_POSTBLOCK \
          --bridge.getaddresses $BRIDGE_GETADDRESSES \
          --authrpc.addr 127.0.0.1 \
@@ -181,7 +203,6 @@ start_geth() {
                  --http.port $GETH_HTTP_PORT \
                  --http.api "eth,net,engine" \
                  --ipcdisable \
-                 --bridge.apibase $BRIDGE_API_BASE \
                  --bridge.postblock $BRIDGE_POSTBLOCK \
                  --bridge.getaddresses $BRIDGE_GETADDRESSES \
                  --authrpc.addr 127.0.0.1 \

@@ -66,12 +66,12 @@ func (k Keeper) HandleNativeTokenRelease(ctx sdk.Context, bridgeTx *types.Bridge
 		return fmt.Errorf("invalid amount %s", bridgeTx.Amount)
 	}
 
-	// Create coins for the native token (assuming "ugonka" as the base denom)
-	// TODO: Make this configurable or derive from chain parameters
-	nativeCoins := sdk.NewCoins(sdk.NewCoin("ugonka", amountInt))
+	// Create coins for the native token using the chain's base denom
+	// TODO: Make this configurable or derive from chain parameters/metadata
+	nativeCoins := sdk.NewCoins(sdk.NewCoin(types.BaseCoin, amountInt))
 
 	// Check if escrow has sufficient balance
-	escrowBalance := k.GetBridgeEscrowBalance(ctx, "ugonka")
+	escrowBalance := k.GetBridgeEscrowBalance(ctx, types.BaseCoin)
 	if escrowBalance.Amount.LT(amountInt) {
 		return fmt.Errorf("insufficient escrow balance: have %s, need %s", escrowBalance.Amount.String(), amountInt.String())
 	}
@@ -105,7 +105,7 @@ func (k Keeper) ValidateBridgeMintRequest(ctx sdk.Context, creator sdk.AccAddres
 	}
 
 	// Check user has sufficient balance
-	userBalance := k.BankView.SpendableCoin(ctx, creator, "ugonka")
+	userBalance := k.BankView.SpendableCoin(ctx, creator, types.BaseCoin)
 
 	if userBalance.Amount.LT(amountInt) {
 		return fmt.Errorf("insufficient balance: have %s, need %s", userBalance.Amount.String(), amountInt.String())

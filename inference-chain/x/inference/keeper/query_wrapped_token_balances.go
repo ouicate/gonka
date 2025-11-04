@@ -7,8 +7,6 @@ import (
 	"math/big"
 	"strings"
 
-	"cosmossdk.io/store/prefix"
-	"github.com/cosmos/cosmos-sdk/runtime"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 	"google.golang.org/grpc/codes"
@@ -21,12 +19,14 @@ func (k Keeper) WrappedTokenBalances(goCtx context.Context, req *types.QueryWrap
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
-	if req.Address == "" {
+	address := strings.TrimSpace(req.Address)
+
+	if address == "" {
 		return nil, status.Error(codes.InvalidArgument, "address cannot be empty")
 	}
 
 	// Validate the cosmos address format
-	if _, err := sdk.AccAddressFromBech32(req.Address); err != nil {
+	if _, err := sdk.AccAddressFromBech32(address); err != nil {
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid cosmos address: %v", err))
 	}
 
@@ -37,14 +37,15 @@ func (k Keeper) WrappedTokenBalances(goCtx context.Context, req *types.QueryWrap
 
 	var balances []*types.WrappedTokenBalance
 
-	for _, tokenContract := range externalTokens {
+	for i := range externalTokens {
+		tokenContract := externalTokens[i]
 		// Query the CW20 balance for this address
-		balance, err := k.queryTokenBalance(ctx, tokenContract.WrappedContractAddress, req.Address)
+		balance, err := k.queryTokenBalance(ctx, tokenContract.WrappedContractAddress, address)
 		if err != nil {
 			k.LogWarn("Failed to query token balance",
 				types.Messages,
 				"contract", tokenContract.WrappedContractAddress,
-				"address", req.Address,
+				"address", address,
 				"error", err)
 			continue // Skip this token if balance query fails
 		}
@@ -62,7 +63,7 @@ func (k Keeper) WrappedTokenBalances(goCtx context.Context, req *types.QueryWrap
 		formattedBalance := k.formatTokenBalance(balance, decimals)
 
 		wrappedBalance := &types.WrappedTokenBalance{
-			TokenInfo:        &tokenContract,
+			TokenInfo:        &externalTokens[i],
 			Symbol:           symbol,
 			Balance:          balance,
 			Decimals:         fmt.Sprintf("%d", decimals),
@@ -79,49 +80,47 @@ func (k Keeper) WrappedTokenBalances(goCtx context.Context, req *types.QueryWrap
 
 // getAllExternalTokenContracts returns all external token contracts from chain state
 func (k Keeper) getAllWrappedTokenContracts(ctx sdk.Context) []types.BridgeWrappedTokenContract {
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	pstore := prefix.NewStore(storeAdapter, []byte(TokenContractKeyPrefix))
-	iterator := pstore.Iterator(nil, nil)
-	defer iterator.Close()
+	iter, err := k.WrappedTokenContractsMap.Iterate(ctx, nil)
+	if err != nil {
+		k.LogWarn("Failed to iterate wrapped token contracts",
+			types.Messages,
+			"error", err)
+		return nil
+	}
+	defer iter.Close()
 
-	var contracts []types.BridgeWrappedTokenContract
-	for ; iterator.Valid(); iterator.Next() {
-		var contract types.BridgeWrappedTokenContract
-		if err := k.cdc.Unmarshal(iterator.Value(), &contract); err != nil {
-			// Log the error but continue processing other contracts
-			k.LogWarn("Failed to unmarshal wrapped token contract",
-				types.Messages,
-				"key", string(iterator.Key()),
-				"error", err)
-			continue
-		}
+	contracts, err := iter.Values()
+	if err != nil {
+		k.LogWarn("Failed to collect wrapped token contracts",
+			types.Messages,
+			"error", err)
+		return nil
+	}
 
-		// Validate the contract data to ensure it's not corrupted
+	filtered := make([]types.BridgeWrappedTokenContract, 0, len(contracts))
+	for _, contract := range contracts {
 		if !k.isValidBridgeWrappedTokenContract(&contract) {
 			k.LogWarn("Skipping corrupted wrapped token contract",
 				types.Messages,
-				"key", string(iterator.Key()),
 				"chainId", contract.ChainId,
 				"contractAddress", contract.ContractAddress,
 				"wrappedContractAddress", contract.WrappedContractAddress)
 			continue
 		}
 
-		// Log the contract for debugging
 		k.LogDebug("Found wrapped token contract",
 			types.Messages,
 			"chainId", contract.ChainId,
 			"contractAddress", contract.ContractAddress,
 			"wrappedContractAddress", contract.WrappedContractAddress)
-
-		contracts = append(contracts, contract)
+		filtered = append(filtered, contract)
 	}
 
 	k.LogDebug("Total wrapped token contracts found",
 		types.Messages,
-		"count", len(contracts))
+		"count", len(filtered))
 
-	return contracts
+	return filtered
 }
 
 // isValidBridgeWrappedTokenContract validates that a BridgeWrappedTokenContract is not corrupted
@@ -205,8 +204,8 @@ func (k Keeper) queryTokenBalance(ctx sdk.Context, contractAddr, address string)
 		return "0", nil // Return nil error to continue processing other tokens
 	}
 
-	// Check if response is empty or nil
-	if response == nil || len(response) == 0 {
+	// Check if response is empty
+	if len(response) == 0 {
 		k.LogWarn("Empty response from WASM contract",
 			types.Messages,
 			"contract", contractAddr,

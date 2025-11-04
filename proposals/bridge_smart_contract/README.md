@@ -128,9 +128,9 @@ After a successful version upgrade, perform these governance and operational ste
     TX_HASH=$(echo "$STORE_TX" | jq -r '.txhash')
     for i in $(seq 1 30); do
       TX_QUERY=$($APP_NAME query tx "$TX_HASH" --chain-id "$CHAIN_ID" --node "$NODE_RPC" --output json 2>/dev/null || echo "")
-      CODE_ID=$(echo "$TX_QUERY" | jq -r '.events[] | select(.type=="store_code") | .attributes[] | select(.key=="code_id") | .value' | head -n1)
-      [ -n "$CODE_ID" ] && break; sleep 2; done
-    [ -z "$CODE_ID" ] && echo "Error: code_id not found" && exit 1
+      WT_CODE_ID=$(echo "$TX_QUERY" | jq -r '.events[] | select(.type=="store_code") | .attributes[] | select(.key=="code_id") | .value' | head -n1)
+      [ -n "$WT_CODE_ID" ] && break; sleep 2; done
+    [ -z "$WT_CODE_ID" ] && echo "Error: code_id not found" && exit 1
     echo "Wrapped-token contract WT_CODE_ID=$WT_CODE_ID"
     ```
 
@@ -187,7 +187,7 @@ After a successful version upgrade, perform these governance and operational ste
         {
           "@type": "/inference.inference.MsgRegisterWrappedTokenContract",
           "authority": "$GOV_MODULE_ADDR",
-          "codeId": $CODE_ID
+          "codeId": $WT_CODE_ID
         },
         {
           "@type": "/inference.inference.MsgRegisterLiquidityPool",
@@ -300,7 +300,7 @@ After a successful version upgrade, perform these governance and operational ste
     ```
 
 - Configure and start the bridge service
-  - Set `BRIDGE_API_BASE` to decentralized‑api, `BRIDGE_GETADDRESSES=/v1/bridge/addresses?chain=ethereum`, `BRIDGE_POSTBLOCK=/admin/v1/bridge/block` and start the `bridge/` container (Prysm + Geth in ingestion‑only mode).
+  - Set `BRIDGE_GETADDRESSES=http://api:9000/v1/bridge/addresses?chain=ethereum`, `BRIDGE_POSTBLOCK=http://api:9200/admin/v1/bridge/block` and start the `bridge/` container (Prysm + Geth in ingestion-only mode).
   - Validate with API: `GET /v1/bridge/status` and `GET /v1/bridge/addresses?chain=ethereum`.
 
 
