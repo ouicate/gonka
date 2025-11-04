@@ -7,10 +7,11 @@ Key points:
 - All experiments were conducted using MLNode v3.0.8.
 - Validation threshold computation overview:
     - Inferences validation is tested against INT-4 quantized version [Qwen3-30B-A3B-Instruct-2507-AWQ-4bit](https://huggingface.co/cpatonn/Qwen3-30B-A3B-Instruct-2507-AWQ-4bit).
-    - Fraud detection accuracy: **54%**
-    - Validation threshold bounds: **`(0.026, 0.027)`**. 
+    - Fraud detection accuracy: **52%**
+    - Validation threshold bounds: **`(0.022, 0.023)`**. 
     - Detailed report on the validation threshold can be found in [qwen30B_thresholds.ipynb](./qwen30B_thresholds.ipynb). 
         - The validation threshold was computed using the standard procedure described in [models/README.md](../README.md).
+        - The inference script producing the raw data is here: [link](https://github.com/gonka-ai/gonka/blob/1a531d772907ea9253c028d544819a4b0d25d011/mlnode/packages/benchmarks/scripts/inference.py) 
     - The data used for our experiments is available for verification: [Qwen30B Validation Data](https://drive.google.com/drive/folders/1JqZ4wFsOr-RRZStk5bhnWppiV5g_-SpY?usp=sharing).
 - It supports tool calling with `hermes` tool call parser, so the model is suggested to be deployed with with the following parameters:
     ```python
