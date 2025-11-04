@@ -19,9 +19,9 @@ from validation.model_presets import GEMMA_3_27B_INT4, GEMMA_3_27B_FP8
 
 
 N_PROMPTS = 1000
-MAX_WORKERS = 50
+MAX_WORKERS = None
 run_params_high_temp = RunParams(
-    exp_name='qwen30_repro5',
+    exp_name='gemma27B',
     output_path='../data/inference_results',
     n_prompts=N_PROMPTS,
     timeout=1800,
@@ -42,83 +42,94 @@ def get_run_params(temp, prompts):
 
 
 server_1xH100_1 = ServerConfig(
-    ip='192.222.53.216',
-    inference_port='64158',
-    node_port='13010',
+    ip='80.188.223.202',
+    inference_port='17390',
+    node_port='17340',
     gpu='1xH100',
 )
 
 server_1xH100_2 = ServerConfig(
-    ip='208.64.254.166',
-    inference_port='31772',
-    node_port='17374',
+    ip='80.188.223.202',
+    inference_port='19477',
+    node_port='19145',
     gpu='1xH100',
 )
 
-
-server_2x3090_1 = ServerConfig(
-    ip='72.49.201.130',
-    inference_port='47464',
-    node_port='47192',
-    gpu='2x3090',
+server_4x3090_1 = ServerConfig(
+    ip='163.5.212.39',
+    inference_port='18906',
+    node_port='24434',
+    gpu='4x3090',
 )
 
-server_2x3090_2 = ServerConfig(
-    ip='213.224.31.105',
-    inference_port='28534',
-    node_port='28860',
-    gpu='2x3090',
+server_4x3090_2 = ServerConfig(
+    ip='109.248.7.144',
+    inference_port='20347',
+    node_port='20505',
+    gpu='4x3090',
 )
 
+honest_preset = GEMMA_3_27B_FP8
+fraudulent_preset = GEMMA_3_27B_INT4
 
 langs = ("en", "sp","ch", "hi", "ar")
 runs = [
-    # Config 1: Fradulent INT4 on 1xH100 vs FP8 on 1xH100
+    # Honest FP8 on 1xH100 vs FP8 on 1xH100
     InferenceValidationRun(
-        model_inference=QWEN3_30B_INT4,
-        model_validation=QWEN3_30B_FP8,
-        server_inference=server_1xH100_1,
-        server_validation=server_1xH100_2,
-        run_inference=get_run_params(0.7, N_PROMPTS//5),
-        run_validation=get_run_params(0.7, N_PROMPTS//5),
-        max_workers=MAX_WORKERS,
-    ),
-    # Config 2: Fradulent INT4 on 2x3090 vs FP8 on 1xH100
-    InferenceValidationRun(
-        model_inference=QWEN3_30B_INT4,
-        model_validation=QWEN3_30B_FP8,
-        server_inference=server_2x3090_1,
-        server_validation=server_1xH100_1,
-        run_inference=get_run_params(0.7, N_PROMPTS//5),
-        run_validation=get_run_params(0.7, N_PROMPTS//5),
-        max_workers=MAX_WORKERS,
-    ),
-    # Config 3: Honest FP8 on 1xH100 vs FP8 on 1xH100
-    InferenceValidationRun(
-        model_inference=QWEN3_30B_FP8,
-        model_validation=QWEN3_30B_FP8,
+        model_inference=honest_preset,
+        model_validation=honest_preset,
         server_inference=server_1xH100_1,
         server_validation=server_1xH100_2,
         run_inference=get_run_params(0.99, N_PROMPTS),
         run_validation=get_run_params(0.99, N_PROMPTS),
         max_workers=MAX_WORKERS,
     ),
-    # Config 4: Honest FP8 on 2x3090 vs FP8 on 1xH100
+    # Fradulent INT4 on 1xH100 vs FP8 on 1xH100
     InferenceValidationRun(
-        model_inference=QWEN3_30B_FP8,
-        model_validation=QWEN3_30B_FP8,
-        server_inference=server_2x3090_1,
+        model_inference=fraudulent_preset,
+        model_validation=honest_preset,
+        server_inference=server_1xH100_2,
+        server_validation=server_1xH100_1,
+        run_inference=get_run_params(0.7, N_PROMPTS//5),
+        run_validation=get_run_params(0.7, N_PROMPTS//5),
+        max_workers=MAX_WORKERS,
+    ),
+    # Fradulent INT4 on 4x3090 vs FP8 on 1xH100
+    InferenceValidationRun(
+        model_inference=fraudulent_preset,
+        model_validation=honest_preset,
+        server_inference=server_4x3090_2,
+        server_validation=server_1xH100_1,
+        run_inference=get_run_params(0.7, N_PROMPTS//5),
+        run_validation=get_run_params(0.7, N_PROMPTS//5),
+        max_workers=MAX_WORKERS,
+    ),
+    # Fradulent INT4 on 4x3090 vs FP8 on 4x3090
+    InferenceValidationRun(
+        model_inference=fraudulent_preset,
+        model_validation=honest_preset,
+        server_inference=server_4x3090_2,
+        server_validation=server_4x3090_1,
+        run_inference=get_run_params(0.7, N_PROMPTS//5),
+        run_validation=get_run_params(0.7, N_PROMPTS//5),
+        max_workers=MAX_WORKERS,
+    ),
+    # Honest FP8 on 4x3090 vs FP8 on 1xH100
+    InferenceValidationRun(
+        model_inference=honest_preset,
+        model_validation=honest_preset,
+        server_inference=server_4x3090_1,
         server_validation=server_1xH100_1,
         run_inference=get_run_params(0.99, N_PROMPTS//5),
         run_validation=get_run_params(0.99, N_PROMPTS//5),
         max_workers=MAX_WORKERS,
     ),
-    # Config 5: Honest FP8 on 2x3090 vs FP8 on 2x3090
+    # Honest FP8 on 4x3090 vs FP8 on 4x3090
     InferenceValidationRun(
-        model_inference=QWEN3_30B_FP8,
-        model_validation=QWEN3_30B_FP8,
-        server_inference=server_2x3090_1,
-        server_validation=server_2x3090_2,
+        model_inference=honest_preset,
+        model_validation=honest_preset,
+        server_inference=server_4x3090_1,
+        server_validation=server_4x3090_2,
         run_inference=get_run_params(0.99, N_PROMPTS//5),
         run_validation=get_run_params(0.99, N_PROMPTS//5),
         max_workers=MAX_WORKERS,

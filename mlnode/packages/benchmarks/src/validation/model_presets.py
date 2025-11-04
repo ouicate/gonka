@@ -49,9 +49,9 @@ GEMMA_3_27B_FP8 = ModelPreset(
     additional_args=[
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'pythonic',
-        '--max-model-len', '20000',
-        '--gpu-memory-utilization', '0.9',
-        "--enable-chunked-prefill"
+        '--max-model-len', '64000',
+        '--gpu-memory-utilization', '0.95',
+        '--enable-chunked-prefill',
     ],
 )
 
@@ -63,9 +63,9 @@ GEMMA_3_27B_INT4 = ModelPreset(
     additional_args=[
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'pythonic',
-        '--max-model-len', '20000',
-        '--gpu-memory-utilization', '0.9',
-        "--enable-chunked-prefill"
+        '--max-model-len', '64000',
+        '--gpu-memory-utilization', '0.95',
+        '--enable-chunked-prefill',
     ],
 )
 
