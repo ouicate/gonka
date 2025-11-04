@@ -30,9 +30,8 @@ func (c StopNodeCommand) Execute(ctx context.Context, worker *NodeWorker) NodeRe
 		return result
 	}
 
-	if worker.node.State.CurrentStatus == types.HardwareNodeStatus_POC {
-		worker.stopWebSocket()
-	}
+	// Always stop WebSocket when stopping node (idempotent - safe to call even if not running)
+	worker.stopWebSocket()
 
 	err := worker.GetClient().Stop(ctx)
 	if err != nil {
@@ -199,6 +198,9 @@ func (c InferenceUpNodeCommand) Execute(ctx context.Context, worker *NodeWorker)
 		return result
 	}
 
+	// Stop WebSocket when transitioning to inference (idempotent - safe to call even if not running)
+	worker.stopWebSocket()
+
 	// Idempotency check
 	state, err := worker.GetClient().NodeState(ctx)
 	if err == nil && state.State == mlnodeclient.MlNodeState_INFERENCE {
@@ -312,6 +314,9 @@ func (c StartTrainingNodeCommand) Execute(ctx context.Context, worker *NodeWorke
 		result.FinalPocStatus = worker.node.State.PocCurrentStatus
 		return result
 	}
+
+	// Stop WebSocket when transitioning to training (idempotent - safe to call even if not running)
+	worker.stopWebSocket()
 
 	rank, ok := c.NodeRanks[worker.nodeId]
 	if !ok {

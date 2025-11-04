@@ -16,7 +16,7 @@ from zeroband.service.manager import TrainManager
 from zeroband.service.routes import router as train_router
 
 from pow.service.manager import PowManager
-from pow.service.routes import router as pow_router
+from pow.service.routes import router as pow_router, ws_router as pow_ws_router
 
 from api.health import router as health_router
 
@@ -89,6 +89,12 @@ app.include_router(
     prefix=API_PREFIX,
     tags=["PoW"],
     dependencies=[Depends(check_service_conflicts)]
+)
+
+app.include_router(
+    pow_ws_router,
+    prefix=API_PREFIX,
+    tags=["PoW WebSocket"]
 )
 
 app.include_router(

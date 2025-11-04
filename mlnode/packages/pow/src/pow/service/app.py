@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from pow.service.routes import router, API_PREFIX
+from pow.service.routes import router, ws_router, API_PREFIX
 from common.logger import setup_logger
 from pow.service.manager import PowManager
 
@@ -32,5 +32,9 @@ app.state.model_params_path = os.environ.get(
 
 app.include_router(
     router,
+    prefix=API_PREFIX
+)
+app.include_router(
+    ws_router,
     prefix=API_PREFIX
 )

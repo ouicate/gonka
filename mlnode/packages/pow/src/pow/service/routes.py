@@ -15,6 +15,10 @@ router = APIRouter(
     tags=["API v1"],
 )
 
+ws_router = APIRouter(
+    tags=["API v1"],
+)
+
 @router.post(
     "/pow/init",
     status_code=200,
@@ -167,16 +171,20 @@ async def stop(request: Request):
     }
 
 
-@router.websocket("/pow/ws")
-async def websocket_endpoint(websocket: WebSocket, request: Request):
-    manager: PowManager = request.app.state.pow_manager
+@ws_router.websocket("/pow/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    manager: PowManager = websocket.app.state.pow_manager
+    
+    await websocket.accept()
     
     if not manager.is_running():
         await websocket.close(code=1008, reason="PoW is not running")
+        logger.warning("WebSocket connection rejected: PoW is not running")
         return
     
     if not manager.websocket_lock or not manager.websocket_connected:
         await websocket.close(code=1008, reason="WebSocket infrastructure not initialized")
+        logger.warning("WebSocket connection rejected: infrastructure not initialized")
         return
     
     with manager.websocket_lock:
@@ -186,7 +194,6 @@ async def websocket_endpoint(websocket: WebSocket, request: Request):
             return
         manager.websocket_connected.value = 1
     
-    await websocket.accept()
     logger.info("WebSocket connection accepted")
     
     try:
