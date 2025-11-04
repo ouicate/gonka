@@ -43,27 +43,29 @@ DEEPSEEK_R1_0528_INT4 = ModelPreset(
 
 
 GEMMA_3_27B_FP8 = ModelPreset(
-    model='pytorch/gemma-3-27b-it-FP8',
+    model='RedHatAI/gemma-3-27b-it-FP8-dynamic',
     precision='fp8',
-    dtype='auto',
+    dtype='bfloat16',
     additional_args=[
-        '--gpu-memory-utilization', '0.95',
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'pythonic',
-        '--max_model_len', '10000',
+        '--max-model-len', '20000',
+        '--gpu-memory-utilization', '0.9',
+        "--enable-chunked-prefill"
     ],
 )
 
 
 GEMMA_3_27B_INT4 = ModelPreset(
-    model='RedHatAI/gemma-3-27b-it-quantized.w4a16',
+    model='ISTA-DASLab/gemma-3-27b-it-GPTQ-4b-128g',
     precision='int4',
-    dtype='auto',
+    dtype='bfloat16',
     additional_args=[
-        '--gpu-memory-utilization', '0.95',
         '--enable-auto-tool-choice',
         '--tool-call-parser', 'pythonic',
-        '--max_model_len', '10000',
+        '--max-model-len', '20000',
+        '--gpu-memory-utilization', '0.9',
+        "--enable-chunked-prefill"
     ],
 )
 

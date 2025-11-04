@@ -15,11 +15,13 @@ from validation.runner import run_validation
 from validation.prompts import preload_all_language_prompts, slice_mixed_language_prompts_with_langs
 from validation.data import ModelInfo, RequestParams, ServerConfig, RunParams, InferenceValidationRun
 from validation.model_presets import QWEN3_30B_INT4, QWEN3_30B_FP8
+from validation.model_presets import GEMMA_3_27B_INT4, GEMMA_3_27B_FP8
 
 
 N_PROMPTS = 1000
+MAX_WORKERS = 50
 run_params_high_temp = RunParams(
-    exp_name='qwen30B',
+    exp_name='qwen30_repro5',
     output_path='../data/inference_results',
     n_prompts=N_PROMPTS,
     timeout=1800,
@@ -28,7 +30,7 @@ run_params_high_temp = RunParams(
         max_tokens=3000,
         temperature=0.99,
         seed=42,
-        top_logprobs=4,
+        top_logprobs=5,
     ),
 )
 
@@ -40,37 +42,31 @@ def get_run_params(temp, prompts):
 
 
 server_1xH100_1 = ServerConfig(
-    ip='208.64.254.166',
-    inference_port='26919',
-    node_port='32605',
+    ip='192.222.53.216',
+    inference_port='64158',
+    node_port='13010',
     gpu='1xH100',
 )
 
 server_1xH100_2 = ServerConfig(
-    ip='80.188.223.202',
-    inference_port='17083',
-    node_port='17867',
+    ip='208.64.254.166',
+    inference_port='31772',
+    node_port='17374',
     gpu='1xH100',
 )
 
-server_1xH100_3 = ServerConfig(
-    ip='80.188.223.202',
-    inference_port='17295',
-    node_port='17852',
-    gpu='1xH100',
-)
 
 server_2x3090_1 = ServerConfig(
     ip='72.49.201.130',
-    inference_port='46726',
-    node_port='47177',
+    inference_port='47464',
+    node_port='47192',
     gpu='2x3090',
 )
 
 server_2x3090_2 = ServerConfig(
-    ip='24.124.32.70',
-    inference_port='49622',
-    node_port='49615',
+    ip='213.224.31.105',
+    inference_port='28534',
+    node_port='28860',
     gpu='2x3090',
 )
 
@@ -85,17 +81,17 @@ runs = [
         server_validation=server_1xH100_2,
         run_inference=get_run_params(0.7, N_PROMPTS//5),
         run_validation=get_run_params(0.7, N_PROMPTS//5),
-        max_workers=10,
+        max_workers=MAX_WORKERS,
     ),
     # Config 2: Fradulent INT4 on 2x3090 vs FP8 on 1xH100
     InferenceValidationRun(
         model_inference=QWEN3_30B_INT4,
         model_validation=QWEN3_30B_FP8,
         server_inference=server_2x3090_1,
-        server_validation=server_1xH100_3,
+        server_validation=server_1xH100_1,
         run_inference=get_run_params(0.7, N_PROMPTS//5),
         run_validation=get_run_params(0.7, N_PROMPTS//5),
-        max_workers=10,
+        max_workers=MAX_WORKERS,
     ),
     # Config 3: Honest FP8 on 1xH100 vs FP8 on 1xH100
     InferenceValidationRun(
@@ -105,17 +101,17 @@ runs = [
         server_validation=server_1xH100_2,
         run_inference=get_run_params(0.99, N_PROMPTS),
         run_validation=get_run_params(0.99, N_PROMPTS),
-        max_workers=10,
+        max_workers=MAX_WORKERS,
     ),
     # Config 4: Honest FP8 on 2x3090 vs FP8 on 1xH100
     InferenceValidationRun(
         model_inference=QWEN3_30B_FP8,
         model_validation=QWEN3_30B_FP8,
         server_inference=server_2x3090_1,
-        server_validation=server_1xH100_3,
+        server_validation=server_1xH100_1,
         run_inference=get_run_params(0.99, N_PROMPTS//5),
         run_validation=get_run_params(0.99, N_PROMPTS//5),
-        max_workers=10,
+        max_workers=MAX_WORKERS,
     ),
     # Config 5: Honest FP8 on 2x3090 vs FP8 on 2x3090
     InferenceValidationRun(
@@ -125,7 +121,7 @@ runs = [
         server_validation=server_2x3090_2,
         run_inference=get_run_params(0.99, N_PROMPTS//5),
         run_validation=get_run_params(0.99, N_PROMPTS//5),
-        max_workers=10,
+        max_workers=MAX_WORKERS,
     ),
 ]
 

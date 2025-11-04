@@ -196,7 +196,7 @@ class InferenceValidationRun(BaseModel):
     server_validation: ServerConfig
     run_inference: RunParams
     run_validation: RunParams
-    max_workers: int = 10
+    max_workers: Optional[int] = None
 
     @model_validator(mode='after')
     def _apply_parallelism_from_servers(self) -> 'InferenceValidationRun':
@@ -213,8 +213,9 @@ class InferenceValidationRun(BaseModel):
         apply_parallelism_args(self.model_validation, val_gpus)
 
         # Apply max workers to both presets
-        _set_flag_value(self.model_inference.additional_args, '--max-num-seqs', str(self.max_workers))
-        _set_flag_value(self.model_validation.additional_args, '--max-num-seqs', str(self.max_workers))
+        if self.max_workers is not None:
+            _set_flag_value(self.model_inference.additional_args, '--max-num-seqs', str(self.max_workers))
+            _set_flag_value(self.model_validation.additional_args, '--max-num-seqs', str(self.max_workers))
 
         return self
 
