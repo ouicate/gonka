@@ -44,10 +44,10 @@ func TestMsgServer_SubmitNewParticipant(t *testing.T) {
 		JoinHeight:        ctx2.BlockHeight(),
 		LastInferenceTime: 0,
 		InferenceUrl:      "url",
-		Status:            types.ParticipantStatus_RAMPING,
+		Status:            types.ParticipantStatus_ACTIVE,
 		ValidatorKey:      validatorKeyString, // Verify secp256k1 public key is stored
 		WorkerPublicKey:   workerKeyString,    // Verify worker key is stored
-		CurrentEpochStats: &types.CurrentEpochStats{},
+		CurrentEpochStats: types.NewCurrentEpochStats(),
 	}, savedParticipant)
 }
 

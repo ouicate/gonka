@@ -203,6 +203,7 @@ func (k msgServer) MaximumInvalidationsReached(ctx sdk.Context, creator sdk.AccA
 		participant.Reputation,
 		int64(params.BandwidthLimitsParams.InvalidationsLimit),
 		int64(params.BandwidthLimitsParams.InvalidationsLimitCurve),
+		int64(params.BandwidthLimitsParams.MinimumConcurrentInvalidations),
 	)
 
 	return currentInvalidations >= maxValidations

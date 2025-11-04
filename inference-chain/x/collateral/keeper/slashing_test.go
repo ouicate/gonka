@@ -35,7 +35,7 @@ func (s *KeeperTestSuite) TestSlashing_Proportional() {
 		DoAndReturn(func(ctx sdk.Context, moduleName string, amt sdk.Coins, memo string) error {
 			s.Require().Equal(types.ModuleName, moduleName)
 			s.Require().Equal(expectedSlashedAmount, amt.AmountOf(inftypes.BaseCoin))
-			s.Require().Equal("collateral slashed", memo)
+			s.Require().Equal("collateral slashed:invalidation", memo)
 			return nil
 		}).
 		Times(1)
@@ -76,7 +76,7 @@ func (s *KeeperTestSuite) TestSlashing_ActiveOnly() {
 		BurnCoins(s.ctx, types.ModuleName, gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx sdk.Context, moduleName string, amt sdk.Coins, memo string) error {
 			s.Require().Equal(expectedSlashedAmount, amt.AmountOf(inftypes.BaseCoin))
-			s.Require().Equal("collateral slashed", memo)
+			s.Require().Equal("collateral slashed:invalidation", memo)
 			return nil
 		}).
 		Times(1)
@@ -115,7 +115,7 @@ func (s *KeeperTestSuite) TestSlashing_UnbondingOnly() {
 		BurnCoins(s.ctx, types.ModuleName, gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx sdk.Context, moduleName string, amt sdk.Coins, memo string) error {
 			s.Require().Equal(expectedSlashedAmount, amt.AmountOf(inftypes.BaseCoin))
-			s.Require().Equal("collateral slashed", memo)
+			s.Require().Equal("collateral slashed:invalidation", memo)
 			return nil
 		}).
 		Times(1)

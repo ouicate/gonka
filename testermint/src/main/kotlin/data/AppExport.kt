@@ -189,6 +189,8 @@ data class BandwidthLimitsParams(
     val kbPerInputToken: Decimal,
     @SerializedName("kb_per_output_token")
     val kbPerOutputToken: Decimal,
+    @SerializedName("minimum_concurrent_invalidations")
+    val minimumConcurrentInvalidations: Long,
 )
 
 data class PocParams(

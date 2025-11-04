@@ -41,11 +41,17 @@ data class UnfundedInferenceParticipant(
     val address: String
 )
 
-
 data class ActiveParticipantsResponse(
     val activeParticipants: ActiveParticipants,
     val addresses: List<String>,
     val validators: List<ActiveValidator>,
+    val excludedParticipants: List<ExcludedParticipant>
+)
+
+data class ExcludedParticipant(
+    val address: String,
+    val reason: String,
+    val effectiveHeight: Long,
 )
 
 data class ActiveParticipants(

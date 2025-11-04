@@ -1,4 +1,5 @@
 import com.productscience.*
+import com.productscience.assertions.assertThat
 import com.productscience.data.*
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
@@ -12,7 +13,6 @@ import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertNotNull
-import com.productscience.assertions.assertThat
 
 @Timeout(value = 15, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -82,9 +82,9 @@ class ValidationTests : TestermintTest() {
 
         val dispatcher = Executors.newFixedThreadPool(10).asCoroutineDispatcher()
         runBlocking(dispatcher) {
-            val deferreds = (1..10).map {
+        val deferreds = (1..10).map {
                 async {
-                    InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!").runFullInference()
+            InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!").runFullInference()
                 }
             }
             deferreds.awaitAll()
@@ -94,10 +94,13 @@ class ValidationTests : TestermintTest() {
 
         genesis.markNeedsReboot()
         logSection("Waiting for removal")
-        genesis.node.waitForNextBlock(10)
+        genesis.node.waitForNextBlock(2)
         val participants = genesis.api.getActiveParticipants()
-        assertThat(participants.activeParticipants.participants).noneMatch { it.index == genesis.node.getColdAddress() }
-        assertThat(participants.validators).hasSize(2)
+        val excluded = participants.excludedParticipants.firstOrNull()
+        assertNotNull(excluded, "Participant was not excluded")
+        assertThat(excluded.address).isEqualTo(genesis.node.getColdAddress())
+        val validators = genesis.node.getValidators()
+        assertThat(validators.validators).hasSize(2)
     }
 
     @Test
@@ -208,12 +211,17 @@ class ValidationTests : TestermintTest() {
             this[AppState::inference] = spec<InferenceState> {
                 this[InferenceState::params] = spec<InferenceParams> {
                     this[InferenceParams::validationParams] = spec<ValidationParams> {
-                        this[ValidationParams::minValidationAverage] = Decimal.fromDouble(10.0)
-                        this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(10.0)
+                        this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
+                        this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
 
+                    }
+                    this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
+                        this[BandwidthLimitsParams::minimumConcurrentInvalidations] = 100L
                     }
                     this[InferenceParams::epochParams] = spec<EpochParams> {
                         this[EpochParams::inferencePruningEpochThreshold] = 100L
+                        // need longer epochs to have time for invalidations
+//                        this[EpochParams::epochLength] = 20L
                     }
                 }
             }
