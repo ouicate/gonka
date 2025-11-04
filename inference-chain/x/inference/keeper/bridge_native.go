@@ -14,7 +14,7 @@ import (
 
 // GetBridgeEscrowAddress returns the bridge escrow module account address
 func (k Keeper) GetBridgeEscrowAddress() sdk.AccAddress {
-	return k.AccountKeeper.GetModuleAddress(types.ModuleName + "/" + types.BridgeEscrowAccName)
+	return k.AccountKeeper.GetModuleAddress(types.BridgeEscrowAccName)
 }
 
 // GetBridgeEscrowBalance returns the current balance of native tokens in the bridge escrow account
@@ -26,13 +26,13 @@ func (k Keeper) GetBridgeEscrowBalance(ctx sdk.Context, denom string) sdk.Coin {
 // TransferToEscrow transfers native tokens from user to bridge escrow account
 func (k Keeper) TransferToEscrow(ctx sdk.Context, fromAddr sdk.AccAddress, amount sdk.Coins) error {
 	// Use SendCoinsFromAccountToModule for proper module account handling
-	return k.BankKeeper.SendCoinsFromAccountToModule(ctx, fromAddr, types.ModuleName, amount, "bridge_escrow")
+	return k.BankKeeper.SendCoinsFromAccountToModule(ctx, fromAddr, types.BridgeEscrowAccName, amount, "bridge_escrow")
 }
 
 // ReleaseFromEscrow transfers native tokens from bridge escrow account to user
 func (k Keeper) ReleaseFromEscrow(ctx sdk.Context, toAddr sdk.AccAddress, amount sdk.Coins) error {
 	// Use SendCoinsFromModuleToAccount for proper module account handling
-	return k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, toAddr, amount, "bridge_release")
+	return k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.BridgeEscrowAccName, toAddr, amount, "bridge_release")
 }
 
 // IsBridgeContractAddress checks if the given contract address matches any registered bridge addresses
