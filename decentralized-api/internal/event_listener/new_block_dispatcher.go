@@ -388,6 +388,50 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 			}
 		}()
 	}
+
+	// Confirmation PoC transitions (during inference phase)
+	if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
+		event := epochState.ActiveConfirmationPoCEvent
+
+		// Start generation
+		if blockHeight == event.GenerationStartHeight {
+			logging.Info("Confirmation PoC generation starting", types.PoC,
+				"trigger_height", event.TriggerHeight,
+				"block_hash", event.PocSeedBlockHash)
+
+			command := broker.NewStartPocCommand()
+			if err := d.nodeBroker.QueueMessage(command); err != nil {
+				logging.Error("Failed to send confirmation PoC start command", types.PoC, "error", err)
+			}
+		}
+
+		// Start validation
+		if blockHeight == event.ValidationStartHeight {
+			logging.Info("Confirmation PoC validation starting", types.PoC,
+				"trigger_height", event.TriggerHeight)
+
+			command := broker.NewInitValidateCommand()
+			if err := d.nodeBroker.QueueMessage(command); err != nil {
+				logging.Error("Failed to send confirmation PoC validate command", types.PoC, "error", err)
+			}
+
+			// Start validation sampling
+			go func() {
+				d.nodePocOrchestrator.ValidateReceivedBatches(event.TriggerHeight)
+			}()
+		}
+
+		// End of event - return to inference
+		if blockHeight == event.ValidationEndHeight+1 {
+			logging.Info("Confirmation PoC completed", types.PoC,
+				"trigger_height", event.TriggerHeight)
+
+			command := broker.NewInferenceUpAllCommand()
+			if err := d.nodeBroker.QueueMessage(command); err != nil {
+				logging.Error("Failed to send inference up command", types.PoC, "error", err)
+			}
+		}
+	}
 }
 
 // shouldTriggerReconciliation determines if reconciliation should be triggered
