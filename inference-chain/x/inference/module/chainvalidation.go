@@ -226,12 +226,11 @@ func (am AppModule) GetPreservedNodesByParticipant(ctx context.Context, epochId 
 	return result, nil
 }
 
-func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.Epoch) ([]*types.ActiveParticipant, map[string]int64) {
+func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.Epoch) []*types.ActiveParticipant {
 	epochStartBlockHeight := upcomingEpoch.PocStartBlockHeight
 	am.LogInfo("ComputeNewWeights: computing new weights", types.PoC,
 		"upcomingEpoch.Index", upcomingEpoch.Index,
 		"upcomingEpoch.PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight)
-
 	// STEP 1: Get preserved weights from inference-serving MLNodes in current epoch
 	preservedParticipants := am.GetPreviousEpochMLNodesWithInferenceAllocation(ctx, upcomingEpoch)
 	am.LogInfo("ComputeNewWeights: Retrieved preserved participants", types.PoC,
@@ -249,7 +248,7 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 			"upcomingEpoch.Index", upcomingEpoch.Index,
 			"upcomingEpoch.PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight,
 			"error", err)
-		return nil, nil
+		return nil
 	}
 
 	// STEP 2: Get PoC batches and filter out batches from inference-serving nodes
@@ -259,7 +258,7 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 			"upcomingEpoch.Index", upcomingEpoch.Index,
 			"upcomingEpoch.PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight,
 			"error", err)
-		return nil, nil
+		return nil
 	}
 
 	// Build a set of inference-serving node IDs that should be excluded from PoC mining
@@ -354,25 +353,7 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 	)
 	pocMiningParticipants := calculator.Calculate()
 
-	// STEP 4.5: Calculate confirmation weights for this epoch
-	effectiveEpoch, found := am.keeper.GetEffectiveEpoch(ctx)
-	var confirmationWeights map[string]int64
-	if found && effectiveEpoch != nil {
-		confirmationWeights = am.calculateConfirmationWeights(
-			ctx,
-			effectiveEpoch.Index,
-			currentValidatorWeights,
-			participants,
-			seeds,
-		)
-		if len(confirmationWeights) > 0 {
-			am.LogInfo("ComputeNewWeights: Calculated confirmation weights", types.PoC,
-				"epochIndex", effectiveEpoch.Index,
-				"numParticipants", len(confirmationWeights))
-		}
-	}
-
-	// STEP 5: Merge preserved participants with PoC mining participants
+	// STEP 4: Merge preserved participants with PoC mining participants
 	var allActiveParticipants []*types.ActiveParticipant
 
 	// Add preserved participants first
@@ -436,10 +417,9 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 		"pocMiningParticipants", len(pocMiningParticipants),
 		"totalActiveParticipants", len(allActiveParticipants))
 
-	return allActiveParticipants, confirmationWeights
+	return allActiveParticipants
 }
 
-// Helper function to find participant by address in a slice
 func findParticipantByAddress(participants []*types.ActiveParticipant, address string) *types.ActiveParticipant {
 	for _, participant := range participants {
 		if participant.Index == address {

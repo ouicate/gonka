@@ -1341,8 +1341,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 			EpochIndex: 1,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        300, // Original total weight
+					MemberAddress:      "participant1",
+					Weight:             300, // Original total weight
 					ConfirmationWeight: 150, // Confirmed only 150 out of 200 non-preserved
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1358,8 +1358,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 					},
 				},
 				{
-					MemberAddress: "participant2",
-					Weight:        150, // Original total weight
+					MemberAddress:      "participant2",
+					Weight:             150, // Original total weight
 					ConfirmationWeight: 100, // Confirmed 100
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1393,7 +1393,7 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 		// Total = 400
 		// participant1 has 250/400 = 62.5% which exceeds 50% cap (2 participants)
 		// Power capping WILL apply
-		
+
 		// After capping to 50%: both get equal weights = 150 each
 		// Total after cap = 300
 		// participant1: 150/300 * 600 = 300
@@ -1414,8 +1414,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 			EpochIndex: 1,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        300,
+					MemberAddress:      "participant1",
+					Weight:             300,
 					ConfirmationWeight: 0, // Failed confirmation PoC completely
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1431,8 +1431,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 					},
 				},
 				{
-					MemberAddress: "participant2",
-					Weight:        200,
+					MemberAddress:      "participant2",
+					Weight:             200,
 					ConfirmationWeight: 200, // Successful confirmation
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1460,7 +1460,7 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationCapping(t *testing.T) {
 		// Total = 300
 		// participant2 has 200/300 = 66.7% which exceeds 50% cap (2 participants)
 		// Power capping WILL apply
-		
+
 		// After capping to 50%: both get equal weights = 100 each
 		// Total after cap = 200
 		// participant1: 100/200 * 300 = 150
@@ -1483,8 +1483,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationAndPowerCapping(t *testi
 			EpochIndex: 1,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        700,
+					MemberAddress:      "participant1",
+					Weight:             700,
 					ConfirmationWeight: 600, // Large confirmed weight
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1500,8 +1500,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationAndPowerCapping(t *testi
 					},
 				},
 				{
-					MemberAddress: "participant2",
-					Weight:        100,
+					MemberAddress:      "participant2",
+					Weight:             100,
 					ConfirmationWeight: 100,
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1527,17 +1527,17 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationAndPowerCapping(t *testi
 		// participant1: preserved(100) + confirmed(600) = 700
 		// participant2: preserved(0) + confirmed(100) = 100
 		// Total = 800
-		
+
 		// participant1 has 700/800 = 87.5% (exceeds 30% cap for 2 participants = 50%)
 		// Power capping will reduce participant1's weight
-		
+
 		// With 2 participants, max allowed = 50%
 		// Cap calculation: participant1 capped, participant2 unchanged
 		// After capping, participant1 should be capped to at most 50% of total
-		
+
 		totalReward := results[0].Settle.RewardCoins + results[1].Settle.RewardCoins
 		require.Equal(t, uint64(1000), totalReward, "Total should equal full reward")
-		
+
 		// Verify participant1 was capped (should get less than 87.5%)
 		participant1Percentage := float64(results[0].Settle.RewardCoins) / float64(totalReward)
 		require.LessOrEqual(t, participant1Percentage, 0.51, "participant1 should be capped below original 87.5%")
@@ -1558,8 +1558,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationEdgeCases(t *testing.T) 
 			EpochIndex: 1,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        300,
+					MemberAddress:      "participant1",
+					Weight:             300,
 					ConfirmationWeight: 150,
 					MlNodes: []*types.MLNodeInfo{
 						{
@@ -1603,8 +1603,8 @@ func TestCalculateParticipantBitcoinRewards_ConfirmationEdgeCases(t *testing.T) 
 			EpochIndex: 1,
 			ValidationWeights: []*types.ValidationWeight{
 				{
-					MemberAddress: "participant1",
-					Weight:        100,
+					MemberAddress:      "participant1",
+					Weight:             100,
 					ConfirmationWeight: 0,
 					MlNodes: []*types.MLNodeInfo{
 						{

@@ -75,6 +75,11 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	confirmationParams *types.ConfirmationPoCParams,
 	sdkCtx sdk.Context,
 ) error {
+	// Don't trigger in early epochs (0, 1) - no confirmation PoC needed
+	if epochContext.EpochIndex <= 1 {
+		return nil
+	}
+
 	// Only trigger during inference phase
 	currentPhase := epochContext.GetCurrentPhase(blockHeight)
 	if currentPhase != types.InferencePhase {
@@ -145,8 +150,12 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	}
 	eventSequence := uint64(len(existingEvents))
 
-	// Calculate event heights
-	generationStartHeight := blockHeight + epochParams.InferenceValidationCutoff
+	// Calculate event heights with minimum grace period of 1 block
+	gracePeriod := epochParams.InferenceValidationCutoff
+	if gracePeriod < 1 {
+		gracePeriod = 1
+	}
+	generationStartHeight := blockHeight + gracePeriod
 	generationEndHeight := generationStartHeight + epochParams.PocStageDuration - 1
 	validationStartHeight := generationEndHeight + 1
 	validationEndHeight := validationStartHeight + epochParams.PocValidationDuration - 1
@@ -195,6 +204,10 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 ) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
+	if epochContext.EpochIndex <= 1 {
+		return nil
+	}
+
 	activeEvent, isActive, err := am.keeper.GetActiveConfirmationPoCEvent(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active confirmation PoC event: %w", err)
@@ -206,38 +219,48 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 
 	event := *activeEvent
 	updated := false
+	transitionCount := 0
+	var transitions []string
 
 	// GRACE_PERIOD -> GENERATION transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GRACE_PERIOD && blockHeight == event.GenerationStartHeight {
+	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GRACE_PERIOD && blockHeight >= event.GenerationStartHeight {
 		// Capture block hash from (generation_start_height - 1)
 		// At generation_start_height, HeaderInfo().Hash gives us the hash of the previous block
 		prevBlockHash := sdkCtx.HeaderInfo().Hash
 		event.PocSeedBlockHash = hex.EncodeToString(prevBlockHash)
 		event.Phase = types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION
 		updated = true
+		transitionCount++
+		transitions = append(transitions, "GRACE_PERIOD->GENERATION")
 
 		am.LogInfo("Confirmation PoC: GRACE_PERIOD -> GENERATION", types.PoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
+			"blockHeight", blockHeight,
 			"generationStartHeight", event.GenerationStartHeight,
 			"pocSeedBlockHash", event.PocSeedBlockHash[:16]+"...")
 	}
 
 	// GENERATION -> VALIDATION transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION && blockHeight == event.ValidationStartHeight {
+	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_GENERATION && blockHeight >= event.ValidationStartHeight {
 		event.Phase = types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION
 		updated = true
+		transitionCount++
+		transitions = append(transitions, "GENERATION->VALIDATION")
 
 		am.LogInfo("Confirmation PoC: GENERATION -> VALIDATION", types.PoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
+			"blockHeight", blockHeight,
 			"validationStartHeight", event.ValidationStartHeight)
 	}
 
 	// VALIDATION -> COMPLETED transition
-	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION && blockHeight == event.ValidationEndHeight+1 {
+	if event.Phase == types.ConfirmationPoCPhase_CONFIRMATION_POC_VALIDATION && blockHeight >= event.ValidationEndHeight+1 {
 		event.Phase = types.ConfirmationPoCPhase_CONFIRMATION_POC_COMPLETED
 		updated = true
+		transitionCount++
+		transitions = append(transitions, "VALIDATION->COMPLETED")
 
 		// Clear active event
 		err = am.keeper.ClearActiveConfirmationPoCEvent(ctx)
@@ -248,7 +271,18 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		am.LogInfo("Confirmation PoC: VALIDATION -> COMPLETED", types.PoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
+			"blockHeight", blockHeight,
 			"validationEndHeight", event.ValidationEndHeight)
+	}
+
+	// Warn if multiple transitions occurred (catch-up scenario)
+	if transitionCount > 1 {
+		am.LogWarn("Confirmation PoC: Multiple phase transitions in single block (catch-up)", types.PoC,
+			"epochIndex", event.EpochIndex,
+			"eventSequence", event.EventSequence,
+			"blockHeight", blockHeight,
+			"transitionCount", transitionCount,
+			"transitions", transitions)
 	}
 
 	// Update the event if phase changed

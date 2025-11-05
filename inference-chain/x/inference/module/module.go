@@ -406,7 +406,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
-	activeParticipants, confirmationWeights := am.ComputeNewWeights(ctx, *upcomingEpoch)
+	activeParticipants := am.ComputeNewWeights(ctx, *upcomingEpoch)
 	if activeParticipants == nil {
 		am.LogError("onEndOfPoCValidationStage: computeResult == nil && activeParticipants == nil", types.PoC)
 		return
@@ -457,7 +457,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		return
 	}
 
-	am.addEpochMembers(ctx, upcomingEg, activeParticipants, confirmationWeights)
+	am.addEpochMembers(ctx, upcomingEg, activeParticipants)
 
 	// Call BLS module to initiate key generation for the new epoch
 	am.InitiateBLSKeyGeneration(ctx, upcomingEpoch.Index, activeParticipants)
@@ -506,7 +506,7 @@ func (am AppModule) onSetNewValidatorsStage(ctx context.Context, blockHeight int
 	am.moveUpcomingToEffectiveGroup(ctx, blockHeight, unitOfComputePrice)
 }
 
-func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.EpochGroup, activeParticipants []*types.ActiveParticipant, confirmationWeights map[string]int64) {
+func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.EpochGroup, activeParticipants []*types.ActiveParticipant) {
 	validationParams := am.keeper.GetParams(ctx).ValidationParams
 
 	for _, p := range activeParticipants {
@@ -520,16 +520,8 @@ func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.
 				"participantIndex", p.Index)
 			continue
 		}
-		
-		// Get confirmation weight for this participant (if available)
-		confirmationWeight := int64(0)
-		if confirmationWeights != nil {
-			if cw, found := confirmationWeights[p.Index]; found {
-				confirmationWeight = cw
-			}
-		}
-		
-		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation, confirmationWeight)
+
+		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation, 0)
 		err = upcomingEg.AddMember(ctx, member)
 		if err != nil {
 			am.LogError("onSetNewValidatorsStage: Unable to add member", types.EpochGroup, "error", err.Error())

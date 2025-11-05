@@ -72,6 +72,8 @@ data class InferenceParams(
     val dynamicPricingParams: DynamicPricingParams? = null,
     @SerializedName("bandwidth_limits_params")
     val bandwidthLimitsParams: BandwidthLimitsParams? = null,
+    @SerializedName("confirmation_poc_params")
+    val confirmationPocParams: ConfirmationPoCParams? = null,
 )
 
 data class TokenomicsParams(
@@ -189,6 +191,15 @@ data class BandwidthLimitsParams(
     val kbPerInputToken: Decimal,
     @SerializedName("kb_per_output_token")
     val kbPerOutputToken: Decimal,
+)
+
+data class ConfirmationPoCParams(
+    @SerializedName("expected_confirmations_per_epoch")
+    val expectedConfirmationsPerEpoch: Long = 0,
+    @SerializedName("alpha_threshold")
+    val alphaThreshold: Decimal = Decimal(70, -2),  // 0.70
+    @SerializedName("slash_fraction")
+    val slashFraction: Decimal = Decimal(10, -2),  // 0.10
 )
 
 data class PocParams(
