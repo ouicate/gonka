@@ -15,7 +15,7 @@ class ConfirmationPoCTests : TestermintTest() {
         logSection("=== TEST: Confirmation PoC Passed - Same Rewards ===")
         
         // Initialize cluster with custom spec for confirmation PoC testing
-        // Use default epoch params (15 blocks), only add confirmation PoC config
+        // Configure epoch timing to allow confirmation PoC triggers during inference phase
         val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 2)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
@@ -90,13 +90,24 @@ class ConfirmationPoCTests : TestermintTest() {
         )
         
         // All participants should have received rewards based on their full weight
+        val balanceChanges = mutableListOf<Long>()
         finalBalances.forEach { (address, finalBalance) ->
             val initialBalance = initialBalances[address]!!
             val change = finalBalance - initialBalance
+            balanceChanges.add(change)
             Logger.info("  $address: balance change = $change")
             // Should have positive reward (not capped since confirmation weight matches regular weight)
             assertThat(change).isGreaterThan(0)
         }
+        
+        // All participants have same weight (10) and same confirmation weight (10)
+        // So they should receive identical rewards
+        logSection("Verifying all balance changes are identical")
+        val expectedChange = balanceChanges[0]
+        balanceChanges.forEach { change ->
+            assertThat(change).isCloseTo(expectedChange, Offset.offset(1L))
+        }
+        Logger.info("  All participants received identical rewards: $expectedChange")
         
         logSection("TEST PASSED: Confirmation PoC with same weight does not affect rewards")
     }
@@ -106,7 +117,7 @@ class ConfirmationPoCTests : TestermintTest() {
         logSection("=== TEST: Confirmation PoC Failed - Capped Rewards ===")
         
         // Initialize cluster with custom spec for confirmation PoC testing
-        // Use default epoch params (15 blocks), only add confirmation PoC config
+        // Configure epoch timing to allow confirmation PoC triggers during inference phase
         val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 2)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
@@ -149,26 +160,36 @@ class ConfirmationPoCTests : TestermintTest() {
         assertThat(confirmationEvent).isNotNull
         Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
         
-        logSection("Waiting for confirmation PoC completion")
+        logSection("Waiting for confirmation PoC grace period")
+        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GRACE_PERIOD)
+        Logger.info("Confirmation PoC grace period active (nodes finishing inference)")
+        
+        logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
+        Logger.info("Confirmation PoC generation phase active")
+        
+        logSection("Waiting for confirmation PoC validation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_VALIDATION)
+        Logger.info("Confirmation PoC validation phase active")
+        
+        logSection("Waiting for confirmation PoC completion")
         waitForConfirmationPoCCompletion(genesis)
         Logger.info("Confirmation PoC completed (event cleared)")
+        
+        logSection("Verifying no slashing occurred for Join1 (above alpha threshold)")
+        val join1Address = join1.node.getColdAddress()
+        val validatorsAfterPoC = genesis.node.getValidators()
+        val join1ValidatorAfterPoC = validatorsAfterPoC.validators.find { 
+            it.consensusPubkey.value == join1.node.getValidatorInfo().key 
+        }
+        assertThat(join1ValidatorAfterPoC).isNotNull
+        assertThat(join1ValidatorAfterPoC!!.status).isEqualTo(StakeValidatorStatus.BONDED.value)
+        Logger.info("  Join1 is still bonded (not slashed, confirmation_weight=8 > alpha*regular_weight=7)")
         
         logSection("Waiting for NEXT epoch where confirmation weights will be applied")
         // Confirmation weights are only calculated and applied during the next epoch's settlement
         genesis.waitForStage(EpochStage.START_OF_POC)
         Logger.info("New epoch started, confirmation weights will be used in settlement")
-        
-        logSection("Verifying no slashing occurred for Join1")
-        val validators = genesis.node.getValidators()
-        val join1Address = join1.node.getColdAddress()
-        val join1Validator = validators.validators.find { 
-            it.consensusPubkey.value == join1.node.getValidatorInfo().key 
-        }
-        assertThat(join1Validator).isNotNull
-        assertThat(join1Validator!!.status).isEqualTo(StakeValidatorStatus.BONDED.value)
-        Logger.info("  Join1 is still bonded (not slashed, above alpha threshold)")
         
         // Record balances AFTER confirmation but BEFORE settlement
         val initialBalances = mapOf(
@@ -192,19 +213,33 @@ class ConfirmationPoCTests : TestermintTest() {
         val join2Change = finalBalances[join2.node.getColdAddress()]!! - initialBalances[join2.node.getColdAddress()]!!
         
         Logger.info("Balance changes:")
-        Logger.info("  Genesis: $genesisChange (weight=10, confirmation=10)")
-        Logger.info("  Join1: $join1Change (weight=10, confirmation=8)")
-        Logger.info("  Join2: $join2Change (weight=10, confirmation=10)")
+        Logger.info("  Genesis: $genesisChange (regular_weight=10, confirmation_weight=10)")
+        Logger.info("  Join1: $join1Change (regular_weight=10, confirmation_weight=8)")
+        Logger.info("  Join2: $join2Change (regular_weight=10, confirmation_weight=10)")
         
-        // Join1 should have lower rewards due to capped confirmation weight
-        // Genesis and Join2 should have similar rewards (both full weight)
+        // All participants should have positive rewards (Join1 not slashed, above alpha threshold)
+        assertThat(genesisChange).isGreaterThan(0)
+        assertThat(join1Change).isGreaterThan(0)
+        assertThat(join2Change).isGreaterThan(0)
+        Logger.info("  All participants received positive rewards")
+        
+        // Genesis and Join2 should have identical rewards (both full weight)
+        logSection("Verifying Genesis and Join2 receive identical rewards")
+        assertThat(genesisChange).isCloseTo(join2Change, Offset.offset(1L))
+        Logger.info("  Genesis and Join2 received identical rewards: $genesisChange")
+        
+        // Join1 should have lower rewards due to capped confirmation weight (8 vs 10)
+        // Expected ratio: join1Change / genesisChange ≈ 8/10 = 0.8
+        logSection("Verifying Join1 rewards are capped proportionally")
         assertThat(join1Change).isLessThan(genesisChange)
         assertThat(join1Change).isLessThan(join2Change)
         Logger.info("  Join1 rewards are capped (lower than Genesis and Join2)")
         
-        // Join1 should still have positive rewards (not slashed, just capped)
-        assertThat(join1Change).isGreaterThan(0)
-        Logger.info("  Join1 still received rewards (not slashed)")
+        // Verify the ratio is approximately 8:10 (allowing some tolerance for rounding)
+        val actualRatio = join1Change.toDouble() / genesisChange.toDouble()
+        val expectedRatio = 8.0 / 10.0  // 0.8
+        assertThat(actualRatio).isCloseTo(expectedRatio, Offset.offset(0.05))
+        Logger.info("  Join1 reward ratio: $actualRatio (expected: $expectedRatio)")
         
         logSection("TEST PASSED: Confirmation PoC correctly caps rewards for lower confirmed weight")
     }
@@ -214,7 +249,9 @@ class ConfirmationPoCTests : TestermintTest() {
     private fun createConfirmationPoCSpec(
         expectedConfirmationsPerEpoch: Long
     ): Spec<AppState> {
-        // Only override confirmation PoC params, keep default epoch params (15 blocks works fine)
+        // Configure epoch params and confirmation PoC params
+        // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
+        // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
         return spec {
             this[AppState::inference] = spec<InferenceState> {
                 this[InferenceState::params] = spec<InferenceParams> {
