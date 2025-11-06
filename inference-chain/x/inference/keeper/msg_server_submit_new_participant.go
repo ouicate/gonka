@@ -14,9 +14,15 @@ func (k msgServer) SubmitNewParticipant(goCtx context.Context, msg *types.MsgSub
 	// ValidatorKey, WorkerKey, and Url as per requirements.
 	if existing, found := k.GetParticipant(ctx, msg.GetCreator()); found {
 		// Preserve all existing fields and update only the allowed ones
-		existing.InferenceUrl = msg.GetUrl()
-		existing.ValidatorKey = msg.GetValidatorKey()
-		existing.WorkerPublicKey = msg.GetWorkerKey()
+		if msg.Url != "" {
+			existing.InferenceUrl = msg.Url
+		}
+		if msg.ValidatorKey != "" {
+			existing.ValidatorKey = msg.ValidatorKey
+		}
+		if msg.WorkerKey != "" {
+			existing.WorkerPublicKey = msg.WorkerKey
+		}
 		if err := k.SetParticipant(ctx, existing); err != nil {
 			return nil, err
 		}

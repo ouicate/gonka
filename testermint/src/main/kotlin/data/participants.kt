@@ -1,5 +1,8 @@
 package com.productscience.data
 
+import com.productscience.LocalInferencePair
+import java.time.Instant
+
 data class ParticipantsResponse(
     val participants: List<Participant>,
 )
@@ -95,3 +98,27 @@ data class ActiveValidator(
     val votingPower: Long,
     val proposerPriority: Long,
 )
+
+data class RawParticipant(
+    override val index: String,
+    val address: String,
+    val weight: Long,
+    val joinTime: Long,
+    val joinHeight: Long,
+    val inferenceUrl: String,
+    val status: Int,
+    val epochsCompleted: Long,
+) : ParticipantInfo
+
+data class RawParticipantWrapper(
+    val participant: List<RawParticipant>
+)
+
+interface ParticipantInfo {
+    val index: String
+}
+
+@Suppress("UNCHECKED_CAST")
+fun <T : ParticipantInfo> Iterable<ParticipantInfo>.getParticipant(pair: LocalInferencePair): T? =
+    this.firstOrNull { it.index == pair.node.getColdAddress() } as? T
+
