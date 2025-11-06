@@ -197,7 +197,11 @@ func getDataFormMainnetfunc(ctx context.Context, epoch string) (*contracts.Activ
 
 	participantsData := make(map[string]string)
 	for _, participant := range prevParticipants.Participants {
-		fmt.Printf("participant.ValidatorKey %v \n", participant.ValidatorKey)
+		// fmt.Printf("participant.ValidatorKey %v \n", participant.ValidatorKey)
+		if participant.ValidatorKey == "" {
+			continue
+		}
+
 		addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
 		if err != nil {
 			return nil, err
@@ -237,14 +241,9 @@ func getDataFormMainnetfunc(ctx context.Context, epoch string) (*contracts.Activ
 	}, nil
 }
 
-func TestKey(t *testing.T) {
-	const key = "fqBKfST8ugF7vQWRJEUu6lP5702vlrMVwA3PyuxLbTY="
-	common.ConsensusKeyToConsensusAddress(key)
-
-}
 func Test_Verification(t *testing.T) {
 	const expectedAppHash = "9A3FAFD33F4694FD906B41860C6D3AE1DA5DA8F6F6A8C58BE56CFABBD8384E13"
-	err := externalutils.VerifyParticipants(context.Background(), expectedAppHash, getDataFormMainnetfunc, "30")
+	err := externalutils.VerifyParticipants(context.Background(), expectedAppHash, getDataFormMainnetfunc, "75")
 	assert.NoError(t, err)
 }
 

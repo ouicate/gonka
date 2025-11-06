@@ -24,11 +24,6 @@ var (
 	ErrParticipantsNotFound      = errors.New("participants not found")
 )
 
-type commitData struct {
-	pk     string
-	weight int64
-}
-
 func (s msgServer) SubmitParticipantsProof(goCtx context.Context, msg *types.MsgSubmitParticipantsProof) (*types.MsgSubmitParticipantsProofResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	if msg.BlockHeight == 0 {
@@ -108,29 +103,14 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 
 	prevParticipantsData := make(map[string]*contracts.CommitInfo)
 	totalPower := int64(0)
-	for _, participant := range prevParticipants.Participants {
-		if participant.ValidatorKey == "" {
-			continue
-		}
 
-		addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
-		if err != nil {
-			return nil, err
+	for _, participant := range results {
+		prevParticipantsData[participant.ValidatorPubKey.Address().String()] = &contracts.CommitInfo{
+			ValidatorAddress: participant.ValidatorPubKey.Address().String(),
+			ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Address().Bytes()),
+			VotingPower:      participant.Power,
 		}
-
-		var weight int64
-		for _, res := range results {
-			if base64.StdEncoding.EncodeToString(res.ValidatorPubKey.Bytes()) == participant.ValidatorKey {
-				weight = res.Power
-			}
-			totalPower += res.Power
-		}
-
-		prevParticipantsData[strings.ToUpper(addrHex)] = &contracts.CommitInfo{
-			ValidatorAddress: "",
-			ValidatorPubKey:  participant.ValidatorKey,
-			VotingPower:      weight,
-		}
+		totalPower += participant.Power
 	}
 
 	if err := verifyGivenProofs(msg, prevParticipantsData); err != nil {
@@ -191,17 +171,17 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 }
 
 func verifyGivenProofs(msg *types.MsgSubmitActiveParticipantsProofData, participantsData map[string]*contracts.CommitInfo) error {
-	for _, sign := range msg.CurrentBlockValidatorsProof.Signatures {
-		if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
-			return errors.New("validator address not found in previous participants")
-		}
-	}
-
-	for _, sign := range msg.NextBlockValidatorsProof.Signatures {
-		if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
-			return errors.New("validator address not found in previous participants")
-		}
-	}
+	//for _, sign := range msg.CurrentBlockValidatorsProof.Signatures {
+	//	if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
+	//		return errors.New("validator address not found in previous participants")
+	//	}
+	//}
+	//
+	//for _, sign := range msg.NextBlockValidatorsProof.Signatures {
+	//	if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
+	//		return errors.New("validator address not found in previous participants")
+	//	}
+	//}
 
 	// 2. verify current block signatures
 	currentProof := common.ToContractsValidatorsProof(msg.CurrentBlockValidatorsProof)

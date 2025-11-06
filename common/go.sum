@@ -323,6 +323,7 @@ github.com/gonka-ai/gonka-utils/go v0.0.0-20250917223316-7583c27b562a/go.mod h1:
 github.com/gonka-ai/gonka-utils/go v0.0.0-20251031164130-050eebb085ee/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
 github.com/gonka-ai/gonka-utils/go v0.0.0-20251103194014-9c8cbdd890ee h1:HkLgS4THJUdF40C0Cjhu2jAxziJw7tWqHbK/fPXjuLQ=
 github.com/gonka-ai/gonka-utils/go v0.0.0-20251103194014-9c8cbdd890ee/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
+github.com/gonka-ai/gonka-utils/go v0.0.0-20251106183404-0352607cacf3/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.1.3 h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=

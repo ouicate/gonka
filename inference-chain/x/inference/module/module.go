@@ -178,9 +178,10 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 		// Don't return error - allow block processing to continue even if pricing update fails
 	}
 
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	currentHeight := sdkCtx.BlockHeight()
-	am.createBlockProof(sdkCtx, ctx, currentHeight)
+	// TODO uncomment me!
+	/*	sdkCtx := sdk.UnwrapSDKContext(ctx)
+		currentHeight := sdkCtx.BlockHeight()
+		am.createBlockProof(sdkCtx, ctx, currentHeight)*/
 	return nil
 }
 
