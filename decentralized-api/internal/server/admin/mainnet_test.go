@@ -16,6 +16,8 @@ import (
 	"github.com/gonka-ai/gonka-utils/go/contracts"
 	externalutils "github.com/gonka-ai/gonka-utils/go/utils"
 	"github.com/productscience/common"
+	keepertest "github.com/productscience/inference/testutil/keeper"
+	"github.com/productscience/inference/x/inference/epochgroup"
 	"github.com/productscience/inference/x/inference/types"
 	"github.com/stretchr/testify/assert"
 	"strconv"
@@ -277,4 +279,80 @@ func Test_WeightCalculation(t *testing.T) {
 		})
 	}
 
+}
+
+func Test_Weights(t *testing.T) {
+	const (
+		archiveNodeEndpoint = "http://204.12.168.157:26657"
+		epochId             = 38
+	)
+	archiveClient, err := rpcclient.New(archiveNodeEndpoint, "/websocket")
+	assert.NoError(t, err)
+
+	activeParticipants, _, err := getParticipants(archiveClient, uint64(epochId))
+	assert.NoError(t, err)
+
+	prevParticipants, _, err := getParticipants(archiveClient, uint64(epochId-1))
+	assert.NoError(t, err)
+
+	matched := make([]*types.ActiveParticipant, 0)
+	k, ctx, _ := keepertest.InferenceKeeperReturningMocks(t)
+
+	height := activeParticipants.EffectiveBlockHeight
+	resp, err := archiveClient.Validators(ctx, &height, nil, nil)
+	assert.NoError(t, err)
+
+	for _, val := range resp.Validators {
+		for _, participant := range prevParticipants.Participants {
+			addr, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
+			assert.NoError(t, err)
+
+			if val.PubKey.Address().String() == addr {
+				matched = append(matched, participant)
+			}
+		}
+	}
+
+	cfg := sdk.GetConfig()
+	cfg.SetBech32PrefixForAccount("gonka", "gonkapub")
+	cfg.SetBech32PrefixForValidator("gonkavaloper", "gonkavaloperpub")
+	cfg.SetBech32PrefixForConsensusNode("gonkavalcons", "gonkavalconspub")
+	cfg.Seal()
+
+	genesisParams := types.GenesisOnlyParams{
+		TotalSupply:                             1000000000000000000,
+		OriginatorSupply:                        200000000000000000,
+		StandardRewardAmount:                    680000000000000000,
+		PreProgrammedSaleAmount:                 120000000000000000,
+		TopRewards:                              3,
+		SupplyDenom:                             "ngonka",
+		TopRewardPeriod:                         31536000,
+		TopRewardPayouts:                        12,
+		TopRewardPayoutsPerMiner:                4,
+		TopRewardMaxDuration:                    126144000,
+		GenesisGuardianNetworkMaturityThreshold: 2000000,
+		GenesisGuardianMultiplier:               types.DecimalFromFloat(0.52),
+		GenesisGuardianEnabled:                  true,
+		MaxIndividualPowerPercentage:            types.DecimalFromFloat(0.30),
+		GenesisGuardianAddresses: []string{
+			"gonkavaloper1y2a9p56kv044327uycmqdexl7zs82fs5lyang5",
+			"gonkavaloper1dkl4mah5erqggvhqkpc8j3qs5tyuetgdc59d0v",
+			"gonkavaloper1kx9mca3xm8u8ypzfuhmxey66u0ufxhs70mtf0e"},
+	}
+	k.SetGenesisOnlyParams(ctx, &genesisParams)
+
+	members := epochgroup.ParticipantsToMembers(matched)
+	results := epochgroup.ComputeResultsForMembers(members)
+	results = k.ApplyEarlyNetworkProtection(ctx, results)
+
+	for _, res := range results {
+		for _, val := range resp.Validators {
+			if res.ValidatorPubKey.Address().String() == val.PubKey.Address().String() {
+				if val.VotingPower != res.Power {
+					fmt.Printf("valoper addr %v: expected %v vs actual %v\n", res.OperatorAddress, val.VotingPower, res.Power)
+				}
+				assert.Equal(t, val.VotingPower, res.Power)
+			}
+		}
+	}
 }
