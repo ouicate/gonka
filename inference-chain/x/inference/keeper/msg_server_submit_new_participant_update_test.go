@@ -66,7 +66,7 @@ func TestMsgServer_SubmitNewParticipant_UpdateExistingRestrictedFields(t *testin
 	require.Equal(t, p1.CurrentEpochStats, p2.CurrentEpochStats)
 }
 
-func TestMsgServer_SubmitNewParticipant_UpdateExistingToEmptyValues(t *testing.T) {
+func TestMsgServer_SubmitNewParticipant_EmptyValuesNoEffect(t *testing.T) {
 	k, ms, ctx := setupMsgServer(t)
 
 	valKey := base64.StdEncoding.EncodeToString(secp256k1.GenPrivKey().PubKey().Bytes())
@@ -95,9 +95,9 @@ func TestMsgServer_SubmitNewParticipant_UpdateExistingToEmptyValues(t *testing.T
 	p2, found := k.GetParticipant(ctx, testutil.Executor)
 	require.True(t, found)
 
-	require.Equal(t, "", p2.InferenceUrl)
-	require.Equal(t, "", p2.ValidatorKey)
-	require.Equal(t, "", p2.WorkerPublicKey)
+	require.Equal(t, "http://url", p2.InferenceUrl)
+	require.Equal(t, valKey, p2.ValidatorKey)
+	require.Equal(t, workKey, p2.WorkerPublicKey)
 
 	// Other fields unchanged
 	require.Equal(t, p1.Index, p2.Index)
