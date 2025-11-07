@@ -6,6 +6,7 @@ import io.ktor.server.routing.*
 import io.ktor.http.*
 import com.productscience.mockserver.model.ModelState
 import com.productscience.mockserver.model.PowState
+import com.productscience.mockserver.WebSocketManagerKey
 import org.slf4j.LoggerFactory
 
 /**
@@ -32,6 +33,13 @@ fun Route.stopRoutes() {
  */
 private suspend fun handleStopRequest(call: ApplicationCall, logger: org.slf4j.Logger) {
     logger.info("Received stop request")
+    
+    // Clean up WebSocket connections before stopping
+    val wsManager = call.application.attributes.getOrNull(WebSocketManagerKey)
+    if (wsManager != null && wsManager.isConnected()) {
+        logger.info("Cleaning up WebSocket connection before stopping")
+        wsManager.unregisterConnection()
+    }
     
     // Update the state to STOPPED
     ModelState.updateState(ModelState.STOPPED)

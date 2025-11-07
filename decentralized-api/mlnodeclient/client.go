@@ -36,7 +36,7 @@ func NewNodeClient(pocUrl string, inferenceUrl string) *Client {
 		pocUrl:       pocUrl,
 		inferenceUrl: inferenceUrl,
 		client: http.Client{
-			Timeout: 15 * time.Minute,
+			Timeout: 30 * time.Second, // Reduced from 15 minutes for faster failure detection
 		},
 		mlGrpcCallbackAddress: "api-private:9300", // TODO: PRTODO: make this configurable
 	}

@@ -14,6 +14,7 @@ import com.productscience.mockserver.service.WebSocketManager
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CancellationException
 
 /**
  * Configures routes for POW-related endpoints.
@@ -23,14 +24,14 @@ fun Route.powRoutes(webhookService: WebhookService, wsManager: WebSocketManager)
 
     // POST /api/v1/pow/init/generate - Generates POC and transitions to POW state
     post("/api/v1/pow/init/generate") {
-        handleInitGenerate(call, webhookService, logger)
+        handleInitGenerate(call, webhookService, wsManager, logger)
     }
 
     // Versioned POST /{version}/api/v1/pow/init/generate - Generates POC and transitions to POW state
     post("/{version}/api/v1/pow/init/generate") {
         val version = call.parameters["version"]
         logger.info("Received versioned POW init/generate request for version: $version")
-        handleInitGenerate(call, webhookService, logger)
+        handleInitGenerate(call, webhookService, wsManager, logger)
     }
 
     // POST /api/v1/pow/init/validate - Validates POC
@@ -67,17 +68,15 @@ fun Route.powRoutes(webhookService: WebhookService, wsManager: WebSocketManager)
         logger.debug("Received versioned POW status request for version: $version")
         handlePowStatus(call, logger)
     }
-
-    // WebSocket /api/v1/pow/ws - WebSocket endpoint for PoC batch delivery
-    webSocket("/api/v1/pow/ws") {
-        handleWebSocket(this, wsManager, logger)
-    }
 }
 
 /**
  * Handles POW init/generate requests.
+ * 
+ * Note: This handler responds immediately (200 OK) and processes webhooks asynchronously
+ * to prevent blocking the HTTP handler thread, which could cause timeouts for other endpoints.
  */
-private suspend fun handleInitGenerate(call: ApplicationCall, webhookService: WebhookService, logger: org.slf4j.Logger) {
+private suspend fun handleInitGenerate(call: ApplicationCall, webhookService: WebhookService, wsManager: WebSocketManager, logger: org.slf4j.Logger) {
     logger.info("Received POW init/generate request")
     
     // Update the state to POW
@@ -98,11 +97,12 @@ private suspend fun handleInitGenerate(call: ApplicationCall, webhookService: We
     val requestBody = call.receiveText()
     logger.debug("Processing generate POC webhook with request body: $requestBody")
 
-    // Process the webhook asynchronously
-    webhookService.processGeneratePocWebhook(requestBody)
-
-    // Respond with 200 OK
+    // Respond with 200 OK FIRST to avoid blocking the client
     call.respond(HttpStatusCode.OK)
+    
+    // Process the webhook asynchronously AFTER responding
+    // This prevents blocking HTTP handler threads with WebSocket operations
+    webhookService.processGeneratePocWebhook(requestBody)
 }
 
 /**
@@ -132,6 +132,9 @@ private suspend fun handleInitValidate(call: ApplicationCall, logger: org.slf4j.
 
 /**
  * Handles POW validate batch requests.
+ * 
+ * Note: This handler responds immediately (200 OK) and processes webhooks asynchronously
+ * to prevent blocking the HTTP handler thread.
  */
 private suspend fun handleValidateBatch(call: ApplicationCall, webhookService: WebhookService, logger: org.slf4j.Logger) {
     logger.info("Received POW validate batch request")
@@ -148,11 +151,11 @@ private suspend fun handleValidateBatch(call: ApplicationCall, webhookService: W
     val requestBody = call.receiveText()
     logger.debug("Processing validate POC batch webhook with request body: $requestBody")
 
-    // Process the webhook asynchronously
-    webhookService.processValidatePocBatchWebhook(requestBody)
-
-    // Respond with 200 OK
+    // Respond with 200 OK FIRST to avoid blocking the client
     call.respond(HttpStatusCode.OK)
+    
+    // Process the webhook asynchronously AFTER responding
+    webhookService.processValidatePocBatchWebhook(requestBody)
 }
 
 /**
@@ -172,12 +175,13 @@ private suspend fun handlePowStatus(call: ApplicationCall, logger: org.slf4j.Log
 
 /**
  * Handles WebSocket connections for PoC batch delivery.
+ * Exposed as public for registration in Application routing.
  */
-private suspend fun handleWebSocket(
+suspend fun handlePowWebSocket(
     session: DefaultWebSocketServerSession,
-    wsManager: WebSocketManager,
-    logger: org.slf4j.Logger
+    wsManager: WebSocketManager
 ) {
+    val logger = LoggerFactory.getLogger("PowWebSocket")
     // Check if PoW is running
     if (ModelState.getCurrentState() != ModelState.POW || 
         PowState.getCurrentState() == PowState.POW_STOPPED) {
@@ -196,27 +200,24 @@ private suspend fun handleWebSocket(
     logger.info("WebSocket connection accepted")
     
     try {
-        // Launch two coroutines: one for sending batches, one for receiving ACKs
         coroutineScope {
-            val sendJob = launch {
+            launch {
                 try {
                     sendBatches(session, wsManager, logger)
                 } catch (e: Exception) {
                     logger.info("Send batches job terminated: ${e.message}")
+                    // No need to rethrow, let the scope handle cancellation
                 }
             }
             
-            val receiveJob = launch {
+            launch {
                 try {
                     receiveAcks(session, wsManager, logger)
                 } catch (e: Exception) {
                     logger.info("Receive ACKs job terminated: ${e.message}")
+                    // No need to rethrow, let the scope handle cancellation
                 }
             }
-            
-            // Wait for either job to complete (usually due to error or disconnect)
-            sendJob.join()
-            receiveJob.join()
         }
     } finally {
         wsManager.unregisterConnection()
@@ -233,7 +234,7 @@ private suspend fun sendBatches(
     logger: org.slf4j.Logger
 ) {
     try {
-        while (true) {
+        while (session.isActive) {
             try {
                 // Poll the queue with a timeout
                 val message = withContext(Dispatchers.IO) {
@@ -248,18 +249,18 @@ private suspend fun sendBatches(
                         ))
                         logger.debug("Sent ${message.type} batch to WebSocket client")
                     }
-                } else {
-                    // Small delay to avoid busy waiting
-                    delay(100)
                 }
             } catch (e: TimeoutCancellationException) {
                 logger.error("Timeout sending batch to WebSocket client")
-                throw e
+                break // Exit the loop on timeout to avoid hammering a non-responsive client
             }
         }
     } catch (e: Exception) {
-        logger.info("Send batches loop terminated: ${e.message}")
-        throw e
+        if (e is CancellationException) {
+            logger.info("Send batches loop cancelled.")
+        } else {
+            logger.error("Send batches loop terminated with an error: ${e.message}", e)
+        }
     }
 }
 

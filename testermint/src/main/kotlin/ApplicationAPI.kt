@@ -21,6 +21,8 @@ import java.net.URLEncoder
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.github.tomakehurst.wiremock.common.Json.node
+import com.github.tomakehurst.wiremock.http.Response.response
 
 const val SERVER_TYPE_PUBLIC = "public"
 const val SERVER_TYPE_ML = "ml"
@@ -209,11 +211,24 @@ data class ApplicationAPI(
 
     fun addNode(node: InferenceNode): InferenceNode = wrapLog("AddNode", true) {
         val url = urlFor(SERVER_TYPE_ADMIN)
-        val response = Fuel.post("$url/admin/v1/nodes")
-            .jsonBody(node, cosmosJson)
-            .responseObject<InferenceNode>(gsonDeserializer(cosmosJson))
-        logResponse(response)
-        response.third.get()
+        var lastException: Exception? = null
+        for (attempt in 1..3) {
+            try {
+                val response = Fuel.post("$url/admin/v1/nodes")
+                    .jsonBody(node, cosmosJson)
+                    .responseObject<InferenceNode>(gsonDeserializer(cosmosJson))
+                logResponse(response)
+                return@wrapLog response.third.get()
+            } catch (e: Exception) {
+                lastException = e
+                Logger.warn(e, "Exception during addNode, retrying")
+                if (attempt < 3) {
+                    Thread.sleep(2000)
+                    continue
+                }
+            }
+        }
+        throw lastException ?: Exception("Failed to add node after 3 attempts")
     }
 
     fun addNodes(nodes: List<InferenceNode>): List<InferenceNode> = wrapLog("AddNodes", true) {

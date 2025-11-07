@@ -31,7 +31,8 @@ class WebhookService(
     private val logger = LoggerFactory.getLogger(WebhookService::class.java)
 
     // Default delay for validation webhooks (in milliseconds)
-    private val validationWebhookDelay = 5000L
+    // Reduced from 5000ms to 1000ms to prevent "PoC too late" errors in fast test environments
+    private val validationWebhookDelay = 1000L
 
     // Default URL for batch validation webhooks
     private val batchValidationWebhookUrl = "http://localhost:9100/v1/poc-batches/validated"
@@ -73,16 +74,19 @@ class WebhookService(
             return false
         }
         
-        // Wait for acknowledgment with timeout (matching ML node sender.py)
-        val ackReceived = wsManager.waitForAck(batchId, timeoutMs = 3000)
-        
-        if (ackReceived) {
-            logger.info("Successfully delivered $batchType batch via WebSocket")
-        } else {
-            logger.warn("Timeout waiting for WebSocket ACK for $batchType batch")
+        // Launch async ACK waiting to avoid blocking HTTP handler thread
+        scope.launch {
+            val ackReceived = wsManager.waitForAck(batchId, timeoutMs = 3000)
+            if (ackReceived) {
+                logger.info("Successfully delivered $batchType batch via WebSocket")
+            } else {
+                logger.warn("Timeout waiting for WebSocket ACK for $batchType batch")
+            }
         }
         
-        return ackReceived
+        // Return true immediately if message was queued - don't block waiting for ACK
+        logger.info("Queued $batchType batch for WebSocket delivery")
+        return true
     }
     
     /**

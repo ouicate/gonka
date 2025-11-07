@@ -46,11 +46,14 @@ func (c GetNodesCommand) GetResponseChannelCapacity() int {
 }
 
 func (c GetNodesCommand) Execute(b *Broker) {
+	logging.Info("GetNodesCommand executing", types.Nodes)
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	logging.Info("GetNodesCommand locked", types.Nodes)
 
 	nodeResponses := make([]NodeResponse, 0, len(b.nodes))
 	for _, nodeWithState := range b.nodes {
+		logging.Info("GetNodesCommand node", types.Nodes, "node", nodeWithState.Node.Id)
 		// --- Deep copy Node ---
 		nodeCopy := nodeWithState.Node // Start with a shallow copy
 
@@ -99,6 +102,7 @@ func (c GetNodesCommand) Execute(b *Broker) {
 			State: stateCopy,
 		})
 	}
+	logging.Info("GetNodesCommand got nodes", types.Nodes, "size", len(nodeResponses))
 	logging.Debug("Got nodes", types.Nodes, "size", len(nodeResponses))
 	c.Response <- nodeResponses
 }

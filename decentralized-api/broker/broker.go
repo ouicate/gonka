@@ -431,6 +431,7 @@ type InvalidCommandError struct {
 }
 
 func (b *Broker) QueueMessage(command Command) error {
+	logging.Info("QueueMessage", types.Nodes, "command", reflect.TypeOf(command).String())
 	// Check validity of command. Primarily check all `Response` channels to make sure they
 	// support buffering, or else we could end up blocking the broker.
 	if command.GetResponseChannelCapacity() == 0 {
@@ -1157,7 +1158,9 @@ func nodeStatusQueryWorker(broker *Broker) {
 				continue
 			}
 
+			logging.Info("nodeStatusQueryWorker about to query node status", types.Nodes, "nodeId", nodeResp.Node.Id)
 			queryStatusResult, err := broker.queryNodeStatus(nodeResp.Node, nodeResp.State)
+			logging.Info("nodeStatusQueryWorker finished querying node status", types.Nodes, "nodeId", nodeResp.Node.Id, "err", err)
 			timestamp := time.Now()
 			if err != nil {
 				logging.Error("nodeStatusQueryWorker. Failed to queue status query command", types.Nodes,

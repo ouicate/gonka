@@ -88,13 +88,16 @@ func (s *Server) createNewNodes(ctx echo.Context) error {
 
 func (s *Server) createNewNode(ctx echo.Context) error {
 	var newNode apiconfig.InferenceNodeConfig
+	logging.Info("createNewNode", types.Nodes, "newNode", newNode)
 	if err := ctx.Bind(&newNode); err != nil {
 		logging.Error("Error decoding request", types.Nodes, "error", err)
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	// Upsert: if node exists, update it; otherwise, create
+	logging.Info("createNewNode getting nodes", types.Nodes)
 	nodes, err := s.nodeBroker.GetNodes()
+	logging.Info("createNewNode got nodes", types.Nodes, "nodes", nodes)
 	if err != nil {
 		logging.Error("Error reading nodes", types.Nodes, "error", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, err)
@@ -109,9 +112,12 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 	}
 
 	if exists {
+		logging.Info("createNewNode updating node", types.Nodes)
 		command := broker.NewUpdateNodeCommand(newNode)
+		logging.Info("createNewNode command", types.Nodes, "command", command)
 		response := command.Response
 		err := s.nodeBroker.QueueMessage(command)
+		logging.Info("createNewNode error", types.Nodes, "error", err)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err)
 		}
@@ -120,13 +126,18 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node")
 		}
 		// sync config file with updated node list
+		logging.Info("createNewNode syncing config", types.Nodes)
 		syncNodesWithConfig(s.nodeBroker, s.configManager)
+		logging.Info("createNewNode returning node", types.Nodes)
 		return ctx.JSON(http.StatusOK, node)
 	} else {
+		logging.Info("createNewNode adding node", types.Nodes)
 		node, err := s.addNode(newNode)
 		if err != nil {
+			logging.Info("createNewNode error", types.Nodes, "error", err)
 			return err
 		}
+		logging.Info("createNewNode returning node", types.Nodes)
 		return ctx.JSON(http.StatusOK, node)
 	}
 }

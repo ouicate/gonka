@@ -2,6 +2,7 @@ package com.productscience.mockserver
 
 import com.productscience.mockserver.routes.configRoutes
 import com.productscience.mockserver.routes.fileRoutes
+import com.productscience.mockserver.routes.handlePowWebSocket
 import com.productscience.mockserver.routes.healthRoutes
 import com.productscience.mockserver.routes.inferenceRoutes
 import com.productscience.mockserver.routes.powRoutes
@@ -30,6 +31,7 @@ import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
+import io.ktor.server.websocket.webSocket
 import io.ktor.util.AttributeKey
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
@@ -42,8 +44,19 @@ val TokenizationServiceKey = AttributeKey<TokenizationService>("TokenizationServ
 val WebSocketManagerKey = AttributeKey<WebSocketManager>("WebSocketManager")
 
 fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module)
-        .start(wait = true)
+    embeddedServer(
+        Netty,
+        port = 8080,
+        host = "0.0.0.0",
+        configure = {
+            // Configure Netty with more worker threads to handle concurrent requests
+            // This prevents WebSocket operations from blocking HTTP request handling
+            connectionGroupSize = 2
+            workerGroupSize = 8
+            callGroupSize = 16
+        },
+        module = Application::module
+    ).start(wait = true)
 }
 
 fun Application.module() {
@@ -100,7 +113,8 @@ fun Application.configureRouting() {
             )
         }
 
-        // Register all the route handlers
+        // Register all HTTP route handlers first
+        // This ensures HTTP requests are matched before WebSocket upgrade checks
         stateRoutes()
         powRoutes(webhookService, wsManager)
         inferenceRoutes(responseService)
@@ -111,6 +125,12 @@ fun Application.configureRouting() {
         tokenizationRoutes(tokenizationService)
         configRoutes(webhookService)
         fileRoutes() // Route for serving files
+        
+        // WebSocket endpoint for PoC - registered last to avoid interfering with HTTP routes
+        // Note: WebSocket routes only match actual WebSocket upgrade requests, not regular HTTP requests
+        webSocket("/api/v1/pow/ws") {
+            handlePowWebSocket(this, wsManager)
+        }
     }
 }
 
@@ -122,9 +142,10 @@ fun Application.configureSerialization() {
 
 fun Application.configureWebSockets() {
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(15)
-        timeout = Duration.ofSeconds(60)
-        maxFrameSize = Long.MAX_VALUE
-        masking = false
+        pingPeriod = Duration.ofSeconds(30)  // Increased to reduce network overhead
+        timeout = Duration.ofSeconds(60)      // More lenient timeout to prevent premature disconnects
+        maxFrameSize = 1024 * 1024           // 1MB - sufficient for PoC batches
+        masking = false                       // Disable masking for performance (server-to-server)
+        contentConverter = null               // Use raw frames, no conversion overhead
     }
 }
