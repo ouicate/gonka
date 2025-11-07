@@ -14,4 +14,3 @@ message ExcludedParticipant {
   string reason = 3;            // Free-form reason string (e.g., "invalidated")
   uint64 exclusion_block_height = 4;  // Block height when exclusion took effect
 }
-.g

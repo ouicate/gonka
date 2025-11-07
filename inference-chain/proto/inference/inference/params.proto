@@ -93,6 +93,7 @@ message ValidationParams {
   Decimal downtime_bad_percentage = 20;
   Decimal downtime_h_threshold = 21;
   Decimal downtime_reputation_preserve = 22; // How much reputation to keep after a downtime him (defaults to 0)
+  Decimal quick_failure_threshold = 23; // The threshold of probabilty of consecutive failures to cause a quick invalidation
 }
 
 message PocParams {

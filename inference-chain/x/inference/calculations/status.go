@@ -44,7 +44,8 @@ func ComputeStatus(validationParameters *types.ValidationParams, newValue types.
 
 	// If we have consecutive failures with a likelihood of less than 1 in a million times, we're assuming bad
 	falsePositiveRate := validationParameters.FalsePositiveRate.ToDecimal()
-	if probabilityOfConsecutiveFailures(falsePositiveRate, newValue.ConsecutiveInvalidInferences).LessThan(decimal.NewFromFloat(0.000001)) {
+	consecutiveFailureCutoff := validationParameters.QuickFailureThreshold.ToDecimal()
+	if probabilityOfConsecutiveFailures(falsePositiveRate, newValue.ConsecutiveInvalidInferences).LessThan(consecutiveFailureCutoff) {
 		return types.ParticipantStatus_INVALID, ConsecutiveFailures, newStats
 	}
 
