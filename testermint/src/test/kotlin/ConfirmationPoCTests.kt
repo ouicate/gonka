@@ -249,7 +249,7 @@ class ConfirmationPoCTests : TestermintTest() {
     
     @Test
     fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation`() {
-        logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
+        logSection("=== TEST: Confirmation PoC with Multi``ple MLNodes - POC_SLOT Allocation ===")
         
         // Initialize cluster with custom spec for confirmation PoC testing
         val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)

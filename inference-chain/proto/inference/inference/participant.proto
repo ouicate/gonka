@@ -10,6 +10,7 @@ enum ParticipantStatus {
   INACTIVE = 2;
   INVALID = 3;
   RAMPING = 4 [deprecated = true];
+  UNCONFIRMED = 5;
 }
 
 message Participant {
