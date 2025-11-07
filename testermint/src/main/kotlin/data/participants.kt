@@ -55,7 +55,7 @@ data class ActiveParticipantsResponse(
 data class ExcludedParticipant(
     val address: String,
     val reason: String,
-    val effectiveHeight: Long,
+    val exclusionBlockHeight: Long,
 )
 
 data class ActiveParticipants(

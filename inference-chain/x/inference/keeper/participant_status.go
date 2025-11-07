@@ -117,10 +117,10 @@ func (k Keeper) recordExclusion(ctx context.Context, participant *types.Particip
 		addr, err := sdk.AccAddressFromBech32(participant.Address)
 		if err == nil {
 			_ = k.ExcludedParticipantsMap.Set(ctx, collections.Join(epochIndex, addr), types.ExcludedParticipant{
-				Address:         participant.Address,
-				EpochIndex:      epochIndex,
-				Reason:          string(reason),
-				EffectiveHeight: uint64(sdk.UnwrapSDKContext(ctx).BlockHeight()),
+				Address:              participant.Address,
+				EpochIndex:           epochIndex,
+				Reason:               string(reason),
+				ExclusionBlockHeight: uint64(sdk.UnwrapSDKContext(ctx).BlockHeight()),
 			})
 		} else {
 			k.LogError("Failed to parse participant address for exclusion entry", types.Validation, "address", participant.Address, "error", err)
