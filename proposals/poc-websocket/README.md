@@ -1,16 +1,16 @@
-# WebSocket Integration for PoW Sender
+# [IMPLEMENTED] Proposal: WebSocket Integration for PoW Communication
 
-## Motivation
+## Goal / Problem
 
-### Core Philosophy
+### Background
 
-This implementation follows Gonka's core principles:
-- **Crazy Simple**: Minimal code, maximum clarity
-- **Minimalistic**: Single responsibility, no boilerplate, no unnecessary abstraction
-- **Standard**: Follow established patterns and project structures
-- **Clean**: Pure functionality, no comments explaining obvious code
-- **Modern**: Use contemporary tooling and best practices
-- **Backward Compatible**: Changes must be 100% backward compatible
+The Sender process on the ML node runs continuously and responds to phase changes. When the API node calls `/pow/phase/generate` or `/pow/phase/validate`, the Sender switches phases and begins retrieving batches from the appropriate queue. The Sender loop runs every 5 seconds:
+
+1. Controller generates batches and puts them in queues
+2. Sender retrieves batches from queues based on current phase
+3. Sender sends batches via configured delivery method
+4. Batches remain in retry queue until successfully acknowledged
+5. Loop repeats
 
 ### The Problem
 
@@ -22,8 +22,8 @@ class PowInitRequestUrl(PowInitRequest):
 ```
 
 The flow:
-1. API node calls `/pow/init` or `/pow/init/generate` with callback URL
-2. ML node starts the Sender process with this URL
+1. API node calls `/pow/init` with callback URL
+2. ML node starts Sender process with this URL
 3. API node calls `/pow/phase/generate` or `/pow/phase/validate` to switch phases
 4. Sender process generates or validates batches
 5. Sender sends batches to callback URL via HTTP POST
@@ -35,43 +35,6 @@ Problems:
 4. **Latency**: HTTP request/response overhead for each batch
 5. **Connection State**: No way to know if API node is actively listening
 6. **Scalability**: Each batch requires a new HTTP connection
-
-### How Endpoints Trigger the Sender
-
-The Sender process runs continuously and responds to phase changes:
-
-```python
-# Endpoints in routes.py
-@router.post("/pow/phase/generate")
-async def start_generate(request: Request):
-    manager.pow_controller.start_generate()
-    
-@router.post("/pow/phase/validate")
-async def start_validate(request: Request):
-    manager.pow_controller.start_validate()
-
-# Sender process loop in sender.py
-def run(self):
-    while not self.stop_event.is_set():
-        if self.phase.value == Phase.GENERATE:
-            generated = self._get_generated()
-            if len(generated) > 0:
-                self.generated_not_sent.append(generated)
-            self._send_generated()
-        
-        elif self.phase.value == Phase.VALIDATE:
-            self.validated_not_sent.extend(self._get_validated())
-            self._send_validated()
-        
-        time.sleep(5)
-```
-
-Flow:
-1. Controller generates batches and puts them in queues
-2. Sender retrieves batches from queues based on current phase
-3. Sender sends batches to callback URL
-4. Batches remain in retry queue until successfully acknowledged
-5. Loop repeats every 5 seconds
 
 ## Proposal
 
@@ -100,26 +63,61 @@ WebSocket provides a persistent bidirectional connection that solves the callbac
 5. **Backward Compatible**: Existing HTTP-only flows work unchanged
 6. **Connection Awareness**: Sender knows if API node is actively listening
 
+### Architecture Decision
+
+**Each NodeWorker manages its own WebSocket connection.**
+
+This follows the existing pattern where each NodeWorker already owns:
+- MLNodeClient (HTTP client)
+- Command queue
+- Node state
+
+Now it also owns:
+- WebSocketClient (WebSocket connection)
+
+**Why This Design?**
+
+1. **Encapsulation**: Each worker owns everything for its ML node
+2. **No circular dependencies**: No centralized manager needed
+3. **Lifecycle management**: Worker lifecycle = WebSocket lifecycle
+4. **Simple**: One connection per worker, managed by that worker
+5. **Consistent**: Follows existing NodeWorker pattern
+
+**Structure:**
+
+```
+Broker
+  └─ NodeWorkGroup
+       └─ map[nodeID]*NodeWorker
+            └─ NodeWorker {
+                 mlClient     MLNodeClient
+                 wsClient     *WebSocketClient  ← NEW
+                 node         *NodeWithState
+                 commandQueue chan Command
+               }
+```
+
 ### Design Principles
 
 **Separation of Concerns:**
 
-**Sender Process** (`sender.py`):
+**Sender Process** (ML node):
 - Accepts optional WebSocket queues and connection state
 - Tries WebSocket first with timeout
 - Falls back to HTTP on failure
 - Remains fully functional without WebSocket (backward compatible)
 
-**WebSocket Endpoint** (`routes.py`):
+**WebSocket Endpoint** (ML node):
 - Separate endpoint at `/pow/ws`
 - Enforces single connection with lock protection
 - Runs two async tasks: send batches, receive acknowledgments
 - Handles disconnection gracefully
 
-**PowManager** (`manager.py`):
-- Creates WebSocket infrastructure (queues, shared state, lock)
-- Passes to Sender during initialization
-- Cleans up on stop
+**WebSocketClient** (API node):
+- Per-node client owned by NodeWorker
+- Manages connection lifecycle and reconnection
+- Processes incoming batches via BatchHandler
+- Sends acknowledgments back to ML node
 
 **Key Principle: Decoupling**
 
@@ -127,9 +125,10 @@ WebSocket functionality is completely optional and decoupled from core PoW logic
 
 ## Implementation
 
-### Components
+### ML Node (Python)
 
 **PowManager** creates WebSocket infrastructure:
+
 ```python
 def init(self, init_request: PowInitRequest):
     # ... existing controller initialization ...
@@ -144,8 +143,6 @@ def init(self, init_request: PowInitRequest):
         generation_queue=self.pow_controller.generated_batch_queue,
         validation_queue=self.pow_controller.validated_batch_queue,
         phase=self.pow_controller.phase,
-        r_target=self.pow_controller.r_target,
-        fraud_threshold=init_request.fraud_threshold,
         websocket_out_queue=self.websocket_out_queue,
         websocket_ack_queue=self.websocket_ack_queue,
         websocket_connected=self.websocket_connected,
@@ -153,6 +150,7 @@ def init(self, init_request: PowInitRequest):
 ```
 
 **Sender** tries WebSocket first, falls back to HTTP:
+
 ```python
 def _send_generated(self):
     if not self.generated_not_sent:
@@ -197,7 +195,8 @@ def _try_send_via_websocket(self, batch_type: str, batch: dict, timeout: float =
     return False
 ```
 
-**WebSocket Endpoint** at `/pow/ws`:
+**WebSocket Endpoint** at `/api/v1/pow/ws`:
+
 ```python
 @router.websocket("/pow/ws")
 async def websocket_endpoint(websocket: WebSocket, request: Request):
@@ -245,6 +244,93 @@ async def websocket_endpoint(websocket: WebSocket, request: Request):
             manager.websocket_connected.value = 0
 ```
 
+### Decentralized-API (Go)
+
+**WebSocketClient** structure:
+
+```go
+type WebSocketClient struct {
+    nodeID      string
+    wsURL       string
+    conn        *websocket.Conn
+    mu          sync.RWMutex
+    handler     *BatchHandler
+    stopChan    chan struct{}
+    stoppedChan chan struct{}
+    ctx         context.Context
+    cancel      context.CancelFunc
+}
+
+func NewWebSocketClient(nodeID string, pocURL string, recorder cosmosclient.CosmosMessageClient) *WebSocketClient
+
+func (c *WebSocketClient) Start()  // Start connection loop in goroutine
+func (c *WebSocketClient) Stop()   // Stop connection and cleanup
+func (c *WebSocketClient) run()    // Internal: connect, reconnect, handle messages
+```
+
+Key methods:
+- `run()`: Main connection loop with automatic reconnection every 3-5 seconds (with jitter)
+- `connectAndHandle()`: Establishes connection and starts message handling
+- `handleMessages()`: Reads messages, processes via BatchHandler, sends ACK
+- `processMessage()`: Unmarshals message, dispatches to handler based on type ("generated" or "validated")
+- `sendAck()`: Sends acknowledgment message back to ML node
+
+**BatchHandler** structure:
+
+```go
+type BatchHandler struct {
+    recorder cosmosclient.CosmosMessageClient
+}
+
+func NewBatchHandler(recorder cosmosclient.CosmosMessageClient) *BatchHandler
+
+func (h *BatchHandler) HandleGeneratedBatch(nodeID string, batch mlnodeclient.ProofBatch) error
+func (h *BatchHandler) HandleValidatedBatch(batch mlnodeclient.ValidatedBatch) error
+```
+
+Responsibilities:
+- Process generated batches: create `MsgSubmitPocBatch` and submit to chain
+- Process validated batches: create `MsgSubmitPocValidation` and submit to chain
+- Same handler used by both WebSocket and HTTP callback paths
+
+**Integration with NodeWorker:**
+
+```go
+type NodeWorker struct {
+    // ... existing fields ...
+    wsClient   *WebSocketClient
+    wsClientMu sync.Mutex
+}
+
+func (w *NodeWorker) startWebSocket(recorder cosmosclient.CosmosMessageClient) {
+    w.wsClientMu.Lock()
+    defer w.wsClientMu.Unlock()
+    
+    if w.wsClient != nil {
+        return  // Already started
+    }
+    
+    pocURL := w.mlClient.GetPoCURL()
+    w.wsClient = NewWebSocketClient(w.nodeId, pocURL, recorder)
+    w.wsClient.Start()
+}
+
+func (w *NodeWorker) stopWebSocket() {
+    w.wsClientMu.Lock()
+    defer w.wsClientMu.Unlock()
+    
+    if w.wsClient != nil {
+        w.wsClient.Stop()
+        w.wsClient = nil
+    }
+}
+```
+
+Lifecycle integration in `node_worker_commands.go`:
+- `StartPoCNodeCommand`: calls `startWebSocket()` when PoC starts successfully
+- `StopPoCNodeCommand`: calls `stopWebSocket()` when PoC stops
+- `StopNodeCommand`: calls `stopWebSocket()` during node shutdown
+
 ### Message Protocol
 
 **ML Node → API Node** (Batch):
@@ -283,35 +369,42 @@ Or `"type": "validated"` for validated batches.
 
 ### Connection Management
 
+**ML Node:**
 - **Single Connection**: Lock enforces only one client at a time
 - **Atomic State**: Connection state protected by lock
 - **Graceful Cleanup**: Lock used during disconnect
 
+**API Node:**
+- **Per-Node Connection**: Each NodeWorker owns its WebSocket connection
+- **Automatic Reconnection**: Reconnects every 3-5 seconds with jitter on failure
+- **Lifecycle Tied to PoC**: WebSocket starts when PoC starts, stops when PoC stops
+- **Thread-Safe**: Mutex protects connection state
+
+### Message Flow
+
+**WebSocket Path:**
+1. ML node sends batch via WebSocket to its specific connection
+2. WebSocketClient receives message
+3. BatchHandler processes batch (knows nodeID from WebSocketClient)
+4. Batch submitted to chain via `recorder.SubmitPocBatch()` or `recorder.SubmitPoCValidation()`
+5. WebSocketClient sends ACK back to ML node
+6. ML node receives ACK, removes batch from retry queue
+
+**HTTP Callback Path:**
+1. ML node sends batch via HTTP POST to callback URL
+2. HTTP handler receives batch at `/generated` or `/validated` endpoint
+3. BatchHandler processes batch (same handler used by WebSocket path)
+4. Batch submitted to chain
+5. HTTP 200 response sent
+6. ML node receives 200, removes batch from retry queue
+
+Both paths use the same BatchHandler, ensuring consistent processing logic.
+
 ### Backward Compatibility
 
-- **No API Changes**: `PowInitRequestUrl` unchanged
+- **No API Changes**: `PowInitRequestUrl` unchanged, callback URL still required
 - **HTTP Still Works**: If WebSocket not used, HTTP callbacks work as before
 - **Graceful Degradation**: WebSocket failure → automatic HTTP fallback
+- **Dual Mode**: Even when WebSocket is connected, HTTP callbacks still accepted
 - **Existing Tests Pass**: All integration tests continue to work unchanged
 
-### API Node Integration Example
-
-```python
-import asyncio
-import json
-from websockets import connect
-
-async def connect_to_mlnode(mlnode_url):
-    ws_url = mlnode_url.replace("http://", "ws://").replace("https://", "wss://")
-    ws_url = f"{ws_url}/api/v1/pow/ws"
-    
-    async with connect(ws_url) as websocket:
-        while True:
-            message = await websocket.recv()
-            data = json.loads(message)
-            
-            await process_batch(data["batch"])
-            
-            ack = {"type": "ack", "id": data["id"]}
-            await websocket.send(json.dumps(ack))
-```
