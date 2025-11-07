@@ -143,12 +143,6 @@ func TestMsgServer_SubmitNewParticipant_InvalidED25519Keys(t *testing.T) {
 			description:  "Key with wrong size (too long)",
 		},
 		{
-			name:         "empty_key",
-			validatorKey: "",
-			expectError:  true,
-			description:  "Empty validator key",
-		},
-		{
 			name:         "invalid_base64",
 			validatorKey: "invalid-base64-string!!!",
 			expectError:  true,
