@@ -63,9 +63,19 @@ type (
 		InferencesToPrune              collections.Map[collections.Pair[int64, string], collections.NoValue]
 		ActiveInvalidations            collections.KeySet[collections.Pair[sdk.AccAddress, string]]
 		ExcludedParticipantsMap        collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
+		// Confirmation PoC collections
 		ConfirmationPoCEvents          collections.Map[collections.Pair[uint64, uint64], types.ConfirmationPoCEvent]
 		ActiveConfirmationPoCEventItem collections.Item[types.ConfirmationPoCEvent]
 		LastUpgradeHeight              collections.Item[int64]
+		// Bridge & Wrapped Token collections
+		BridgeContractAddresses        collections.Map[collections.Pair[string, string], types.BridgeContractAddress]
+		BridgeTransactionsMap          collections.Map[collections.Triple[string, string, string], types.BridgeTransaction]
+		WrappedTokenCodeIDItem         collections.Item[uint64]
+		WrappedTokenMetadataMap        collections.Map[collections.Pair[string, string], types.BridgeTokenMetadata]
+		WrappedTokenContractsMap       collections.Map[collections.Pair[string, string], types.BridgeWrappedTokenContract]
+		WrappedContractReverseIndex    collections.Map[string, types.BridgeTokenReference]
+		LiquidityPoolItem              collections.Item[types.LiquidityPool]
+		LiquidityPoolApprovedTokensMap collections.Map[collections.Pair[string, string], types.BridgeTokenReference]
 	}
 )
 
@@ -304,6 +314,60 @@ func NewKeeper(
 			types.LastUpgradeHeightPrefix,
 			"last_upgrade_height",
 			collections.Int64Value,
+		),
+		BridgeContractAddresses: collections.NewMap(
+			sb,
+			types.BridgeContractAddressesPrefix,
+			"bridge_contract_addresses",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+			codec.CollValue[types.BridgeContractAddress](cdc),
+		),
+		BridgeTransactionsMap: collections.NewMap(
+			sb,
+			types.BridgeTransactionsPrefix,
+			"bridge_transactions",
+			collections.TripleKeyCodec(collections.StringKey, collections.StringKey, collections.StringKey),
+			codec.CollValue[types.BridgeTransaction](cdc),
+		),
+		WrappedTokenMetadataMap: collections.NewMap(
+			sb,
+			types.WrappedTokenMetadataPrefix,
+			"bridge_token_metadata",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+			codec.CollValue[types.BridgeTokenMetadata](cdc),
+		),
+		WrappedTokenContractsMap: collections.NewMap(
+			sb,
+			types.WrappedTokenContractsPrefix,
+			"bridge_wrapped_token_contracts",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+			codec.CollValue[types.BridgeWrappedTokenContract](cdc),
+		),
+		WrappedContractReverseIndex: collections.NewMap(
+			sb,
+			types.WrappedContractReverseIndexPrefix,
+			"wrapped_contract_reverse_index",
+			collections.StringKey,
+			codec.CollValue[types.BridgeTokenReference](cdc),
+		),
+		LiquidityPoolApprovedTokensMap: collections.NewMap(
+			sb,
+			types.LiquidityPoolApprovedTokensPrefix,
+			"bridge_trade_approved_tokens",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+			codec.CollValue[types.BridgeTokenReference](cdc),
+		),
+		WrappedTokenCodeIDItem: collections.NewItem(
+			sb,
+			types.WrappedTokenCodeIDPrefix,
+			"wrapped_token_code_id",
+			collections.Uint64Value,
+		),
+		LiquidityPoolItem: collections.NewItem(
+			sb,
+			types.LiquidityPoolPrefix,
+			"liquidity_pool",
+			codec.CollValue[types.LiquidityPool](cdc),
 		),
 	}
 	// Build the collections schema

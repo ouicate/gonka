@@ -136,7 +136,10 @@ data class EpochParams(
     val pocValidationDelay: Long,
     val pocValidationDuration: Long,
     val setNewValidatorsDelay: Long,
-    val inferencePruningEpochThreshold: Long
+    val inferenceValidationCutoff: Long,
+    val inferencePruningEpochThreshold: Long,
+    val inferencePruningMax: Long,
+    val pocPruningMax: Long,
 )
 
 data class Decimal(
@@ -182,6 +185,22 @@ data class ValidationParams(
     val missRequestsPenalty: Decimal,
     val timestampExpiration: Long,
     val timestampAdvance: Long,
+    @SerializedName("estimated_limits_per_block_kb")
+    val estimatedLimitsPerBlockKb: Long,
+    @SerializedName("invalid_reputation_preserve")
+    val invalidReputationPreserve: Decimal?,
+    @SerializedName("bad_participant_invalidation_rate")
+    val badParticipantInvalidationRate: Decimal?,
+    @SerializedName("invalidation_h_threshold")
+    val invalidationHThreshold: Decimal?,
+    @SerializedName("downtime_good_percentage")
+    val downtimeGoodPercentage: Decimal?,
+    @SerializedName("downtime_bad_percentage")
+    val downtimeBadPercentage: Decimal?,
+    @SerializedName("downtime_h_threshold")
+    val downtimeHThreshold: Decimal?,
+    @SerializedName("downtime_reputation_preserve")
+    val downtimeReputationPreserve: Decimal?,
 )
 
 data class BandwidthLimitsParams(
@@ -191,6 +210,14 @@ data class BandwidthLimitsParams(
     val kbPerInputToken: Decimal,
     @SerializedName("kb_per_output_token")
     val kbPerOutputToken: Decimal,
+    @SerializedName("invalidations_limit")
+    val invalidationsLimit: Long,
+    @SerializedName("invalidations_sample_period")
+    val invalidationsSamplePeriod: Long,
+    @SerializedName("invalidations_limit_curve")
+    val invalidationsLimitCurve: Long,
+    @SerializedName("minimum_concurrent_invalidations")
+    val minimumConcurrentInvalidations: Long,
 )
 
 data class ConfirmationPoCParams(
@@ -205,6 +232,7 @@ data class ConfirmationPoCParams(
 data class PocParams(
     val defaultDifficulty: Int,
     val validationSampleSize: Int,
+    @SerializedName("poc_data_pruning_epoch_threshold")
     val pocDataPruningEpochThreshold: Long,
 )
 

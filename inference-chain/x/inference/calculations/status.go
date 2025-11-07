@@ -1,9 +1,8 @@
 package calculations
 
 import (
-	"math"
-
 	"github.com/productscience/inference/x/inference/types"
+	"github.com/shopspring/decimal"
 )
 
 type ParticipantStatusReason string
@@ -17,90 +16,124 @@ const (
 	StatisticalInvalidations ParticipantStatusReason = "statistical_invalidations"
 	// NoReason indicates no specific reason for the status
 	NoReason ParticipantStatusReason = ""
+	// AlgorithmError Should NEVER happen unless we have bad algorithms or parameters
+	AlgorithmError ParticipantStatusReason = "algorithm_error"
+	// AlreadySet when we are already invalid or inactive
+	AlreadySet ParticipantStatusReason = "already_set"
+	// Downtime when missed inferences exceeds the threshold
+	Downtime ParticipantStatusReason = "downtime"
 )
 
-func ComputeStatus(validationParameters *types.ValidationParams, participant types.Participant) (status types.ParticipantStatus, reason ParticipantStatusReason) {
+const (
+	// Keeping the log precision low keeps compute low and high precision is not needed
+	LogPrecision = 12
+)
+
+// Note that newValue is passed in BY VALUE, so changes to newValue directly will not pass back
+func ComputeStatus(validationParameters *types.ValidationParams, newValue types.Participant, oldStats types.CurrentEpochStats) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
 	// Genesis only (for tests)
+	newStats := getStats(&newValue)
 	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
-		return types.ParticipantStatus_ACTIVE, NoReason
+		return types.ParticipantStatus_ACTIVE, NoReason, newStats
 	}
+
+	// Once INVALID or INACTIVE, this can only be reset deliberately (at epoch start)
+	if newValue.Status == types.ParticipantStatus_INVALID || newValue.Status == types.ParticipantStatus_INACTIVE {
+		return newValue.Status, AlreadySet, newStats
+	}
+
 	// If we have consecutive failures with a likelihood of less than 1 in a million times, we're assuming bad
-	falsePositiveRate := validationParameters.FalsePositiveRate.ToFloat()
-	if probabilityOfConsecutiveFailures(falsePositiveRate, participant.ConsecutiveInvalidInferences) < 0.000001 {
-		return types.ParticipantStatus_INVALID, ConsecutiveFailures
+	falsePositiveRate := validationParameters.FalsePositiveRate.ToDecimal()
+	if probabilityOfConsecutiveFailures(falsePositiveRate, newValue.ConsecutiveInvalidInferences).LessThan(decimal.NewFromFloat(0.000001)) {
+		return types.ParticipantStatus_INVALID, ConsecutiveFailures, newStats
 	}
 
-	// Solely for Genesis testing/automation
-	if participant.CurrentEpochStats == nil {
-		participant.CurrentEpochStats = &types.CurrentEpochStats{}
+	invalidationDecision := getInvalidationStatus(&newStats, oldStats, validationParameters)
+	if invalidationDecision == Fail {
+		return types.ParticipantStatus_INVALID, StatisticalInvalidations, newStats
+	} else if invalidationDecision == Error {
+		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
-	zScore := CalculateZScoreFromFPR(falsePositiveRate, participant.CurrentEpochStats.ValidatedInferences, participant.CurrentEpochStats.InvalidatedInferences)
-	needed := MeasurementsNeeded(falsePositiveRate, uint64(validationParameters.MinRampUpMeasurements))
-	if participant.CurrentEpochStats.InferenceCount < needed && participant.EpochsCompleted < 1 {
-		return types.ParticipantStatus_RAMPING, Ramping
+	inactiveDecision := getInactiveStatus(&newStats, oldStats, validationParameters)
+	if inactiveDecision == Fail {
+		return types.ParticipantStatus_INACTIVE, Downtime, newStats
+	} else if inactiveDecision == Error {
+		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
-	if zScore > 1 {
-		return types.ParticipantStatus_INVALID, StatisticalInvalidations
-	}
-	return types.ParticipantStatus_ACTIVE, NoReason
+	return types.ParticipantStatus_ACTIVE, NoReason, newStats
 }
 
-// CalculateZScoreFromFPR - Positive values mean the failure rate is HIGHER than expected, thus bad
-func CalculateZScoreFromFPR(expectedFailureRate float64, valid uint64, invalid uint64) float64 {
-	total := valid + invalid
-	if total == 0 {
-		return 0 // avoid division by zero; with zero observations we will be in RAMPING anyway
+func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	newInferences := int64(newStats.InferenceCount) - int64(oldStats.InferenceCount)
+	newMissedInferences := int64(newStats.MissedRequests) - int64(oldStats.MissedRequests)
+	inactiveSprt, err := NewSPRT(
+		parameters.DowntimeGoodPercentage.ToDecimal(),
+		parameters.DowntimeBadPercentage.ToDecimal(),
+		parameters.DowntimeHThreshold.ToDecimal(),
+		newStats.InactiveLLR.ToDecimal(),
+		LogPrecision,
+	)
+	if err != nil {
+		return Error
 	}
-	observedFailureRate := float64(invalid) / float64(total)
-
-	// Calculate the variance using the binomial distribution formula
-	variance := expectedFailureRate * (1 - expectedFailureRate) / float64(total)
-	if variance == 0 {
-		return 0
-	}
-
-	// Calculate the standard deviation
-	stdDev := math.Sqrt(variance)
-
-	// Calculate the z-score (how many standard deviations the observed failure rate is from the expected failure rate)
-	zScore := (observedFailureRate - expectedFailureRate) / stdDev
-
-	return zScore
+	inactiveSprt.UpdateCounts(newMissedInferences, newInferences)
+	newStats.InactiveLLR = types.DecimalFromDecimal(inactiveSprt.LLR)
+	return inactiveSprt.Decision()
 }
 
-// MeasurementsNeeded calculates the number of measurements required
-// for a single failure to be within one standard deviation of the expected distribution
-func MeasurementsNeeded(p float64, max uint64) uint64 {
-	if p <= 0 || p >= 1 {
-		panic("Probability p must be between 0 and 1, exclusive")
+func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	newValidations := int64(newStats.ValidatedInferences) - int64(oldStats.ValidatedInferences)
+	newInvalidations := int64(newStats.InvalidatedInferences) - int64(oldStats.InvalidatedInferences)
+	//newInferences := newValue.CurrentEpochStats.InferenceCount - oldValue.CurrentEpochStats.InferenceCount
+	//newMissedInferences := newValue.CurrentEpochStats.MissedRequests - oldValue.CurrentEpochStats.MissedRequests
+
+	invalidationSprt, err := NewSPRT(
+		parameters.FalsePositiveRate.ToDecimal(),
+		parameters.BadParticipantInvalidationRate.ToDecimal(),
+		parameters.InvalidationHThreshold.ToDecimal(),
+		newStats.InvalidLLR.ToDecimal(),
+		LogPrecision,
+	)
+	if err != nil {
+		return Error
 	}
+	invalidationSprt.UpdateCounts(newInvalidations, newValidations)
+	newStats.InvalidLLR = types.DecimalFromDecimal(invalidationSprt.LLR)
+	return invalidationSprt.Decision()
+}
 
-	// This value is derived from solving the inequality: |1 - np| <= sqrt(np(1 - p))
-	// Which leads to the quadratic inequality: y^2 - 3y + 1 >= 0, where y = np
-	// The solution to this inequality is np >= (3 + sqrt(5)) / 2
-	requiredValue := (3 + math.Sqrt(5)) / 2
-
-	// Calculate the number of measurements
-	n := requiredValue / p
-
-	// Round up to the nearest whole number since we need an integer count of measurements
-	needed := uint64(math.Ceil(n))
-	if needed > max {
-		return max
+func getStats(newValue *types.Participant) types.CurrentEpochStats {
+	var newStats types.CurrentEpochStats
+	if newValue == nil || newValue.CurrentEpochStats == nil {
+		newStats = types.CurrentEpochStats{}
+	} else {
+		newStats = *newValue.CurrentEpochStats
 	}
-	return needed
+	if newStats.InvalidLLR == nil {
+		newStats.InvalidLLR = &types.Decimal{
+			Value:    0,
+			Exponent: 0,
+		}
+	}
+	if newStats.InactiveLLR == nil {
+		newStats.InactiveLLR = &types.Decimal{
+			Value:    0,
+			Exponent: 0,
+		}
+	}
+	return newStats
 }
 
 // probabilityOfConsecutiveFailures returns P(F^N|G) = x^N
-func probabilityOfConsecutiveFailures(expectedFailureRate float64, consecutiveFailures int64) float64 {
-	if expectedFailureRate < 0 || expectedFailureRate > 1 {
+func probabilityOfConsecutiveFailures(expectedFailureRate decimal.Decimal, consecutiveFailures int64) decimal.Decimal {
+	if expectedFailureRate.LessThan(decimal.Zero) || expectedFailureRate.GreaterThan(decimal.NewFromInt(1)) {
 		panic("expectedFailureRate must be between 0 and 1")
 	}
 	if consecutiveFailures < 0 {
-		panic("consecutiveFailures must be non-negative")
+		return decimal.Zero
 	}
 
-	return math.Pow(expectedFailureRate, float64(consecutiveFailures))
+	return expectedFailureRate.Pow(decimal.NewFromInt(consecutiveFailures))
 }

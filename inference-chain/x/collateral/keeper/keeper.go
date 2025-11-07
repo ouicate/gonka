@@ -438,7 +438,7 @@ func (k Keeper) Slash(ctx context.Context, participantAddress sdk.AccAddress, sl
 
 	// 3. Burn the total slashed amount from the module account
 	if !totalSlashedAmount.IsZero() {
-		err := k.bookkeepingBankKeeper.BurnCoins(sdkCtx, types.ModuleName, sdk.NewCoins(totalSlashedAmount), "collateral slashed")
+		err := k.bookkeepingBankKeeper.BurnCoins(sdkCtx, types.ModuleName, sdk.NewCoins(totalSlashedAmount), "collateral slashed:"+reason)
 		if err != nil {
 			// This is a critical error, indicating an issue with the module account or supply
 			return sdk.Coin{}, fmt.Errorf("failed to burn slashed coins: %w", err)

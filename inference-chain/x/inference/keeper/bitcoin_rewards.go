@@ -427,8 +427,9 @@ func CalculateParticipantBitcoinRewards(
 	// Calculate effectiveWeight for each participant using helper function
 	effectiveWeights := make([]*types.ActiveParticipant, 0, len(participants))
 	for _, participant := range participants {
-		if participant.Status == types.ParticipantStatus_INVALID {
-			logger.Info("Bitcoin Rewards: Invalid participant, skipping", "participant", participant.Address)
+		// Skip invalid participants from PoC weight calculations
+		if participant.Status != types.ParticipantStatus_ACTIVE {
+			logger.Info("Invalid/inactive participant found in PoC weight calculations, skipping", "participant", participant.Address)
 			participantWeights[participant.Address] = 0
 			continue
 		}
@@ -511,14 +512,14 @@ func CalculateParticipantBitcoinRewards(
 
 		// Calculate WorkCoins (UNCHANGED from current system - direct user fees)
 		workCoins := uint64(0)
-		if participant.CoinBalance > 0 && participant.Status != types.ParticipantStatus_INVALID {
+		if participant.CoinBalance > 0 && participant.Status == types.ParticipantStatus_ACTIVE {
 			workCoins = uint64(participant.CoinBalance)
 		}
 		settleAmount.WorkCoins = workCoins
 
 		// Calculate RewardCoins (NEW Bitcoin-style distribution by PoC weight)
 		rewardCoins := uint64(0)
-		if participant.Status != types.ParticipantStatus_INVALID && totalPoCWeight > 0 {
+		if participant.Status == types.ParticipantStatus_ACTIVE && totalPoCWeight > 0 {
 			participantWeight := participantWeights[participant.Address]
 			if participantWeight > 0 {
 				// Use big.Int to prevent overflow with large numbers

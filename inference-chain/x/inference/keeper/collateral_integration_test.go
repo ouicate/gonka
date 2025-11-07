@@ -190,7 +190,7 @@ func TestSlashingForDowntime_Integration(t *testing.T) {
 		Return(sdk.NewCoin(types.BaseCoin, math.NewInt(0)), nil).Times(1)
 
 	// Execute the function under test directly
-	k.CheckAndSlashForDowntime(ctx, participant)
+	k.SlashForDowntime(ctx, participant, params)
 }
 
 func TestInvalidateInference_FullFlow_WithStatefulMock(t *testing.T) {
@@ -330,7 +330,7 @@ func TestDoubleJeopardy_DowntimeThenInvalidSlash(t *testing.T) {
 	require.True(t, found)
 
 	// Manually call the downtime slashing logic.
-	k.CheckAndSlashForDowntime(ctx, &participant)
+	k.SlashForDowntime(ctx, &participant, params)
 
 	// Verify collateral was slashed for downtime
 	collateralAfterDowntimeCoin, found := ck.GetCollateral(ctx, participantAcc)

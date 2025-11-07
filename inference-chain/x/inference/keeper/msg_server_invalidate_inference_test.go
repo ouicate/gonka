@@ -122,11 +122,11 @@ func TestInvalidateInference_RefundsRequesterAndChargesExecutor_WithSlash(t *tes
 	executorAddr := sample.AccAddress()
 	payerAddr := sample.AccAddress()
 
-	// Set executor with 5 consecutive invalids so increment => 6, causing INVALID by probability rule
+	// Set executor with 4 consecutive invalids so increment => 5, causing INVALID by probability rule
 	executor := types.Participant{
 		Index:                        executorAddr,
 		Address:                      executorAddr,
-		Status:                       types.ParticipantStatus_INVALID,
+		Status:                       types.ParticipantStatus_ACTIVE,
 		ConsecutiveInvalidInferences: 4,
 		CurrentEpochStats:            &types.CurrentEpochStats{},
 		CoinBalance:                  5_000,
