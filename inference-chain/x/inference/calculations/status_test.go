@@ -25,7 +25,7 @@ func TestComputeStatus(t *testing.T) {
 			params:      nil,
 			participant: types.Participant{},
 			wantStatus:  types.ParticipantStatus_ACTIVE,
-			wantReason:  NoReason,
+			wantReason:  NoSpecificReason,
 		},
 		{
 			name: "consecutive failures returns invalid",
@@ -36,6 +36,7 @@ func TestComputeStatus(t *testing.T) {
 				DowntimeGoodPercentage:         types.DecimalFromFloat(0.1),
 				DowntimeBadPercentage:          types.DecimalFromFloat(0.2),
 				DowntimeHThreshold:             types.DecimalFromFloat(4),
+				QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 			},
 			participant: types.Participant{
 				ConsecutiveInvalidInferences: 20,
@@ -52,6 +53,7 @@ func TestComputeStatus(t *testing.T) {
 				DowntimeGoodPercentage:         types.DecimalFromFloat(0.1),
 				DowntimeBadPercentage:          types.DecimalFromFloat(0.2),
 				DowntimeHThreshold:             types.DecimalFromFloat(4),
+				QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 			},
 			participant: types.Participant{
 				CurrentEpochStats: &types.CurrentEpochStats{
@@ -71,6 +73,7 @@ func TestComputeStatus(t *testing.T) {
 				DowntimeGoodPercentage:         types.DecimalFromFloat(0.1),
 				DowntimeBadPercentage:          types.DecimalFromFloat(0.2),
 				DowntimeHThreshold:             types.DecimalFromFloat(4),
+				QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 			},
 			participant: types.Participant{
 				CurrentEpochStats: &types.CurrentEpochStats{
@@ -79,7 +82,7 @@ func TestComputeStatus(t *testing.T) {
 				},
 			},
 			wantStatus: types.ParticipantStatus_ACTIVE,
-			wantReason: NoReason,
+			wantReason: NoSpecificReason,
 		},
 	}
 
@@ -100,6 +103,7 @@ func TestDowntimeTriggersInactive(t *testing.T) {
 		DowntimeGoodPercentage:         types.DecimalFromFloat(0.1), // P0
 		DowntimeBadPercentage:          types.DecimalFromFloat(0.2), // P1
 		DowntimeHThreshold:             types.DecimalFromFloat(4),   // H
+		QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 	}
 
 	participant := types.Participant{
@@ -134,6 +138,7 @@ func TestDowntimeParamsOutOfRangeReturnAlgorithmError(t *testing.T) {
 			DowntimeGoodPercentage:         types.DecimalFromFloat(v.good),
 			DowntimeBadPercentage:          types.DecimalFromFloat(v.bad),
 			DowntimeHThreshold:             types.DecimalFromFloat(4),
+			QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 		}
 		participant := types.Participant{CurrentEpochStats: &types.CurrentEpochStats{}}
 		status, reason, _ := ComputeStatus(params, participant, zeroStats)

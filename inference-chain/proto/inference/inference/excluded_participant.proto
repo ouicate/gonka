@@ -12,5 +12,5 @@ message ExcludedParticipant {
   string address = 1;           // Bech32 address of the participant
   uint64 epoch_index = 2;       // Epoch index for which the participant is excluded
   string reason = 3;            // Free-form reason string (e.g., "invalidated")
-  uint64 effective_height = 4;  // Block height when exclusion took effect
+  uint64 exclusion_block_height = 4;  // Block height when exclusion took effect
 }

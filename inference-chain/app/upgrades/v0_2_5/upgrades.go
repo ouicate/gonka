@@ -32,7 +32,6 @@ func CreateUpgradeHandler(
 			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
 		}
 
-
 		// Run default module migrations.
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
 		if err != nil {
@@ -56,6 +55,7 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ValidationParams.DowntimeBadPercentage = types.DecimalFromFloat(0.2)
 	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(4.0)
 	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
+	params.ValidationParams.QuickFailureThreshold = types.DecimalFromFloat(0.000001)
 	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
 	return k.SetParams(ctx, params)
 }
