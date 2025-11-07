@@ -187,9 +187,9 @@ func (s *Server) getExcludedParticipants(ctx context.Context, epoch uint64) []Ex
 	excludedList := make([]ExcludedParticipant, len(excluded.Items))
 	for i, participant := range excluded.Items {
 		excludedList[i] = ExcludedParticipant{
-			Address:         participant.Address,
-			Reason:          participant.Reason,
-			EffectiveHeight: int64(participant.EffectiveHeight),
+			Address:              participant.Address,
+			Reason:               participant.Reason,
+			ExclusionBlockHeight: int64(participant.ExclusionBlockHeight),
 		}
 	}
 

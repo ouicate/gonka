@@ -54,9 +54,9 @@ type ActiveParticipantWithProof struct {
 }
 
 type ExcludedParticipant struct {
-	Address         string `json:"address"`
-	Reason          string `json:"reason"`
-	EffectiveHeight int64  `json:"effective_height"`
+	Address              string `json:"address"`
+	Reason               string `json:"reason"`
+	ExclusionBlockHeight int64  `json:"exclusion_block_height"`
 }
 
 type ParticipantDto struct {
