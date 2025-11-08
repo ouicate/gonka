@@ -289,14 +289,14 @@ func ApplyPowerCappingForWeights(participants []*types.ActiveParticipant) ([]*ty
 	}
 
 	// Call the core capping algorithm
-	cappedParticipants, _, wasCapped := calculateOptimalCap(participants, totalWeight, maxPercentageDecimal)
+	cappedParticipants, _, wasCapped := CalculateOptimalCap(participants, totalWeight, maxPercentageDecimal)
 
 	return cappedParticipants, wasCapped
 }
 
-// calculateOptimalCap implements the power capping algorithm
+// CalculateOptimalCap implements the power capping algorithm
 // Returns capped participants, new total power, and whether capping was applied
-func calculateOptimalCap(participants []*types.ActiveParticipant, totalPower int64, maxPercentage *types.Decimal) ([]*types.ActiveParticipant, int64, bool) {
+func CalculateOptimalCap(participants []*types.ActiveParticipant, totalPower int64, maxPercentage *types.Decimal) ([]*types.ActiveParticipant, int64, bool) {
 	participantCount := len(participants)
 	maxPercentageDecimal := maxPercentage.ToDecimal()
 

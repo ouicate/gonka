@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/calculations"
@@ -435,17 +437,65 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 	}
 
 	// Check for slashing violations
-	am.checkConfirmationSlashing(ctx, &epochGroupData, confirmationWeights)
+	am.checkConfirmationSlashing(ctx, &epochGroupData)
 
 	return nil
 }
 
 // checkConfirmationSlashing checks if participants should be slashed based on confirmation PoC results
 // Stub implementation - slashing logic not yet implemented
-func (am AppModule) checkConfirmationSlashing(ctx context.Context, epochGroupData *types.EpochGroupData, confirmationWeights map[string]int64) {
-	// TODO: Implement slashing logic
-	// Check if confirmationWeight <= alpha * initialWeight
-	// If true, slash and jail participant
-	am.LogInfo("checkConfirmationSlashing: Stub called (not yet implemented)", types.PoC,
-		"epochIndex", epochGroupData.EpochIndex)
+func (am AppModule) checkConfirmationSlashing(
+	ctx context.Context,
+	epochGroupData *types.EpochGroupData,
+) error {
+	notPreservedTotalWeight, err := am.GetNotPreservedTotalWeightByParticipant(ctx, epochGroupData.EpochIndex)
+	if err != nil {
+		return fmt.Errorf("failed to get not preserved total weight by participant: %w", err)
+	}
+	for _, vw := range epochGroupData.ValidationWeights {
+		address := vw.MemberAddress
+		notPreservedTotalWeightValue, found := notPreservedTotalWeight[address]
+		if !found {
+			am.LogWarn("checkConfirmationSlashing: Not preserved total weight not found for participant", types.PoC,
+				"address", address)
+			continue
+		}
+		confirmationWeight := vw.ConfirmationWeight
+		participant, found := am.keeper.GetParticipant(ctx, address)
+		if !found {
+			am.LogWarn("checkConfirmationSlashing: Participant not found", types.PoC,
+				"address", address)
+			continue
+		}
+		participant.CurrentEpochStats.ConfirmationPoCRatio = types.DecimalFromDecimal(decimal.NewFromInt(confirmationWeight).Div(decimal.NewFromInt(notPreservedTotalWeightValue)))
+		am.keeper.SetParticipant(ctx, participant)
+	}
+	return nil
+}
+
+func (am AppModule) GetNotPreservedTotalWeightByParticipant(ctx context.Context, epochId uint64) (map[string]int64, error) {
+	participants, found := am.keeper.GetActiveParticipants(ctx, epochId)
+	if !found {
+		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Active participants not found", types.PoC, "epochId", epochId)
+		return nil, errors.New("GetPreviousEpochMLNodesWithInferenceAllocation: active participant not found. epochId: " + strconv.FormatUint(epochId, 10))
+	}
+
+	result := make(map[string]int64)
+
+	for _, p := range participants.Participants {
+		am.LogInfo("GetPreviousEpochMLNodesWithInferenceAllocation. GetPreservedNodesByParticipant: Processing participant", types.PoC,
+			"participantAddress", p.Index, "len(p.MlNodes)", len(p.MlNodes))
+
+		totalWeight := int64(0)
+		for _, nodeArray := range p.MlNodes {
+			for _, mlNode := range nodeArray.MlNodes {
+				if len(mlNode.TimeslotAllocation) > 1 && !mlNode.TimeslotAllocation[1] {
+					totalWeight += mlNode.PocWeight
+				}
+			}
+		}
+		result[p.Index] = totalWeight
+	}
+
+	return result, nil
 }

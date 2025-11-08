@@ -40,5 +40,6 @@ message CurrentEpochStats {
   uint64 invalidated_inferences = 7;
   Decimal invalidLLR = 8;
   Decimal inactiveLLR = 9;
+  Decimal confirmationPoCRatio = 10;
 }
 

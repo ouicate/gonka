@@ -440,7 +440,180 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("  Test validated with $numPocSlotTrue POC_SLOT=true nodes and $numPocSlotFalse POC_SLOT=false nodes")
         Logger.info("  Final weight: $expectedFinalWeight = (${numPocSlotTrue}×10) + (${numPocSlotFalse}×8)")
     }
-    
+
+
+
+    @Test
+    fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation 2`() {
+        logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
+
+        // Configure genesis with 3 MLNodes BEFORE cluster initialization
+        // Reuse existing docker-compose files for additional mock servers
+        // NOTE: Must use genesis, not join nodes! Join node init only starts specific services (api, mock-server, proxy)
+        // and doesn't start mock-server-2, mock-server-3. Genesis init starts ALL services.
+        val config = inferenceConfig.copy(
+            additionalDockerFilesByKeyName = mapOf(
+                GENESIS_KEY_NAME to listOf("docker-compose-local-mock-node-2.yml", "docker-compose-local-mock-node-3.yml")
+            ),
+            nodeConfigFileByKeyName = mapOf(
+                GENESIS_KEY_NAME to "node_payload_mock-server_genesis_3_nodes.json"
+            )
+        )
+
+        // Initialize cluster with custom spec for confirmation PoC testing
+        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
+        val (cluster, genesis) = initCluster(
+            joinCount = 2,
+            mergeSpec = confirmationSpec,
+            config = config,
+            reboot = true,
+            resetMlNodes = false  // Don't reset - we want to keep our 3-node configuration
+        )
+
+        logSection("✅ Cluster Initialized Successfully with genesis having 3 MLNodes!")
+
+        val join1 = cluster.joinPairs[0]
+        val join2 = cluster.joinPairs[1]
+
+        logSection("Verifying genesis has 3 mock server containers")
+        // The additional mock servers should have been started by initCluster with reboot=true
+        var genesisNodes = genesis.api.getNodes()
+        Logger.info("Genesis has ${genesisNodes.size} nodes registered")
+        genesisNodes.forEach { node ->
+            Logger.info("  Node: ${node.node.id} at ${node.node.host}:${node.node.pocPort}")
+        }
+
+        logSection("Setting up mock weights to avoid power capping")
+        // Set genesis nodes to weight=10 per node (total 30), join nodes to weight=50 to avoid power capping Genesis
+        // Genesis: 30/130 = 23% < 30% (no capping)
+        // Note: Each node generates its own nonces, so setting to 10 means each of genesis's 3 nodes generates 10, totaling 30
+        genesis.setPocResponseOnAllMocks(30)
+        genesis.setPocValidationResponseOnAllMocks(30)
+        join1.setPocResponseOnAllMocks(100)
+        join1.setPocValidationResponseOnAllMocks(100)
+        join2.setPocResponseOnAllMocks(250)
+        join2.setPocValidationResponseOnAllMocks(250)
+
+        logSection("Waiting for first PoC cycle to establish weight=50 for join nodes")
+        genesis.waitForStage(EpochStage.START_OF_POC)
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
+
+        logSection("Waiting for second PoC cycle to establish confirmation_weight=50 for join nodes")
+        // The confirmation_weight is initialized from the previous epoch's weight during epoch formation
+        // We need a second cycle so join nodes' confirmation_weight gets set to 50
+        genesis.waitForStage(EpochStage.START_OF_POC)
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
+
+        logSection("Querying POC_SLOT allocation for Genesis's 3 nodes")
+        genesisNodes = genesis.api.getNodes()
+        assertThat(genesisNodes).hasSize(3)
+
+        data class NodeAllocation(val nodeId: String, val pocSlot: Boolean, val weight: Long)
+
+        val pocSlotAllocation = genesisNodes.mapNotNull { nodeResponse ->
+            val epochMlNodes = nodeResponse.state.epochMlNodes
+            if (epochMlNodes != null && epochMlNodes.isNotEmpty()) {
+                val (_, mlNodeInfo) = epochMlNodes.entries.first()
+                val timeslotAllocation = mlNodeInfo.timeslotAllocation
+                val pocSlot = timeslotAllocation.getOrNull(1) ?: false  // Index 1 is POC_SLOT
+                NodeAllocation(nodeResponse.node.id, pocSlot, mlNodeInfo.pocWeight.toLong())
+            } else {
+                null
+            }
+        }
+
+        assertThat(pocSlotAllocation).hasSize(3)
+
+        logSection("Genesis MLNode POC_SLOT allocation:")
+        pocSlotAllocation.forEach {
+            Logger.info("  Node ${it.nodeId}: POC_SLOT=${it.pocSlot}, weight=${it.weight}")
+        }
+
+        val numPocSlotTrue = pocSlotAllocation.count { it.pocSlot }
+        val numPocSlotFalse = pocSlotAllocation.count { !it.pocSlot }
+
+        val expectedFinalWeight = 80L
+        val confirmedWeightPerNode = (90L - expectedFinalWeight) / numPocSlotTrue
+
+        Logger.info("Genesis weight breakdown:")
+        Logger.info("  POC_SLOT=true nodes: $numPocSlotTrue × 30 = ${numPocSlotTrue * 30}")
+        Logger.info("  POC_SLOT=false nodes: $numPocSlotFalse × $confirmedWeightPerNode = ${numPocSlotFalse * confirmedWeightPerNode}")
+        Logger.info("  Expected final weight: $expectedFinalWeight")
+
+        logSection("Waiting for confirmation PoC trigger during inference phase")
+        val confirmationEvent = waitForConfirmationPoCTrigger(genesis)
+        assertThat(confirmationEvent).isNotNull
+        Logger.info("Confirmation PoC triggered at height ${confirmationEvent!!.triggerHeight}")
+
+        logSection("Setting PoC mocks for confirmation")
+        // During confirmation PoC, each POC_SLOT=false node will return weight=8 (reduced from 10)
+        Logger.info("  Genesis: each node returns weight=$confirmedWeightPerNode (reduced from 10)")
+        Logger.info("    - Only $numPocSlotFalse POC_SLOT=false nodes will participate in confirmation")
+        Logger.info("    - Total confirmed weight: ${numPocSlotFalse * confirmedWeightPerNode}")
+        Logger.info("  Join1: weight=100 per node (full confirmation)")
+        Logger.info("  Join2: weight=250 per node (full confirmation)")
+        genesis.setPocResponseOnAllMocks(confirmedWeightPerNode)
+        genesis.setPocValidationResponseOnAllMocks(confirmedWeightPerNode)
+
+        logSection("Waiting for confirmation PoC generation phase")
+        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
+        Logger.info("Confirmation PoC generation phase active")
+
+        logSection("Waiting for confirmation PoC validation phase")
+        waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_VALIDATION)
+        Logger.info("Confirmation PoC validation phase active")
+
+        logSection("Waiting for confirmation PoC completion")
+        waitForConfirmationPoCCompletion(genesis)
+        Logger.info("Confirmation PoC completed (event cleared)")
+
+        // Reset mocks to full weight after confirmation
+        genesis.setPocResponseOnAllMocks(30)
+        genesis.setPocValidationResponseOnAllMocks(30)
+
+        logSection("Waiting for NEXT epoch where confirmation weights will be applied")
+        genesis.waitForStage(EpochStage.START_OF_POC)
+        Logger.info("New epoch started, confirmation weights will be used in settlement")
+
+        // Record balances AFTER confirmation but BEFORE settlement
+        val initialBalances = mapOf(
+            genesis.node.getColdAddress() to genesis.node.getSelfBalance(),
+            join1.node.getColdAddress() to join1.node.getSelfBalance(),
+            join2.node.getColdAddress() to join2.node.getSelfBalance()
+        )
+
+        logSection("Waiting for reward settlement with confirmation weights")
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
+
+        logSection("Verifying rewards are capped for Genesis based on POC_SLOT allocation")
+        val finalBalances = mapOf(
+            genesis.node.getColdAddress() to genesis.node.getSelfBalance(),
+            join1.node.getColdAddress() to join1.node.getSelfBalance(),
+            join2.node.getColdAddress() to join2.node.getSelfBalance()
+        )
+
+        val genesisChange = finalBalances[genesis.node.getColdAddress()]!! - initialBalances[genesis.node.getColdAddress()]!!
+        val join1Change = finalBalances[join1.node.getColdAddress()]!! - initialBalances[join1.node.getColdAddress()]!!
+        val join2Change = finalBalances[join2.node.getColdAddress()]!! - initialBalances[join2.node.getColdAddress()]!!
+
+        Logger.info("Balance changes:")
+        Logger.info("  Genesis: $genesisChange")
+        Logger.info("  Join1: $join1Change")
+        Logger.info("  Join2: $join2Change")
+
+        // All participants should have positive rewards
+        assertThat(genesisChange).isGreaterThan(0)
+        assertThat(join1Change).isGreaterThan(0)
+        assertThat(join2Change).isGreaterThan(0)
+        Logger.info("  All participants received positive rewards")
+
+        val join1Ration = genesisChange.toDouble() / join1Change.toDouble()
+        val join2Ration = genesisChange.toDouble() / join2Change.toDouble()
+
+        assertThat(join1Ration).isCloseTo(0.8, Percentage.withPercentage(1.0))
+        assertThat(join2Ration).isCloseTo(0.6666667, Percentage.withPercentage(1.0))
+    }
+
     // Helper functions
     
     private fun createConfirmationPoCSpec(

@@ -22,6 +22,8 @@ const (
 	AlreadySet ParticipantStatusReason = "already_set"
 	// Downtime when missed inferences exceeds the threshold
 	Downtime ParticipantStatusReason = "downtime"
+	// Failed Confirmation PoC
+	FailedConfirmationPoC ParticipantStatusReason = "failed_confirmation_poc"
 )
 
 const (
@@ -30,7 +32,12 @@ const (
 )
 
 // Note that newValue is passed in BY VALUE, so changes to newValue directly will not pass back
-func ComputeStatus(validationParameters *types.ValidationParams, newValue types.Participant, oldStats types.CurrentEpochStats) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
+func ComputeStatus(
+	validationParameters *types.ValidationParams,
+	confirmationPocParams *types.ConfirmationPoCParams,
+	newValue types.Participant,
+	oldStats types.CurrentEpochStats,
+) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
 	// Genesis only (for tests)
 	newStats := getStats(&newValue)
 	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
@@ -59,6 +66,13 @@ func ComputeStatus(validationParameters *types.ValidationParams, newValue types.
 	if inactiveDecision == Fail {
 		return types.ParticipantStatus_INACTIVE, Downtime, newStats
 	} else if inactiveDecision == Error {
+		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
+	}
+
+	failedConfirmationPoCDecision := getFailedConfirmationPoCStatus(&newStats, confirmationPocParams)
+	if failedConfirmationPoCDecision == Fail {
+		return types.ParticipantStatus_INACTIVE, FailedConfirmationPoC, newStats
+	} else if failedConfirmationPoCDecision == Error {
 		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
@@ -102,6 +116,16 @@ func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.Cur
 	invalidationSprt.UpdateCounts(newInvalidations, newValidations)
 	newStats.InvalidLLR = types.DecimalFromDecimal(invalidationSprt.LLR)
 	return invalidationSprt.Decision()
+}
+
+func getFailedConfirmationPoCStatus(newStats *types.CurrentEpochStats, parameters *types.ConfirmationPoCParams) Decision {
+	if parameters == nil || parameters.AlphaThreshold == nil || parameters.AlphaThreshold.ToDecimal().Equal(decimal.Zero) {
+		return Pass
+	}
+	if newStats.ConfirmationPoCRatio.ToDecimal().LessThan(parameters.AlphaThreshold.ToDecimal()) {
+		return Fail
+	}
+	return Pass
 }
 
 func getStats(newValue *types.Participant) types.CurrentEpochStats {
