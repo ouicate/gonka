@@ -26,14 +26,13 @@ func CreateUpgradeHandler(
 			fromVM["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
 		}
 
-		err := setNewInvalidationParams(ctx, k, fromVM)
-		sdkCtx := sdk.UnwrapSDKContext(ctx)
-		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
-			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
-		}
+	err := setNewInvalidationParams(ctx, k, fromVM)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
+		k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
+	}
 
-
-		// Run default module migrations.
+	// Run default module migrations.
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
 		if err != nil {
 			return toVM, err
@@ -56,6 +55,7 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ValidationParams.DowntimeBadPercentage = types.DecimalFromFloat(0.2)
 	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(4.0)
 	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
+	params.ValidationParams.QuickFailureThreshold = types.DecimalFromFloat(0.000001)
 	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
 	return k.SetParams(ctx, params)
 }

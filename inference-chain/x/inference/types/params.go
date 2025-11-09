@@ -127,6 +127,7 @@ func DefaultValidationParams() *ValidationParams {
 		DowntimeBadPercentage:          DecimalFromFloat(0.20),
 		DowntimeGoodPercentage:         DecimalFromFloat(0.1),
 		DowntimeHThreshold:             DecimalFromFloat(4),
+		QuickFailureThreshold:          DecimalFromFloat(0.000001),
 	}
 }
 
