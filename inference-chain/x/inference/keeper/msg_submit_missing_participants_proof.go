@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -105,13 +106,17 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	totalPower := int64(0)
 
 	for _, participant := range results {
+		s.logger.Info(fmt.Sprintf(
+			"SubmitMissingProof: participant: op addr %v  val key %v\n", participant.OperatorAddress, participant.ValidatorPubKey))
 		prevParticipantsData[participant.ValidatorPubKey.Address().String()] = &contracts.CommitInfo{
 			ValidatorAddress: participant.ValidatorPubKey.Address().String(),
-			ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Address().Bytes()),
+			ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Bytes()),
 			VotingPower:      participant.Power,
 		}
 		totalPower += participant.Power
 	}
+
+	s.logger.Info(fmt.Sprintf("SubmitMissingProof: totalPower %v\n", totalPower))
 
 	if err := verifyGivenProofs(msg, prevParticipantsData); err != nil {
 		s.logger.Error("error verifying  proofs", "block height", int64(msg.BlockHeight), "err", err)
@@ -133,6 +138,8 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 		}
 		totalVotedPower += data.VotingPower
 	}
+
+	s.logger.Info(fmt.Sprintf("SubmitMissingProof: total voted power %v\n", totalPower))
 
 	minPowerNeed := float64(totalPower) / 100.0 * 51.0 // need at least 51% validators signed
 	if float64(totalVotedPower) < minPowerNeed {

@@ -13,7 +13,7 @@ require (
 	github.com/cosmos/ibc-go/v8 v8.2.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/golang/protobuf v1.5.4
-	github.com/gonka-ai/gonka-utils/go v0.0.0-20251106183404-0352607cacf3
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20251109185649-9d06cebd023d
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/ignite/cli/v28 v28.11.0
