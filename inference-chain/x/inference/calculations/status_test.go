@@ -14,7 +14,7 @@ func TestComputeStatus(t *testing.T) {
 		params      *types.ValidationParams
 		participant types.Participant
 		wantStatus  types.ParticipantStatus
-			wantReason  ParticipantStatusReason
+		wantReason  ParticipantStatusReason
 	}{
 		{
 			name:        "nil validation parameters returns active",

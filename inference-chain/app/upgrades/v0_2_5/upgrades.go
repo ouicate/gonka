@@ -26,13 +26,13 @@ func CreateUpgradeHandler(
 			fromVM["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
 		}
 
-	err := setNewInvalidationParams(ctx, k, fromVM)
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
-		k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
-	}
+		err := setNewInvalidationParams(ctx, k, fromVM)
+		sdkCtx := sdk.UnwrapSDKContext(ctx)
+		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
+			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
+		}
 
-	// Run default module migrations.
+		// Run default module migrations.
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
 		if err != nil {
 			return toVM, err
