@@ -66,9 +66,9 @@
       },
       "params": {
         "epoch_params": {
-        "epoch_length": "220",
+        "epoch_length": "360",
         "epoch_multiplier": "1",
-        "epoch_shift": "150",
+        "epoch_shift": "300",
         "poc_stage_duration": "60",
         "poc_exchange_duration": "5",
         "poc_validation_delay": "5",
