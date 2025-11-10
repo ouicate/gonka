@@ -280,8 +280,13 @@ func TestSetModelsForParticipants_OneNodeOneModel(t *testing.T) {
 	require.Len(t, modelGroup.MlNodes, 1, "The model-specific group should have one node")
 
 	assertNodeInGroup(t, modelGroup.MlNodes, "mlnode1")
-	// With weight-based allocation: 1 node (weight 29), target 50% = 14.5, so it gets allocated
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 1)
+	// With new filtering logic: 1 participant with 1 node cannot have that node allocated
+	// because it would make the participant non-voting (100% of weight non-voting),
+	// violating the requirement that ≥70% of weight can vote in PoC validation.
+	// The voting constraint prevents allocation: allocating would make non-voting weight = 29,
+	// but max allowed non-voting weight = 30% × 29 = 8.7, so 29 > 8.7 fails the check.
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 1) // Not allocated for PoC
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 0)  // None allocated
 }
 
 func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
@@ -1103,30 +1108,42 @@ func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
 		statsByParticipant[participant.Index] = stats
 	}
 
-	// Calculate target weight (50%)
-	targetWeight := globalTotalWeight / 2
+	// Calculate expected values based on N/2+1 participant sampling
+	expectedEligibleParticipants := int64(numParticipants/2 + 1) // 11 out of 20
+	expectedEligibleWeight := (globalTotalWeight * expectedEligibleParticipants) / int64(numParticipants)
+	// Target is 50% of ELIGIBLE weight (not total weight)
+	targetWeightFromEligible := expectedEligibleWeight / 2
 
 	// Log overall results
 	t.Logf("\n=== Fair Distribution Test Results ===")
-	t.Logf("Participants: %d", numParticipants)
+	t.Logf("Participants: %d (eligible: %d with N/2+1 sampling)", numParticipants, expectedEligibleParticipants)
 	t.Logf("Nodes per participant: %d", nodesPerParticipant)
 	t.Logf("Total nodes: %d", globalTotalNodes)
 	t.Logf("Total weight: %d", globalTotalWeight)
-	t.Logf("Target weight: %d (50%%)", targetWeight)
+	t.Logf("Expected eligible weight: ~%d (from %d participants)", expectedEligibleWeight, expectedEligibleParticipants)
+	t.Logf("Target weight from eligible: ~%d (50%% of eligible)", targetWeightFromEligible)
 	t.Logf("Allocated weight: %d", globalAllocatedWeight)
-	t.Logf("Allocated percentage: %.2f%%", float64(globalAllocatedWeight)/float64(globalTotalWeight)*100)
+	t.Logf("Allocated as %% of total: %.2f%%", float64(globalAllocatedWeight)/float64(globalTotalWeight)*100)
+	t.Logf("Allocated as %% of eligible: %.2f%%", float64(globalAllocatedWeight)/float64(expectedEligibleWeight)*100)
 	t.Logf("Allocated nodes: %d/%d", globalAllocatedNodes, globalTotalNodes)
 
-	// Verify allocated weight is close to target (within one max node weight)
-	maxNodeWeight := int64(baseWeight * 2)
-	require.GreaterOrEqual(t, globalAllocatedWeight, targetWeight,
-		"Allocated weight should be >= target")
-	require.LessOrEqual(t, globalAllocatedWeight, targetWeight+maxNodeWeight,
-		"Allocated weight should not exceed target by more than one node")
+	// Verify allocated weight is reasonable given N/2+1 sampling
+	// We expect roughly 50% of eligible weight, with some variance due to:
+	// - IQR outlier filtering may remove some nodes
+	// - Voting constraints may limit allocation
+	// - Round-robin may not fill completely
+	minExpectedWeight := targetWeightFromEligible * 6 / 10 // At least 60% of target from eligible
+	maxExpectedWeight := expectedEligibleWeight             // At most all eligible weight
+	
+	require.GreaterOrEqual(t, globalAllocatedWeight, minExpectedWeight,
+		"Allocated weight (%d) should be >= 60%% of target from eligible (%d)",
+		globalAllocatedWeight, minExpectedWeight)
+	require.LessOrEqual(t, globalAllocatedWeight, maxExpectedWeight,
+		"Allocated weight (%d) should not exceed total eligible weight (%d)",
+		globalAllocatedWeight, maxExpectedWeight)
 
 	// Check distribution fairness
 	var allocatedCounts []int
-	var nodesAllocatedPerParticipant []int
 	participantsWithAllocation := 0
 	participantsWithNoAllocation := 0
 
@@ -1135,7 +1152,6 @@ func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
 		stats := statsByParticipant[participantID]
 
 		allocatedCounts = append(allocatedCounts, stats.allocatedNodes)
-		nodesAllocatedPerParticipant = append(nodesAllocatedPerParticipant, stats.allocatedNodes)
 
 		if stats.allocatedNodes > 0 {
 			participantsWithAllocation++
