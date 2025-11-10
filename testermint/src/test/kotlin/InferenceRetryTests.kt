@@ -63,7 +63,7 @@ class InferenceRetryTests : TestermintTest() {
             errorType = "server_error",
             delay = Duration.ofMillis(0),
             streamDelay = Duration.ofMillis(0),
-            segment = "",
+            segment = "/v3.0.8",
             model = null
         )
         mockErroring.setPocResponse(weight = 10, scenarioName = "default")
