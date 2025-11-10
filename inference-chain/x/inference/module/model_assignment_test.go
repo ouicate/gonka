@@ -30,6 +30,11 @@ func (m *mockKeeperForModelAssigner) GetActiveParticipants(ctx context.Context, 
 	return types.ActiveParticipants{}, false
 }
 
+func (m *mockKeeperForModelAssigner) GetEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) (val types.EpochGroupData, found bool) {
+	// Not implemented for this mock - return empty data
+	return types.EpochGroupData{}, false
+}
+
 // Mock Logger
 type mockLogger struct{}
 
