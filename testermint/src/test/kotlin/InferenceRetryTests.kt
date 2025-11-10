@@ -56,8 +56,8 @@ class InferenceRetryTests : TestermintTest() {
         )
         mockHealthy.setPocResponse(weight = 10, scenarioName = "default")
 
-        val mlNodeVersion = genesis.node.getMlNodeVersion()
-
+        val mlNodeVersionResponse = genesis.node.getMlNodeVersion()
+        val mlNodeVersion = mlNodeVersionResponse.mlnodeVersion.currentVersion
         // Set erroring behavior on the second node (HTTP 500)
         mockErroring.setInferenceErrorResponse(
             statusCode = 500,
@@ -65,7 +65,7 @@ class InferenceRetryTests : TestermintTest() {
             errorType = "server_error",
             delay = Duration.ofMillis(0),
             streamDelay = Duration.ofMillis(0),
-            segment = "/v3.0.8",
+            segment = "/${mlNodeVersion}",
             model = null
         )
         mockErroring.setPocResponse(weight = 10, scenarioName = "default")
