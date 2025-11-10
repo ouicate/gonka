@@ -56,6 +56,8 @@ class InferenceRetryTests : TestermintTest() {
         )
         mockHealthy.setPocResponse(weight = 10, scenarioName = "default")
 
+        val mlNodeVersion = genesis.node.getMlNodeVersion()
+
         // Set erroring behavior on the second node (HTTP 500)
         mockErroring.setInferenceErrorResponse(
             statusCode = 500,

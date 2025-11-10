@@ -154,6 +154,10 @@ data class ApplicationCLI(
         exec(listOf(config.execName, "version")).first()
     }
 
+    fun getMlNodeVersion(): MlNodeVersionQueryResponse = wrapLog("getMlNodeVersion", infoLevel = false) {
+        execAndParse(listOf("query", "inference", "ml-node-version"))
+    }
+
     var coldAccountKey: Validator? = null
     var warmAccountKey: Validator? = null
 
