@@ -65,7 +65,7 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	if params.ConfirmationPocParams == nil {
 		params.ConfirmationPocParams = &types.ConfirmationPoCParams{}
 	}
-	params.ConfirmationPocParams.ExpectedConfirmationsPerEpoch = 0
+	params.ConfirmationPocParams.ExpectedConfirmationsPerEpoch = 1
 	params.ConfirmationPocParams.AlphaThreshold = types.DecimalFromFloat(0.5)
 	params.ConfirmationPocParams.SlashFraction = types.DecimalFromFloat(0.0)
 	params.ConfirmationPocParams.UpgradeProtectionWindow = 500
