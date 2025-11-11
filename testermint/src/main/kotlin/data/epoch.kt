@@ -7,7 +7,7 @@ data class EpochResponse(
     val blockHeight: Long,
     @SerializedName("latest_epoch")
     val latestEpoch: LatestEpochDto,
-    val phase: EpochPhase,
+    val phase: Any,  // Changed from EpochPhase to Any to handle both String and enum
     @SerializedName("epoch_stages")
     val epochStages: EpochStages,
     @SerializedName("next_epoch_stages")
@@ -19,14 +19,35 @@ data class EpochResponse(
     @SerializedName("active_confirmation_poc_event")
     val activeConfirmationPocEvent: ConfirmationPoCEvent? = null
 ) {
+    // Helper function to get phase as enum, handling Int, Double, String, and enum values
+    fun getPhaseAsEnum(): EpochPhase {
+        return when (phase) {
+            is EpochPhase -> phase
+            is Int -> EpochPhase.values().find { it.value == phase } ?: EpochPhase.Inference
+            is Double -> EpochPhase.values().find { it.value == phase.toInt() } ?: EpochPhase.Inference
+            is Float -> EpochPhase.values().find { it.value == phase.toInt() } ?: EpochPhase.Inference
+            is Number -> EpochPhase.values().find { it.value == phase.toInt() } ?: EpochPhase.Inference
+            is String -> {
+                when (phase) {
+                    "POC_GENERATE" -> EpochPhase.PoCGenerate
+                    "POC_GENERATE_WIND_DOWN" -> EpochPhase.PoCGenerateWindDown
+                    "POC_VALIDATE" -> EpochPhase.PoCValidate
+                    "POC_VALIDATE_WIND_DOWN" -> EpochPhase.PoCValidateWindDown
+                    "INFERENCE" -> EpochPhase.Inference
+                    else -> EpochPhase.Inference // Default fallback
+                }
+            }
+            else -> EpochPhase.Inference
+        }
+    }
+
     val safeForInference: Boolean =
-        if (phase == EpochPhase.Inference) {
+        if (getPhaseAsEnum() == EpochPhase.Inference) {
             val blocksUntilEnd = nextEpochStages.pocStart - blockHeight
             blocksUntilEnd > 3
         } else {
             false
         }
-
 }
 
 data class LatestEpochDto(
@@ -35,12 +56,12 @@ data class LatestEpochDto(
     val pocStartBlockHeight: Long
 )
 
-enum class EpochPhase {
-    PoCGenerate,
-    PoCGenerateWindDown,
-    PoCValidate,
-    PoCValidateWindDown,
-    Inference
+enum class EpochPhase(val value: Int) {
+    PoCGenerate(0),
+    PoCGenerateWindDown(1),
+    PoCValidate(2),
+    PoCValidateWindDown(3),
+    Inference(4)
 }
 
 data class EpochStages(
