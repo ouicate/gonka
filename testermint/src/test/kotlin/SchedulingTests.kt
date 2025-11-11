@@ -1,6 +1,7 @@
 import com.productscience.ApplicationCLI
 import com.productscience.EpochStage
 import com.productscience.GENESIS_KEY_NAME
+import com.productscience.data.NodeResponse
 import com.productscience.data.Pubkey2
 import com.productscience.inferenceConfig
 import com.productscience.initCluster
@@ -21,7 +22,7 @@ class SchedulingTests : TestermintTest() {
                 GENESIS_KEY_NAME to "node_payload_mock-server_genesis_2_nodes.json"
             ),
         )
-        val (_, genesis) = initCluster(config = config, reboot = true, resetMlNodes = false)
+        val (cluster, genesis) = initCluster(config = config, reboot = true, resetMlNodes = false)
         val genesisParticipantKey = genesis.node.getValidatorInfo()
 
         // Wait for all participants to join and validators to be applied
@@ -45,35 +46,19 @@ class SchedulingTests : TestermintTest() {
             }
         }
 
-        assertThat(allocatedNode).isNotNull
+        assertThat(allocatedNode).isNull()
 
         genesis.waitForStage(EpochStage.START_OF_POC)
-
-        genesis.api.getNodes().let { nodes ->
-            assertThat(nodes).hasSize(2)
-            nodes.forEach { node ->
-                node.state.epochMlNodes?.forEach { (_, value) ->
-                    assertThat(value.pocWeight).isEqualTo(10)
-                    assertThat(value.timeslotAllocation).hasSize(2)
-                }
-            }
-            nodes.forEach { node ->
-                if (node.node.id == allocatedNode.node.id) {
-                    assertThat(node.state.currentStatus).isEqualTo("INFERENCE")
-                    assertThat(node.state.intendedStatus).isEqualTo("INFERENCE")
-                } else {
-                    assertThat(node.state.currentStatus).isEqualTo("POC")
-                    assertThat(node.state.intendedStatus).isEqualTo("POC")
-                }
-            }
-        }
 
         genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
 
         checkParticipantWeights(genesis.node, genesisParticipantKey)
 
-        val allocatedNode2 = genesis.api.getNodes().let { nodes ->
-            assertThat(nodes).hasSize(2)
+        val nodes = cluster.allPairs.map { pair ->
+            pair.api.getNodes()
+        }.flatten()
+        val allocatedNode2 = nodes.let { nodes ->
+            assertThat(nodes).hasSize(4)
 
             nodes.forEach { node ->
                 node.state.epochMlNodes?.forEach { (key, value) ->
