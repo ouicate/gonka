@@ -188,7 +188,7 @@ class ConfirmationPoCTests : TestermintTest() {
             it.consensusPubkey.value == join1.node.getValidatorInfo().key 
         }
         assertThat(join1ValidatorAfterPoC).isNotNull
-        assertThat(join1ValidatorAfterPoC!!.status).isEqualTo(StakeValidatorStatus.BONDED.value)
+        assertThat(join1ValidatorAfterPoC!!.getStatusAsInt()).isEqualTo(StakeValidatorStatus.BONDED.value)
         Logger.info("  Join1 is still bonded (not slashed, confirmation_weight=8 > alpha*regular_weight=7)")
         
         logSection("Waiting for NEXT epoch where confirmation weights will be applied")

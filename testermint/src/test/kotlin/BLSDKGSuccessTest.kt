@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.Tag
 import org.tinylog.kotlin.Logger
 import java.util.Base64
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -271,15 +272,43 @@ class BLSDKGSuccessTest : TestermintTest() {
             Logger.error("Signing request not found! This suggests the request was never created, expired, or has a different ID")
         }
         
-        val statusCode = signingStatus.signingRequest.status.toString().toInt()
-        val statusEnum = ThresholdSigningStatus.fromValue(statusCode)
-        Logger.info("Found signing request with status: $statusEnum ($statusCode)")
+        val rawStatus = signingStatus.signingRequest.status
+        val statusEnum = parseThresholdSigningStatus(rawStatus)
+        Logger.info("Found signing request with status: $statusEnum (raw: $rawStatus)")
         assertThat(statusEnum).isEqualTo(ThresholdSigningStatus.COMPLETED)
         assertThat(signingStatus.signingRequest.finalSignature).isNotNull()
         val sigBytes = Base64.getDecoder().decode(signingStatus.signingRequest.finalSignature)
         assertThat(sigBytes).hasSize(48) // Compressed G1 format
         Logger.info("Threshold signature created successfully for request $requestId")
     }
+    
+    private fun parseThresholdSigningStatus(status: Any?): ThresholdSigningStatus =
+        when (status) {
+            null -> ThresholdSigningStatus.UNSPECIFIED
+            is ThresholdSigningStatus -> status
+            is Number -> ThresholdSigningStatus.fromValue(status.toInt())
+            is String -> {
+                status.toIntOrNull()?.let { return ThresholdSigningStatus.fromValue(it) }
+
+                val normalized = status.uppercase(Locale.US)
+                val mappings = listOf(
+                    "UNDEFINED" to ThresholdSigningStatus.UNSPECIFIED,
+                    "UNSPECIFIED" to ThresholdSigningStatus.UNSPECIFIED,
+                    "PENDING" to ThresholdSigningStatus.PENDING_SIGNING,
+                    "PENDING_SIGNING" to ThresholdSigningStatus.PENDING_SIGNING,
+                    "COLLECTING_SIGNATURES" to ThresholdSigningStatus.COLLECTING_SIGNATURES,
+                    "AGGREGATING" to ThresholdSigningStatus.COLLECTING_SIGNATURES, // Legacy alias
+                    "COMPLETED" to ThresholdSigningStatus.COMPLETED,
+                    "FAILED" to ThresholdSigningStatus.FAILED,
+                    "EXPIRED" to ThresholdSigningStatus.EXPIRED
+                )
+
+                mappings.firstOrNull { (token, _) ->
+                    normalized == token || normalized.endsWith("_$token")
+                }?.second ?: ThresholdSigningStatus.UNSPECIFIED
+            }
+            else -> ThresholdSigningStatus.UNSPECIFIED
+        }
     
     // ========================================
     // DKG Phase Management
@@ -524,9 +553,10 @@ enum class DKGPhase(val value: Int) {
 
 enum class ThresholdSigningStatus(val value: Int) {
     UNSPECIFIED(0),
-    COLLECTING_SIGNATURES(1),
-    AGGREGATING(2),
+    PENDING_SIGNING(1),
+    COLLECTING_SIGNATURES(2),
     COMPLETED(3),
+    FAILED(4),
     EXPIRED(5);
 
     companion object {

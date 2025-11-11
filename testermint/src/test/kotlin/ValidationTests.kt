@@ -210,7 +210,7 @@ class ValidationTests : TestermintTest() {
         genesis.node.waitForNextBlock(3)
         val inferencePayload = genesis.node.getInference(inference.inferenceId)
         assertNotNull(inferencePayload)
-        assertThat(inferencePayload.inference.status).isEqualTo(InferenceStatus.INVALIDATED.value)
+        assertThat(inferencePayload.inference.getStatusAsInt()).isEqualTo(InferenceStatus.INVALIDATED.value)
     }
 
     companion object {
