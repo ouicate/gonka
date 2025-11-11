@@ -90,10 +90,16 @@ func (am AppModule) checkConfirmationPoCTrigger(
 
 	// Check if there's already an active event
 	_, isActive, err := am.keeper.GetActiveConfirmationPoCEvent(ctx)
+	am.LogInfo("checkConfirmationPoCTrigger: Getting active confirmation PoC event", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex)
 	if err != nil {
 		return fmt.Errorf("failed to get active confirmation PoC event: %w", err)
 	}
 	if isActive {
+		am.LogInfo("checkConfirmationPoCTrigger: Already have an active event, don't trigger another", types.PoC,
+			"blockHeight", blockHeight,
+			"epochIndex", epochContext.EpochIndex)
 		// Already have an active event, don't trigger another
 		return nil
 	}
@@ -102,8 +108,18 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	upgradeProtectionWindow := confirmationParams.UpgradeProtectionWindow
 	if upgradeProtectionWindow <= 0 {
 		upgradeProtectionWindow = 500 // Default to 500 blocks if not set
+		am.LogInfo("checkConfirmationPoCTrigger: Upgrade protection window not set, using default", types.PoC,
+			"blockHeight", blockHeight,
+			"epochIndex", epochContext.EpochIndex,
+			"upgradeProtectionWindow", upgradeProtectionWindow)
 	}
 	hasUpgrade, reason, err := am.keeper.HasUpgradeInWindow(ctx, blockHeight, upgradeProtectionWindow)
+	am.LogInfo("checkConfirmationPoCTrigger: Checking for upgrades within upgrade protection window", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"upgradeProtectionWindow", upgradeProtectionWindow,
+		"hasUpgrade", hasUpgrade,
+		"reason", reason)
 	if err != nil {
 		return fmt.Errorf("failed to check upgrade window: %w", err)
 	}
@@ -120,21 +136,44 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	setNewValidatorsHeight := epochContext.SetNewValidators()
 	nextEpochContext := epochContext.NextEpochContext()
 	nextPoCStart := nextEpochContext.PocStartBlockHeight
-
+	am.LogInfo("checkConfirmationPoCTrigger: Next PoC start", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"nextPoCStart", nextPoCStart)
 	// Total duration includes all phases (same as regular PoC structure)
 	confirmationWindowDuration := epochParams.PocStageDuration +
 		epochParams.PocExchangeDuration +
 		epochParams.PocValidationDelay +
 		epochParams.PocValidationDuration
+	am.LogInfo("checkConfirmationPoCTrigger: Confirmation window duration", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"confirmationWindowDuration", confirmationWindowDuration)
 	triggerWindowEnd := nextPoCStart - epochParams.InferenceValidationCutoff - confirmationWindowDuration
-
+	am.LogInfo("checkConfirmationPoCTrigger: Trigger window end", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"triggerWindowEnd", triggerWindowEnd)
 	if blockHeight < setNewValidatorsHeight || blockHeight > triggerWindowEnd {
+		am.LogInfo("checkConfirmationPoCTrigger: Outside valid trigger window", types.PoC,
+			"blockHeight", blockHeight,
+			"epochIndex", epochContext.EpochIndex,
+			"setNewValidatorsHeight", setNewValidatorsHeight,
+			"triggerWindowEnd", triggerWindowEnd)
 		// Outside valid trigger window
 		return nil
 	}
 
 	triggerWindowLength := triggerWindowEnd - setNewValidatorsHeight + 1
+	am.LogInfo("checkConfirmationPoCTrigger: Trigger window length", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"triggerWindowLength", triggerWindowLength)
 	if triggerWindowLength <= 0 {
+		am.LogInfo("checkConfirmationPoCTrigger: Invalid trigger window length", types.PoC,
+			"blockHeight", blockHeight,
+			"epochIndex", epochContext.EpochIndex,
+			"triggerWindowLength", triggerWindowLength)
 		// Invalid window
 		return nil
 	}
@@ -143,7 +182,10 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	expectedConfirmations := decimal.NewFromInt(int64(confirmationParams.ExpectedConfirmationsPerEpoch))
 	windowBlocks := decimal.NewFromInt(triggerWindowLength)
 	triggerProbability := expectedConfirmations.Div(windowBlocks)
-
+	am.LogInfo("checkConfirmationPoCTrigger: Trigger probability", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"triggerProbability", triggerProbability.String())
 	// Use block hash at H-1 as randomness source
 	prevBlockHash := sdkCtx.HeaderInfo().Hash
 	if len(prevBlockHash) < 8 {
@@ -152,6 +194,10 @@ func (am AppModule) checkConfirmationPoCTrigger(
 
 	blockHashSeed := int64(binary.BigEndian.Uint64(prevBlockHash[:8]))
 	randFloat := calculations.DeterministicFloat(blockHashSeed, fmt.Sprintf("confirmation_poc_trigger_%d", blockHeight))
+	am.LogInfo("checkConfirmationPoCTrigger: Random float", types.PoC,
+		"blockHeight", blockHeight,
+		"epochIndex", epochContext.EpochIndex,
+		"randFloat", randFloat.String())
 
 	shouldTrigger := randFloat.LessThan(triggerProbability)
 
