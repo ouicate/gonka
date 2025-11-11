@@ -46,19 +46,35 @@ class SchedulingTests : TestermintTest() {
             }
         }
 
-        assertThat(allocatedNode).isNull()
+        assertThat(allocatedNode).isNotNull
 
         genesis.waitForStage(EpochStage.START_OF_POC)
+
+        genesis.api.getNodes().let { nodes ->
+            assertThat(nodes).hasSize(2)
+            nodes.forEach { node ->
+                node.state.epochMlNodes?.forEach { (_, value) ->
+                    assertThat(value.pocWeight).isEqualTo(10)
+                    assertThat(value.timeslotAllocation).hasSize(2)
+                }
+            }
+            nodes.forEach { node ->
+                if (node.node.id == allocatedNode.node.id) {
+                    assertThat(node.state.currentStatus).isEqualTo("INFERENCE")
+                    assertThat(node.state.intendedStatus).isEqualTo("INFERENCE")
+                } else {
+                    assertThat(node.state.currentStatus).isEqualTo("POC")
+                    assertThat(node.state.intendedStatus).isEqualTo("POC")
+                }
+            }
+        }
 
         genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
 
         checkParticipantWeights(genesis.node, genesisParticipantKey)
 
-        val nodes = cluster.allPairs.map { pair ->
-            pair.api.getNodes()
-        }.flatten()
-        val allocatedNode2 = nodes.let { nodes ->
-            assertThat(nodes).hasSize(4)
+        val allocatedNode2 = genesis.api.getNodes().let { nodes ->
+            assertThat(nodes).hasSize(2)
 
             nodes.forEach { node ->
                 node.state.epochMlNodes?.forEach { (key, value) ->

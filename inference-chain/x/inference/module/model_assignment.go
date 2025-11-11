@@ -59,11 +59,25 @@ func (e *EpochMLNodeData) GetForParticipant(modelId, participantAddr string) []*
 	if e.data[modelId] == nil {
 		return nil
 	}
-	return e.data[modelId][participantAddr]
+	nodes := e.data[modelId][participantAddr]
+	sortMLNodesByNodeId(nodes)
+	return nodes
 }
 
 func (e *EpochMLNodeData) Models() []string {
 	return sortedKeys(e.data)
+}
+
+func sortMLNodesByNodeId(nodes []*types.MLNodeInfo) {
+	slices.SortFunc(nodes, func(a, b *types.MLNodeInfo) int {
+		if a.NodeId < b.NodeId {
+			return -1
+		}
+		if a.NodeId > b.NodeId {
+			return 1
+		}
+		return 0
+	})
 }
 
 func (e *EpochMLNodeData) GetAllIndividualNodeWeights() []int64 {
@@ -105,8 +119,6 @@ func (e *EpochMLNodeData) GetAllParticipantsHash() string {
 
 	sortedParticipants := sortedKeys(uniqueParticipants)
 
-	// IMPORTANT: Maintain exact string format for blockchain determinism
-	// Changing this format would alter all subsequent random selections
 	allParticipantsStr := fmt.Sprintf("%v", sortedParticipants)
 	allParticipantsHash := sha256.Sum256([]byte(allParticipantsStr))
 	return fmt.Sprintf("%x", allParticipantsHash[:8])
@@ -239,12 +251,9 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		ma.LogInfo("Participant models and ML nodes updated", types.EpochGroup, "flow_context", FlowContext, "step", "participant_updated", "participant_index", p.Index, "supported_models", p.Models, "ml_nodes", p.MlNodes)
 	}
 	ma.LogInfo("Finished model assignment for all participants", types.EpochGroup, "flow_context", FlowContext, "step", "model_assignment_complete")
-
-	ma.allocateMLNodesForPoC(ctx, upcomingEpoch, participants)
-	ma.LogInfo("Finished PoC allocation for all participants", types.EpochGroup, "flow_context", FlowContext, "step", "end")
 }
 
-func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
+func (ma *ModelAssigner) AllocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
 	ma.LogInfo("Starting ML node allocation for PoC slots", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start", "num_participants", len(participants))
 
 	allocationFraction := ma.keeper.GetParams(ctx).EpochParams.PocSlotAllocation
@@ -290,7 +299,7 @@ func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 	}
 	ma.LogInfo("Built current epoch data map", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "build_current_epoch_data", "num_models", len(currentEpochData.Models()))
 
-	eligibleNodesData := ma.filterEligibleMLNodes(upcomingEpoch, previousEpochData, currentEpochData)
+	eligibleNodesData := ma.filterEligibleMLNodes(upcomingEpoch, previousEpochData, currentEpochData, totalCurrentEpochWeight)
 	ma.LogInfo("Filtered eligible nodes for all models", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "filter_all_eligible", "num_models", len(eligibleNodesData.Models()))
 
 	for _, modelId := range sortedModelIds {
@@ -302,15 +311,16 @@ func (ma *ModelAssigner) allocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 // thresholdSet holds the calculated thresholds for participant and node weight filtering
 type thresholdSet struct {
 	participantMinNodeWeights map[string]int64 // per-participant minimum node weight (25% rule)
+	participantNodeCounts     map[string]int   // per-participant target node count (for uniform weights)
 	globalMaxNodeWeight       int64            // global outlier threshold (IQR method)
 }
 
 func (ma *ModelAssigner) calculateThresholds(currentEpochData *EpochMLNodeData) thresholdSet {
 	allParticipantsWeights := currentEpochData.GetAllParticipantWeights()
-	participantWeightThreshold := calculateParticipantWeightThreshold70Percent(allParticipantsWeights)
-	ma.LogInfo("Calculated participant weight threshold (70% rule)", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_participant_threshold", "threshold", participantWeightThreshold, "total_participants", len(allParticipantsWeights))
+	participantWeightThreshold := calculateParticipantWeightThreshold75Percent(allParticipantsWeights)
+	ma.LogInfo("Calculated participant weight threshold (75% rule)", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_participant_threshold", "threshold", participantWeightThreshold, "total_participants", len(allParticipantsWeights))
 
-	participantMinNodeWeightThresholds := calculatePerParticipantThreshold(currentEpochData, participantWeightThreshold)
+	participantMinNodeWeightThresholds, participantNodeCounts := calculatePerParticipantThreshold(currentEpochData, participantWeightThreshold)
 	ma.LogInfo("Calculated per-participant node thresholds (25% rule)", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_per_participant_thresholds", "total_participants", len(participantMinNodeWeightThresholds))
 
 	allNodesWeights := currentEpochData.GetAllIndividualNodeWeights()
@@ -319,6 +329,7 @@ func (ma *ModelAssigner) calculateThresholds(currentEpochData *EpochMLNodeData) 
 
 	return thresholdSet{
 		participantMinNodeWeights: participantMinNodeWeightThresholds,
+		participantNodeCounts:     participantNodeCounts,
 		globalMaxNodeWeight:       globalMaxNodeWeightThreshold,
 	}
 }
@@ -329,7 +340,8 @@ func filterNodesByThresholds(nodes []*types.MLNodeInfo, participantAddr string, 
 		thresholds.participantMinNodeWeights[participantAddr],
 		thresholds.globalMaxNodeWeight,
 	)
-	return filterNodesByWeight(nodes, threshold)
+	targetCount := thresholds.participantNodeCounts[participantAddr]
+	return filterNodesByWeightAndCount(nodes, threshold, targetCount)
 }
 
 func buildEligibleParticipantSet(currentEpochData *EpochMLNodeData, thresholds thresholdSet) map[string]bool {
@@ -356,15 +368,20 @@ func buildEligibleParticipantSet(currentEpochData *EpochMLNodeData, thresholds t
 //
 // FILTERING PHASES:
 //
-// Phase 1 - Top Participant Participation (70% + 25% rule):
+// Phase 1 - Top Participant Participation (75% + 25% rule):
 //
-//	Ensures participants with top 70% of weight have at least 25% of their nodes participating.
+//	Ensures participants with top 75% of weight have at least 25% of their nodes participating.
 //	Calculates per-participant minimum node weight thresholds to include their top 25% nodes.
 //
 // Phase 2 - Outlier Node Filtering (IQR method):
 //
 //	Filters out suspiciously large nodes using statistical outlier detection (Q3 + 1.5*IQR).
 //	Prevents single large nodes from dominating the eligible set.
+//
+// Phase 3 - Voting Constraint Check (<34% non-voting):
+//
+//	Ensures at least 75% of total capped weight can vote in PoC validation.
+//	Tracks participants that become "non-voting" and limits them to <34% of capped total weight.
 //
 // KEY CONCEPTS:
 //   - Eligible node: Can have POC_SLOT=true (serve inference during PoC phase)
@@ -378,16 +395,26 @@ func (ma *ModelAssigner) filterEligibleMLNodes(
 	upcomingEpoch types.Epoch,
 	previousEpochData *EpochMLNodeData,
 	currentEpochData *EpochMLNodeData,
+	totalCappedWeight int64,
 ) *EpochMLNodeData {
 	allParticipantsHashStr := currentEpochData.GetAllParticipantsHash()
 
-	// Step 1: Calculate all thresholds (70% + 25% rule, IQR outlier detection)
+	// Step 1: Calculate all thresholds (75% + 25% rule, IQR outlier detection)
 	thresholds := ma.calculateThresholds(currentEpochData)
 
 	// Step 2: Build set of eligible participants (those with nodes passing weight thresholds)
 	eligibleParticipantAddrs := buildEligibleParticipantSet(currentEpochData, thresholds)
+	for participantAddr, eligible := range eligibleParticipantAddrs {
+		ma.LogInfo("Eligible participant", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "eligible_participant", "participant", participantAddr, "eligible", eligible)
+	}
+	ma.LogInfo("Eligible participants", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "participant_min_node_weights", thresholds.participantMinNodeWeights, "global_max_node_weight", thresholds.globalMaxNodeWeight)
 
-	// Step 3: Apply thresholds and sample participants per model
+	// Step 3: Calculate Phase 3 voting constraint (max 34% non-voting weight)
+	maxAllowedNonVotingWeight := decimal.NewFromInt(34).Div(decimal.NewFromInt(100)).Mul(decimal.NewFromInt(totalCappedWeight)).IntPart()
+	totalNonVotingWeight := int64(0)
+	ma.LogInfo("Calculated voting constraint threshold", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "calculate_voting_constraint", "max_allowed_non_voting_weight", maxAllowedNonVotingWeight, "total_capped_weight", totalCappedWeight)
+
+	// Step 4: Apply thresholds and sample participants per model
 	eligibleNodesData := NewEpochMLNodeData()
 	for _, modelId := range currentEpochData.Models() {
 		participantNodes := currentEpochData.GetForModel(modelId)
@@ -413,13 +440,67 @@ func (ma *ModelAssigner) filterEligibleMLNodes(
 			currentNodes := participantNodes[participantAddr]
 			filteredNodes := filterNodesByThresholds(currentNodes, participantAddr, thresholds)
 
+			// Add nodes with Phase 3 voting constraint check
+			totalParticipantWeight := currentEpochData.GetParticipantWeight(participantAddr)
 			for _, node := range filteredNodes {
+				currentParticipantWeight := eligibleNodesData.GetParticipantWeight(participantAddr)
+				eligibleNodesWeightIfAdded := currentParticipantWeight + node.PocWeight
+
+				// Phase 3: Check if adding this node would violate voting constraints
+				canAllocate, updatedWeight := canAllocateParticipantNode(
+					eligibleNodesWeightIfAdded,
+					totalParticipantWeight,
+					totalNonVotingWeight,
+					maxAllowedNonVotingWeight,
+				)
+				if !canAllocate {
+					// Stop adding nodes for this participant - would violate constraints
+					ma.LogInfo("Stopped adding nodes due to voting constraint", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "voting_constraint_limit", "participant", participantAddr, "model_id", modelId, "total_non_voting_weight", totalNonVotingWeight, "max_allowed", maxAllowedNonVotingWeight)
+					break
+				}
+				totalNonVotingWeight = updatedWeight
 				eligibleNodesData.Append(modelId, participantAddr, node)
 			}
 		}
 	}
 
 	return eligibleNodesData
+}
+
+// canAllocateParticipantNode checks if a node can be allocated without violating voting constraints.
+//
+// VOTING CONSTRAINTS:
+// A participant can only vote in PoC validation if they have at least some nodes with POC_SLOT=false.
+// If all a participant's nodes have POC_SLOT=true (all in eligible set), they become "non-voting".
+//
+// To ensure sufficient PoC validation, we limit non-voting participants to <34% of capped total weight.
+// This guarantees at least 75% of capped weight can participate in PoC validation.
+//
+// PARAMETERS:
+//   - eligibleNodesWeightIfAdded: Total weight of eligible nodes if we add the current node being considered
+//   - totalParticipantWeight: Total weight of all the participant's nodes
+//   - totalNonVotingWeight: Current sum of weights for all non-voting participants
+//   - maxAllowedNonVotingWeight: Maximum allowed total weight for non-voting participants (34% threshold)
+//
+// RETURNS:
+//   - canAllocate: Whether this node can be added to eligible set
+//   - updatedNonVotingWeight: Updated total non-voting weight if node is allocated
+func canAllocateParticipantNode(
+	eligibleNodesWeightIfAdded, totalParticipantWeight int64,
+	totalNonVotingWeight, maxAllowedNonVotingWeight int64,
+) (canAllocate bool, updatedNonVotingWeight int64) {
+	// Check if adding this node would make all participant's nodes eligible (participant becomes non-voting)
+	if eligibleNodesWeightIfAdded >= totalParticipantWeight {
+		// Check if adding this participant's weight to non-voting group would exceed 34% threshold
+		if totalNonVotingWeight+totalParticipantWeight < maxAllowedNonVotingWeight {
+			// Can allocate - participant becomes non-voting but total non-voting weight still under limit
+			return true, totalNonVotingWeight + totalParticipantWeight
+		}
+		// Cannot allocate - would exceed non-voting weight limit
+		return false, totalNonVotingWeight
+	}
+	// Can allocate - participant will still have nodes for voting (POC_SLOT=false)
+	return true, totalNonVotingWeight
 }
 
 func (ma *ModelAssigner) allocateMLNodePerPoCForModel(
@@ -516,11 +597,15 @@ func getSmallestMLNodeWithPOCSLotFalse(nodes []*types.MLNodeInfo) *types.MLNodeI
 	return smallest
 }
 
-// calculateWeightThreshold calculates minimum weight threshold to reach targetPercent of total weight.
-// Returns (w - 1) where w reaches targetPercent. Returns 0 if all weights needed.
-func calculateWeightThreshold(weights []int64, targetPercent int) int64 {
-	if len(weights) == 0 || len(weights) == 1 {
-		return 0
+// calculateWeightThresholdWithCount calculates both the weight threshold and target node count.
+// Returns (threshold, count) where threshold filters nodes and count limits uniform weight selections.
+func calculateWeightThresholdWithCount(weights []int64, targetPercent int) (int64, int) {
+	if len(weights) == 0 {
+		return 0, 0
+	}
+	if len(weights) == 1 {
+		// Single node: choose Option B (0% eligible, 100% voting)
+		return weights[0] - 1, 0
 	}
 
 	totalWeight := int64(0)
@@ -544,13 +629,85 @@ func calculateWeightThreshold(weights []int64, targetPercent int) int64 {
 
 	// Accumulate until reaching target
 	sum := int64(0)
-	for i, w := range sorted {
+	nodeCount := 0
+	for _, w := range sorted {
+		nodeCount++
 		sum += w
 		if sum >= targetWeight {
-			if i == len(sorted)-1 {
-				return 0
+			// Check if remaining nodes have the same weight (uniform at cutoff)
+			hasLowerWeight := false
+			for i := nodeCount; i < len(sorted); i++ {
+				if sorted[i] < w {
+					hasLowerWeight = true
+					break
+				}
 			}
-			// Return threshold as w-1 to include items at exactly this weight
+
+			// If all remaining weights are same as current weight (uniform at cutoff)
+			// Return exact weight and the target node count
+			if !hasLowerWeight {
+				return w, nodeCount
+			}
+			return w - 1, 0
+		}
+	}
+
+	return 0, len(weights)
+}
+
+// calculateWeightThreshold calculates minimum weight threshold to reach targetPercent of total weight.
+// Returns (w - 1) where w reaches targetPercent. Returns 0 if all weights needed.
+// For uniform weights at the cutoff point, returns the exact weight value instead of (w - 1).
+func calculateWeightThreshold(weights []int64, targetPercent int) int64 {
+	if len(weights) == 0 {
+		return 0
+	}
+	if len(weights) == 1 {
+		// Single node: choose Option B (0% eligible, 100% voting)
+		// Ensures at least 25% weight preserved for voting
+		return weights[0] - 1 // Exclude node (weight > threshold in filter)
+	}
+
+	totalWeight := int64(0)
+	for _, w := range weights {
+		totalWeight += w
+	}
+	targetWeight := (totalWeight * int64(targetPercent)) / 100
+
+	// Sort descending
+	sorted := make([]int64, len(weights))
+	copy(sorted, weights)
+	slices.SortFunc(sorted, func(a, b int64) int {
+		if a > b {
+			return -1
+		}
+		if a < b {
+			return 1
+		}
+		return 0
+	})
+
+	// Accumulate until reaching target
+	sum := int64(0)
+	nodeCount := 0
+	for _, w := range sorted {
+		nodeCount++
+		sum += w
+		if sum >= targetWeight {
+			// Check if remaining nodes have the same weight (uniform at cutoff)
+			hasLowerWeight := false
+			for i := nodeCount; i < len(sorted); i++ {
+				if sorted[i] < w {
+					hasLowerWeight = true
+					break
+				}
+			}
+
+			// If all remaining weights are same as current weight, return exact value
+			// This enables count-based filtering for uniform weights
+			if !hasLowerWeight {
+				return w
+			}
 			return w - 1
 		}
 	}
@@ -558,19 +715,21 @@ func calculateWeightThreshold(weights []int64, targetPercent int) int64 {
 	return 0
 }
 
-// calculateParticipantWeightThreshold70Percent calculates the minimum participant weight threshold
-// to ensure participants with top 70% of total weight are included.
+// calculateParticipantWeightThreshold75Percent calculates the minimum participant weight threshold
+// to ensure participants with top 75% of total weight are included.
 //
-// Returns the weight threshold such that participants with weight > threshold sum to >= 70% of total weight.
+// Returns the weight threshold such that participants with weight > threshold sum to >= 75% of total weight.
 // Returns 0 if all participants are needed (edge cases: 0, 1 participant, or cumulative includes all).
-func calculateParticipantWeightThreshold70Percent(weights []int64) int64 {
-	return calculateWeightThreshold(weights, 70)
+func calculateParticipantWeightThreshold75Percent(weights []int64) int64 {
+	return calculateWeightThreshold(weights, 75)
 }
 
-// calculatePerParticipantThreshold calculates node weight thresholds for top 70% participants.
+// calculatePerParticipantThreshold calculates node weight thresholds for top 75% participants.
 // For each participant, ensures top 25% of their nodes (by weight) are included.
-func calculatePerParticipantThreshold(epochData *EpochMLNodeData, participantWeightThreshold int64) map[string]int64 {
-	result := make(map[string]int64)
+// Returns both weight thresholds and target node counts (for uniform weight handling).
+func calculatePerParticipantThreshold(epochData *EpochMLNodeData, participantWeightThreshold int64) (map[string]int64, map[string]int) {
+	thresholds := make(map[string]int64)
+	counts := make(map[string]int)
 
 	uniqueParticipants := make(map[string]bool)
 	for _, modelData := range epochData.data {
@@ -595,14 +754,17 @@ func calculatePerParticipantThreshold(epochData *EpochMLNodeData, participantWei
 			}
 		}
 
-		result[participantAddr] = calculateWeightThreshold(nodeWeights, 25)
+		threshold, targetCount := calculateWeightThresholdWithCount(nodeWeights, 25)
+		thresholds[participantAddr] = threshold
+		counts[participantAddr] = targetCount
 	}
 
-	return result
+	return thresholds, counts
 }
 
 // calculateNodeWeightThresholdIQR calculates outlier threshold using IQR method (Q3 + 1.5*IQR).
 // Uses integer arithmetic for blockchain determinism.
+// Returns 0 when IQR=0 (uniform weights), which means no filtering should be applied.
 func calculateNodeWeightThresholdIQR(weights []int64) int64 {
 	if len(weights) == 0 {
 		return 0
@@ -627,17 +789,27 @@ func calculateNodeWeightThresholdIQR(weights []int64) int64 {
 	q3 := sortedWeights[q3Index]
 	iqr := q3 - q1
 
+	// If IQR is 0, weights are uniform - no outlier filtering needed
+	if iqr == 0 {
+		return 0
+	}
+
 	// 1.5*IQR = IQR + IQR/2
 	threshold := q3 + iqr + (iqr / 2)
+	threshold = threshold + 1
 
 	return threshold
 }
 
-// filterNodesByWeight filters nodes with weight <= threshold. threshold=0 means no filtering.
+// filterNodesByWeightAndCount filters nodes by weight threshold and optional count limit.
+// - threshold=0 means no weight filtering
+// - targetCount=0 means no count limiting
+// - targetCount>0 means select exactly targetCount nodes (for uniform weights)
 // Returns nodes sorted ascending for deterministic allocation.
-func filterNodesByWeight(nodes []*types.MLNodeInfo, threshold int64) []*types.MLNodeInfo {
+func filterNodesByWeightAndCount(nodes []*types.MLNodeInfo, threshold int64, targetCount int) []*types.MLNodeInfo {
 	filtered := make([]*types.MLNodeInfo, 0, len(nodes))
 
+	// First apply weight filtering
 	if threshold == 0 {
 		filtered = append(filtered, nodes...)
 	} else {
@@ -648,6 +820,7 @@ func filterNodesByWeight(nodes []*types.MLNodeInfo, threshold int64) []*types.ML
 		}
 	}
 
+	// Sort ascending for deterministic allocation
 	slices.SortFunc(filtered, func(a, b *types.MLNodeInfo) int {
 		if a.PocWeight < b.PocWeight {
 			return -1
@@ -655,13 +828,24 @@ func filterNodesByWeight(nodes []*types.MLNodeInfo, threshold int64) []*types.ML
 		if a.PocWeight > b.PocWeight {
 			return 1
 		}
+		// For same weight, sort by node ID for determinism
+		if a.NodeId < b.NodeId {
+			return -1
+		}
+		if a.NodeId > b.NodeId {
+			return 1
+		}
 		return 0
 	})
+
+	// Apply count limit if specified (for uniform weight handling)
+	if targetCount > 0 && len(filtered) > targetCount {
+		filtered = filtered[:targetCount]
+	}
+
 	return filtered
 }
 
-// calculateEffectiveNodeThreshold returns the more restrictive (lower) threshold.
-// threshold=0 means "no filtering".
 func calculateEffectiveNodeThreshold(participantThreshold, globalThreshold int64) int64 {
 	if participantThreshold == 0 {
 		return globalThreshold
@@ -672,7 +856,6 @@ func calculateEffectiveNodeThreshold(participantThreshold, globalThreshold int64
 	return min(participantThreshold, globalThreshold)
 }
 
-// sampleEligibleParticipantsWithHistory deterministically samples N/2+1 participants with history.
 func (ma *ModelAssigner) sampleEligibleParticipantsWithHistory(
 	sortedParticipantAddrs []string,
 	previousEpochData *EpochMLNodeData,

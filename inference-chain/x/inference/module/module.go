@@ -442,6 +442,9 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
 
+	modelAssigner.AllocateMLNodesForPoC(ctx, *upcomingEpoch, activeParticipants)
+	am.LogInfo("Finished PoC allocation for all participants", types.EpochGroup, "step", "poc_allocation_complete")
+
 	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
 	if err != nil {
 		am.LogError("onEndOfPoCValidationStage: Unable to register top miners", types.Tokenomics, "error", err.Error())

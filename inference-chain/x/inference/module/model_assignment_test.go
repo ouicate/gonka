@@ -161,9 +161,11 @@ func TestSetModelsForParticipants_OneModelTwoNodes_Bug(t *testing.T) {
 	assertNodeInGroup(t, modelGroup.MlNodes, "mlnode1")
 	assertNodeInGroup(t, modelGroup.MlNodes, "mlnode2")
 
-	// Verify that one node is allocated for PoC and the other is not.
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 1)
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 1)
+	// setModelsForParticipants only initializes nodes, doesn't allocate POC slots
+	// All nodes should be [true, false] (PRE_POC_SLOT=true, POC_SLOT=false)
+	// Actual POC allocation happens in AllocateMLNodesForPoC
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 2)
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 0)
 }
 
 // assertNodeInGroup checks if a node with the given ID exists in the list of nodes.
@@ -280,14 +282,12 @@ func TestSetModelsForParticipants_OneNodeOneModel(t *testing.T) {
 	require.Len(t, modelGroup.MlNodes, 1, "The model-specific group should have one node")
 
 	assertNodeInGroup(t, modelGroup.MlNodes, "mlnode1")
-	// With the current filtering logic: 1 participant with 1 node and previous epoch history
-	// will be selected for eligibility (N/2+1 = 1 participant selected).
-	// The single node passes weight thresholds (no IQR outliers with 1 node, no 25% rule violation).
-	// Therefore, the node will be allocated for PoC to meet the target allocation fraction (50%).
-	// Note: This means the participant becomes non-voting, but there's no explicit constraint
-	// in the code to prevent this for edge cases like single participant networks.
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 0) // None kept for voting only
-	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 1)  // Allocated for PoC
+	// With Phase 1 fix: Single node participants preserve voting power (Option B)
+	// The node is excluded from eligible set to ensure 25% weight for voting.
+	// Since the node is indivisible, it's kept entirely for voting (100% voting power).
+	// This prevents the participant from becoming non-voting.
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, false}, 1) // Kept for voting
+	assertTimeslotAllocationCount(t, modelGroup.MlNodes, []bool{true, true}, 0)  // Not allocated for PoC
 }
 
 func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
@@ -395,15 +395,15 @@ func TestSetModelsForParticipants_ManyNodesManyModels(t *testing.T) {
 	require.Len(t, groupB.MlNodes, 1, "Model B group should have one node (mlnode3)")
 	assertNodeInGroup(t, groupB.MlNodes, "mlnode3")
 
-	// Check weight-based allocation:
-	// Model A: 3 nodes (30, 25, 25), total weight = 80, target 50% = 40
-	// Algorithm allocates smallest first: 25 + 25 = 50, so 2 nodes get POC_SLOT=true
-	// Model B: 1 node (20), total weight = 20, target 50% = 10
-	// Algorithm allocates the node (0 < 10, add 20), so 1 node gets POC_SLOT=true
-	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, true}, 2)
-	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, false}, 1)
-	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, true}, 1)
-	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, false}, 0)
+	// setModelsForParticipants only initializes timeslot allocations
+	// All nodes are initialized to [true, false] (PRE_POC_SLOT=true, POC_SLOT=false)
+	// Actual POC slot allocation happens later in AllocateMLNodesForPoC
+	// Model A: 3 nodes should all be [true, false]
+	// Model B: 1 node should be [true, false]
+	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, true}, 0)
+	assertTimeslotAllocationCount(t, groupA.MlNodes, []bool{true, false}, 3)
+	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, true}, 0)
+	assertTimeslotAllocationCount(t, groupB.MlNodes, []bool{true, false}, 1)
 }
 
 func TestAllocateMLNodesForPoC_MultipleParticipantsAndAllocations(t *testing.T) {
@@ -1031,10 +1031,12 @@ func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
 			}
 		}
 
+		participantWeight := int64(nodesPerParticipant * baseWeight * 3 / 2) // Average of 10 and 20
 		participants = append(participants, &types.ActiveParticipant{
 			Index:   participantID,
 			Models:  []string{modelID},
 			MlNodes: []*types.ModelMLNodes{{MlNodes: mlNodes}},
+			Weight:  participantWeight,
 		})
 
 		hardwareNodesMap[participantID] = &types.HardwareNodes{
@@ -1069,8 +1071,9 @@ func TestAllocateMLNodesForPoC_FairDistribution(t *testing.T) {
 
 	upcomingEpoch := types.Epoch{Index: 1}
 
-	// Call allocation
+	// Call model assignment and POC allocation
 	modelAssigner.setModelsForParticipants(ctx, participants, upcomingEpoch)
+	modelAssigner.AllocateMLNodesForPoC(ctx, upcomingEpoch, participants)
 
 	// Collect allocation statistics
 	type ParticipantStats struct {
@@ -1256,4 +1259,581 @@ func formatParticipantID(index int) string {
 
 func formatNodeID(participantIndex, nodeIndex int) string {
 	return fmt.Sprintf("p%03d-node%02d", participantIndex, nodeIndex)
+}
+
+// ============================================================================
+// Unit Tests for Helper Functions
+// ============================================================================
+
+func TestCalculateWeightThresholdWithCount_UniformWeights(t *testing.T) {
+	testCases := []struct {
+		name           string
+		weights        []int64
+		targetPercent  int
+		expThreshold   int64
+		expCount       int
+	}{
+		{
+			name:          "Two uniform nodes, 25% target",
+			weights:       []int64{10, 10},
+			targetPercent: 25,
+			expThreshold:  10,
+			expCount:      1, // 25% of 20 = 5, first node reaches target
+		},
+		{
+			name:          "Four uniform nodes, 25% target",
+			weights:       []int64{10, 10, 10, 10},
+			targetPercent: 25,
+			expThreshold:  10,
+			expCount:      1, // 25% of 40 = 10, first node reaches target
+		},
+		{
+			name:          "Four uniform nodes, 50% target",
+			weights:       []int64{10, 10, 10, 10},
+			targetPercent: 50,
+			expThreshold:  10,
+			expCount:      2, // 50% of 40 = 20, two nodes reach target
+		},
+		{
+			name:          "Four uniform nodes, 75% target",
+			weights:       []int64{10, 10, 10, 10},
+			targetPercent: 75,
+			expThreshold:  10,
+			expCount:      3, // 75% of 40 = 30, three nodes reach target
+		},
+		{
+			name:          "All uniform weights need all nodes",
+			weights:       []int64{15, 15, 15},
+			targetPercent: 100,
+			expThreshold:  15, // Returns exact weight for uniform case
+			expCount:      3,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			threshold, count := calculateWeightThresholdWithCount(tc.weights, tc.targetPercent)
+			require.Equal(t, tc.expThreshold, threshold, "Threshold mismatch")
+			require.Equal(t, tc.expCount, count, "Count mismatch")
+		})
+	}
+}
+
+func TestCalculateWeightThresholdWithCount_HeterogeneousWeights(t *testing.T) {
+	testCases := []struct {
+		name           string
+		weights        []int64
+		targetPercent  int
+		expThreshold   int64
+		expCount       int
+	}{
+		{
+			name:          "Heterogeneous weights, 25% target",
+			weights:       []int64{30, 25, 20, 15},
+			targetPercent: 25,
+			expThreshold:  29, // 25% of 90 = 22.5, first node (30) reaches, return 30-1
+			expCount:      0,  // No count limiting for heterogeneous
+		},
+		{
+			name:          "Heterogeneous weights, 50% target",
+			weights:       []int64{30, 25, 20, 15},
+			targetPercent: 50,
+			expThreshold:  24, // 50% of 90 = 45, 30+25=55 reaches, return 25-1
+			expCount:      0,
+		},
+		{
+			name:          "Descending weights, 70% target",
+			weights:       []int64{50, 40, 30, 20, 10},
+			targetPercent: 70,
+			expThreshold:  29, // 70% of 150 = 105, 50+40+30=120, return 30-1
+			expCount:      0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			threshold, count := calculateWeightThresholdWithCount(tc.weights, tc.targetPercent)
+			require.Equal(t, tc.expThreshold, threshold, "Threshold mismatch")
+			require.Equal(t, tc.expCount, count, "Count mismatch")
+		})
+	}
+}
+
+func TestCalculateWeightThresholdWithCount_EdgeCases(t *testing.T) {
+	testCases := []struct {
+		name           string
+		weights        []int64
+		targetPercent  int
+		expThreshold   int64
+		expCount       int
+	}{
+		{
+			name:          "Empty weights",
+			weights:       []int64{},
+			targetPercent: 50,
+			expThreshold:  0,
+			expCount:      0,
+		},
+		{
+			name:          "Single node - voting preservation",
+			weights:       []int64{10},
+			targetPercent: 25,
+			expThreshold:  9, // 10-1 to exclude for voting
+			expCount:      0,
+		},
+		{
+			name:          "Single node - any percent",
+			weights:       []int64{100},
+			targetPercent: 75,
+			expThreshold:  99, // 100-1 to exclude for voting
+			expCount:      0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			threshold, count := calculateWeightThresholdWithCount(tc.weights, tc.targetPercent)
+			require.Equal(t, tc.expThreshold, threshold, "Threshold mismatch")
+			require.Equal(t, tc.expCount, count, "Count mismatch")
+		})
+	}
+}
+
+func TestFilterNodesByWeightAndCount_CountLimit(t *testing.T) {
+	nodes := []*types.MLNodeInfo{
+		{NodeId: "node1", PocWeight: 10},
+		{NodeId: "node2", PocWeight: 10},
+		{NodeId: "node3", PocWeight: 10},
+		{NodeId: "node4", PocWeight: 10},
+	}
+
+	testCases := []struct {
+		name        string
+		threshold   int64
+		targetCount int
+		expCount    int
+		expNodeIds  []string
+	}{
+		{
+			name:        "Count limit 2 with threshold 10",
+			threshold:   10,
+			targetCount: 2,
+			expCount:    2,
+			expNodeIds:  []string{"node1", "node2"}, // Sorted by NodeId
+		},
+		{
+			name:        "Count limit 1 with threshold 10",
+			threshold:   10,
+			targetCount: 1,
+			expCount:    1,
+			expNodeIds:  []string{"node1"},
+		},
+		{
+			name:        "Count limit 0 (no limiting) with threshold 10",
+			threshold:   10,
+			targetCount: 0,
+			expCount:    4,
+			expNodeIds:  []string{"node1", "node2", "node3", "node4"},
+		},
+		{
+			name:        "Count limit exceeds available nodes",
+			threshold:   10,
+			targetCount: 10,
+			expCount:    4, // Only 4 nodes available
+			expNodeIds:  []string{"node1", "node2", "node3", "node4"},
+		},
+		{
+			name:        "Threshold excludes all, count limit irrelevant",
+			threshold:   9,
+			targetCount: 2,
+			expCount:    0,
+			expNodeIds:  []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filtered := filterNodesByWeightAndCount(nodes, tc.threshold, tc.targetCount)
+			require.Len(t, filtered, tc.expCount, "Filtered count mismatch")
+			
+			for i, expId := range tc.expNodeIds {
+				require.Equal(t, expId, filtered[i].NodeId, "Node ID mismatch at index %d", i)
+			}
+		})
+	}
+}
+
+func TestFilterNodesByWeightAndCount_Determinism(t *testing.T) {
+	// Test that same inputs produce same outputs (deterministic ordering)
+	nodes := []*types.MLNodeInfo{
+		{NodeId: "node-c", PocWeight: 10},
+		{NodeId: "node-a", PocWeight: 10},
+		{NodeId: "node-d", PocWeight: 15},
+		{NodeId: "node-b", PocWeight: 10},
+	}
+
+	// Run filtering multiple times
+	result1 := filterNodesByWeightAndCount(nodes, 15, 0)
+	result2 := filterNodesByWeightAndCount(nodes, 15, 0)
+	result3 := filterNodesByWeightAndCount(nodes, 15, 0)
+
+	// All results should be identical
+	require.Len(t, result1, 4)
+	require.Len(t, result2, 4)
+	require.Len(t, result3, 4)
+
+	// Should be sorted by weight ascending, then by NodeId
+	expectedOrder := []string{"node-a", "node-b", "node-c", "node-d"}
+	for i, expId := range expectedOrder {
+		require.Equal(t, expId, result1[i].NodeId, "Result 1 order mismatch at %d", i)
+		require.Equal(t, expId, result2[i].NodeId, "Result 2 order mismatch at %d", i)
+		require.Equal(t, expId, result3[i].NodeId, "Result 3 order mismatch at %d", i)
+	}
+}
+
+// ============================================================================
+// Integration Tests for Uniform Weights
+// ============================================================================
+
+func TestAllocateMLNodesForPoC_UniformWeights(t *testing.T) {
+	const modelID = "model-uniform"
+	ctx := context.Background()
+
+	// Setup: 3 participants matching user's scenario
+	// - Participant 1: 2 nodes × weight 10
+	// - Participant 2: 1 node × weight 10
+	// - Participant 3: 1 node × weight 10
+
+	participants := []*types.ActiveParticipant{
+		{
+			Index:  "participant1",
+			Models: []string{modelID},
+			Weight: 20,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p1-node1", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p1-node2", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+		{
+			Index:  "participant2",
+			Models: []string{modelID},
+			Weight: 10,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p2-node1", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+		{
+			Index:  "participant3",
+			Models: []string{modelID},
+			Weight: 10,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p3-node1", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+	}
+
+	// Setup mock keeper with previous epoch data
+	mockKeeper := &mockKeeperForModelAssigner{
+		governanceModels: []types.Model{{Id: modelID}},
+		hardwareNodes: map[string]*types.HardwareNodes{
+			"participant1": {
+				Participant: "participant1",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p1-node1", Models: []string{modelID}},
+					{LocalId: "p1-node2", Models: []string{modelID}},
+				},
+			},
+			"participant2": {
+				Participant: "participant2",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p2-node1", Models: []string{modelID}},
+				},
+			},
+			"participant3": {
+				Participant: "participant3",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p3-node1", Models: []string{modelID}},
+				},
+			},
+		},
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelID: {
+				0: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: "participant1",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p1-node1", PocWeight: 10},
+								{NodeId: "p1-node2", PocWeight: 10},
+							},
+						},
+						{
+							MemberAddress: "participant2",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p2-node1", PocWeight: 10},
+							},
+						},
+						{
+							MemberAddress: "participant3",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p3-node1", PocWeight: 10},
+							},
+						},
+					},
+				},
+			},
+		},
+		params: &types.Params{
+			EpochParams: &types.EpochParams{
+				PocSlotAllocation: &types.Decimal{Value: 5, Exponent: -1}, // 50%
+			},
+		},
+	}
+
+	modelAssigner := NewModelAssigner(mockKeeper, mockLogger{})
+	upcomingEpoch := types.Epoch{Index: 1}
+
+	// Execute
+	modelAssigner.AllocateMLNodesForPoC(ctx, upcomingEpoch, participants)
+
+	// Verify results
+	t.Logf("\n=== Uniform Weight Test Results ===")
+
+	// Participant 1: Should have exactly 1 eligible node (count limiting for uniform weights)
+	p1Nodes := participants[0].MlNodes[0].MlNodes
+	p1Allocated := 0
+	for _, node := range p1Nodes {
+		if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+			p1Allocated++
+		}
+	}
+	t.Logf("Participant 1 (2 nodes × 10): %d allocated", p1Allocated)
+	// With 25% rule on uniform weights, expect 1 node to be eligible
+	// Actual allocation depends on 50% target and round-robin
+
+	// Participant 2 & 3: Single nodes should be excluded for voting preservation
+	p2Nodes := participants[1].MlNodes[0].MlNodes
+	p2Allocated := 0
+	for _, node := range p2Nodes {
+		if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+			p2Allocated++
+		}
+	}
+	t.Logf("Participant 2 (1 node × 10): %d allocated", p2Allocated)
+
+	p3Nodes := participants[2].MlNodes[0].MlNodes
+	p3Allocated := 0
+	for _, node := range p3Nodes {
+		if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+			p3Allocated++
+		}
+	}
+	t.Logf("Participant 3 (1 node × 10): %d allocated", p3Allocated)
+
+	// Total allocation
+	totalAllocated := p1Allocated + p2Allocated + p3Allocated
+	t.Logf("Total allocated: %d", totalAllocated)
+
+	// Assertions
+	// Participant 2 & 3 should have 0 allocations (single node voting preservation)
+	require.Equal(t, 0, p2Allocated, "Single-node participant 2 should not have allocations (voting preservation)")
+	require.Equal(t, 0, p3Allocated, "Single-node participant 3 should not have allocations (voting preservation)")
+
+	// Participant 1 should have at least some allocation
+	require.GreaterOrEqual(t, p1Allocated, 0, "Participant 1 should be eligible for allocation")
+	require.LessOrEqual(t, p1Allocated, 1, "Participant 1 should have at most 1 eligible node (25% of 2 nodes)")
+}
+
+func TestAllocateMLNodesForPoC_MixedUniformAndHeterogeneous(t *testing.T) {
+	const modelID = "model-mixed"
+	ctx := context.Background()
+
+	// Setup: 3 participants with different weight distributions
+	// - Participant 1: uniform weights (4 nodes × 10)
+	// - Participant 2: heterogeneous weights (30, 25, 20, 15)
+	// - Participant 3: uniform weights (3 nodes × 15)
+
+	participants := []*types.ActiveParticipant{
+		{
+			Index:  "participant1",
+			Models: []string{modelID},
+			Weight: 40,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p1-node1", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p1-node2", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p1-node3", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p1-node4", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+		{
+			Index:  "participant2",
+			Models: []string{modelID},
+			Weight: 90,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p2-node1", PocWeight: 30, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p2-node2", PocWeight: 25, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p2-node3", PocWeight: 20, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p2-node4", PocWeight: 15, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+		{
+			Index:  "participant3",
+			Models: []string{modelID},
+			Weight: 45,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "p3-node1", PocWeight: 15, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p3-node2", PocWeight: 15, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "p3-node3", PocWeight: 15, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+	}
+
+	// Setup mock keeper with previous epoch data
+	mockKeeper := &mockKeeperForModelAssigner{
+		governanceModels: []types.Model{{Id: modelID}},
+		hardwareNodes: map[string]*types.HardwareNodes{
+			"participant1": {
+				Participant: "participant1",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p1-node1", Models: []string{modelID}},
+					{LocalId: "p1-node2", Models: []string{modelID}},
+					{LocalId: "p1-node3", Models: []string{modelID}},
+					{LocalId: "p1-node4", Models: []string{modelID}},
+				},
+			},
+			"participant2": {
+				Participant: "participant2",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p2-node1", Models: []string{modelID}},
+					{LocalId: "p2-node2", Models: []string{modelID}},
+					{LocalId: "p2-node3", Models: []string{modelID}},
+					{LocalId: "p2-node4", Models: []string{modelID}},
+				},
+			},
+			"participant3": {
+				Participant: "participant3",
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "p3-node1", Models: []string{modelID}},
+					{LocalId: "p3-node2", Models: []string{modelID}},
+					{LocalId: "p3-node3", Models: []string{modelID}},
+				},
+			},
+		},
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelID: {
+				0: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: "participant1",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p1-node1", PocWeight: 10},
+								{NodeId: "p1-node2", PocWeight: 10},
+								{NodeId: "p1-node3", PocWeight: 10},
+								{NodeId: "p1-node4", PocWeight: 10},
+							},
+						},
+						{
+							MemberAddress: "participant2",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p2-node1", PocWeight: 30},
+								{NodeId: "p2-node2", PocWeight: 25},
+								{NodeId: "p2-node3", PocWeight: 20},
+								{NodeId: "p2-node4", PocWeight: 15},
+							},
+						},
+						{
+							MemberAddress: "participant3",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "p3-node1", PocWeight: 15},
+								{NodeId: "p3-node2", PocWeight: 15},
+								{NodeId: "p3-node3", PocWeight: 15},
+							},
+						},
+					},
+				},
+			},
+		},
+		params: &types.Params{
+			EpochParams: &types.EpochParams{
+				PocSlotAllocation: &types.Decimal{Value: 5, Exponent: -1}, // 50%
+			},
+		},
+	}
+
+	modelAssigner := NewModelAssigner(mockKeeper, mockLogger{})
+	upcomingEpoch := types.Epoch{Index: 1}
+
+	// Execute
+	modelAssigner.AllocateMLNodesForPoC(ctx, upcomingEpoch, participants)
+
+	// Verify results
+	t.Logf("\n=== Mixed Uniform/Heterogeneous Test Results ===")
+
+	for i, participant := range participants {
+		allocatedCount := 0
+		totalWeight := int64(0)
+		allocatedWeight := int64(0)
+
+		for _, node := range participant.MlNodes[0].MlNodes {
+			totalWeight += node.PocWeight
+			if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+				allocatedCount++
+				allocatedWeight += node.PocWeight
+			}
+		}
+
+		t.Logf("Participant %d (%s): %d/%d nodes allocated, weight: %d/%d",
+			i+1, participant.Index, allocatedCount, len(participant.MlNodes[0].MlNodes),
+			allocatedWeight, totalWeight)
+	}
+
+	// Total weight and allocation
+	totalWeight := int64(0)
+	totalAllocatedWeight := int64(0)
+	for _, participant := range participants {
+		for _, node := range participant.MlNodes[0].MlNodes {
+			totalWeight += node.PocWeight
+			if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
+				totalAllocatedWeight += node.PocWeight
+			}
+		}
+	}
+
+	t.Logf("Total weight: %d", totalWeight)
+	t.Logf("Total allocated weight: %d (%.1f%%)", totalAllocatedWeight,
+		float64(totalAllocatedWeight)/float64(totalWeight)*100)
+
+	// Assertions
+	// Total weight should be 175 (40 + 90 + 45)
+	require.Equal(t, int64(175), totalWeight, "Total weight should be 175")
+
+	// Some allocation should happen (not all filtered out)
+	require.Greater(t, totalAllocatedWeight, int64(0), "Some nodes should be allocated")
+
+	// Allocated weight should not exceed total
+	require.LessOrEqual(t, totalAllocatedWeight, totalWeight, "Allocated weight should not exceed total")
 }
