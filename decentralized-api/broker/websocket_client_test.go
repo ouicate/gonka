@@ -1,7 +1,6 @@
 package broker
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -81,13 +80,13 @@ func TestWebSocketClient_MessageProcessing(t *testing.T) {
 			Dist:        []float64{0.1, 0.2, 0.3},
 		}
 		batchJSON, _ := json.Marshal(generatedBatch)
-		
+
 		message := WebSocketMessage{
 			Type:  "generated",
 			Batch: batchJSON,
 			ID:    "test-message-123",
 		}
-		
+
 		if err := conn.WriteJSON(message); err != nil {
 			t.Logf("Failed to write message: %v", err)
 			return
@@ -107,17 +106,10 @@ func TestWebSocketClient_MessageProcessing(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	
-	client := &WebSocketClient{
-		nodeID:      "test-node",
-		wsURL:       wsURL,
-		handler:     NewBatchHandler(mockRecorder),
-		stopChan:    make(chan struct{}),
-		stoppedChan: make(chan struct{}),
-	}
-	client.ctx, client.cancel = context.WithCancel(context.Background())
 
-	go client.run()
+	client := NewWebSocketClient("test-node", wsURL, mockRecorder)
+
+	client.Start()
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -135,10 +127,16 @@ func TestWebSocketClient_StartStop(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	client.Stop()
+	// Stop() now blocks until shutdown is complete via wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		client.Stop()
+		close(done)
+	}()
 
 	select {
-	case <-client.stoppedChan:
+	case <-done:
+		// Success - Stop() completed
 	case <-time.After(2 * time.Second):
 		t.Fatal("Client did not stop within timeout")
 	}
@@ -196,7 +194,7 @@ func TestWebSocketClient_ProcessMessage_Generated(t *testing.T) {
 
 func TestWebSocketClient_ProcessMessage_Validated(t *testing.T) {
 	validPubKey := "02a1633cafcc01ebfb6d78e39f687a1f0995c62fc95f51ead10a02ee0be551b5dc"
-	
+
 	mockRecorder := &cosmosclient.MockCosmosMessageClient{}
 	mockRecorder.On("SubmitPoCValidation", mock.AnythingOfType("*inference.MsgSubmitPocValidation")).Return(nil)
 
@@ -256,4 +254,3 @@ func TestWebSocketClient_ProcessMessage_UnknownType(t *testing.T) {
 	assert.Equal(t, "", messageID)
 	assert.Contains(t, err.Error(), "unknown message type")
 }
-

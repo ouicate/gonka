@@ -5,6 +5,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/logging"
 	"decentralized-api/mlnodeclient"
+	"reflect"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ type NodeWorker struct {
 	versionsMu        sync.Mutex
 	wsClient          *WebSocketClient
 	wsClientMu        sync.Mutex
+	waitCount         int32
 }
 
 // NewNodeWorkerWithClient creates a new worker with a custom client (for testing)
@@ -47,6 +49,18 @@ func NewNodeWorkerWithClient(nodeId string, node *NodeWithState, client mlnodecl
 	return worker
 }
 
+func (w *NodeWorker) addWait(reason string) {
+	w.wg.Add(1)
+	w.waitCount++
+	logging.Info("NodeWorker.addWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount, "reason", reason)
+}
+
+func (w *NodeWorker) removeWait() {
+	w.wg.Done()
+	w.waitCount--
+	logging.Info("NodeWorker.removeWait", types.Nodes, "node_id", w.nodeId, "waitCount", w.waitCount)
+}
+
 // run is the main event loop for the worker
 func (w *NodeWorker) run() {
 	for {
@@ -61,7 +75,7 @@ func (w *NodeWorker) run() {
 					"node_id", w.nodeId, "error", err)
 			}
 			// We don't wait for the response from updateCmd, the worker's job is done.
-			w.wg.Done()
+			w.removeWait()
 		case <-w.shutdown:
 			// Drain remaining commands before shutting down
 			close(w.commands)
@@ -72,7 +86,7 @@ func (w *NodeWorker) run() {
 					logging.Error("Failed to queue node result update command during shutdown", types.Nodes,
 						"node_id", w.nodeId, "error", err)
 				}
-				w.wg.Done()
+				w.removeWait()
 			}
 			return
 		}
@@ -81,12 +95,12 @@ func (w *NodeWorker) run() {
 
 // Submit queues a command for execution on this node
 func (w *NodeWorker) Submit(ctx context.Context, cmd NodeWorkerCommand) bool {
-	w.wg.Add(1)
+	w.addWait(reflect.TypeOf(cmd).String())
 	select {
 	case w.commands <- commandWithContext{cmd: cmd, ctx: ctx}:
 		return true
 	default:
-		w.wg.Done()
+		w.removeWait()
 		return false
 	}
 }
@@ -94,6 +108,7 @@ func (w *NodeWorker) Submit(ctx context.Context, cmd NodeWorkerCommand) bool {
 // Shutdown gracefully stops the worker
 func (w *NodeWorker) Shutdown() {
 	close(w.shutdown)
+	logging.Info("NodeWorker.WaitingForShutdown", types.Nodes, "node_id", w.nodeId)
 	w.wg.Wait() // Wait for all pending commands to complete
 }
 
@@ -171,15 +186,17 @@ func (w *NodeWorker) startWebSocket(recorder cosmosclient.CosmosMessageClient) {
 	pocURL := w.node.Node.PoCUrl()
 	w.wsClient = NewWebSocketClient(w.nodeId, pocURL, recorder)
 	w.wsClient.Start()
-	
+
 	logging.Info("WebSocket. Started client for node", types.PoC, "nodeId", w.nodeId)
 }
 
 func (w *NodeWorker) stopWebSocket() {
+	logging.Info("WebSocket. Stopping client for node: getting lock", types.PoC, "nodeId", w.nodeId)
 	w.wsClientMu.Lock()
 	defer w.wsClientMu.Unlock()
 
 	if w.wsClient != nil {
+		logging.Info("WebSocket. Stopping client for node: stopping!", types.PoC, "nodeId", w.nodeId)
 		w.wsClient.Stop()
 		w.wsClient = nil
 		logging.Info("WebSocket. Stopped client for node", types.PoC, "nodeId", w.nodeId)

@@ -204,8 +204,8 @@ func (c UpdateNodeResultCommand) GetResponseChannelCapacity() int {
 }
 
 func (c UpdateNodeResultCommand) Execute(b *Broker) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.writeLock("UpdateNodeResultCommand")
+	defer b.writeUnlock("UpdateNodeResultCommand")
 
 	node, exists := b.nodes[c.NodeId]
 	if !exists {

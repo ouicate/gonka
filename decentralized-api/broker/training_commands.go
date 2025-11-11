@@ -44,8 +44,8 @@ func (c StartTrainingCommand) Execute(broker *Broker) {
 		return
 	}
 
-	broker.mu.Lock()
-	defer broker.mu.Unlock()
+	broker.writeLock("StartTrainingCommand")
+	defer broker.writeUnlock("StartTrainingCommand")
 	for nodeId := range c.nodeRanks {
 		node, nodeFound := broker.nodes[nodeId]
 		if !nodeFound || node == nil {

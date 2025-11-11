@@ -11,14 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/productscience/inference/x/inference/types"
 )
 
 type WebSocketMessage struct {
-	Type  string                       `json:"type"`
-	Batch json.RawMessage              `json:"batch"`
-	ID    string                       `json:"id"`
+	Type  string          `json:"type"`
+	Batch json.RawMessage `json:"batch"`
+	ID    string          `json:"id"`
 }
 
 type AckMessage struct {
@@ -27,152 +28,119 @@ type AckMessage struct {
 }
 
 type WebSocketClient struct {
-	nodeID      string
-	wsURL       string
-	conn        *websocket.Conn
-	mu          sync.RWMutex
-	handler     *BatchHandler
-	stopChan    chan struct{}
-	stoppedChan chan struct{}
-	ctx         context.Context
-	cancel      context.CancelFunc
+	nodeID  string
+	wsURL   string
+	handler *BatchHandler
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 func NewWebSocketClient(nodeID string, pocURL string, recorder cosmosclient.CosmosMessageClient) *WebSocketClient {
 	ctx, cancel := context.WithCancel(context.Background())
 	wsURL := convertHTTPToWSURL(pocURL) + "/api/v1/pow/ws"
-	
+
 	return &WebSocketClient{
-		nodeID:      nodeID,
-		wsURL:       wsURL,
-		handler:     NewBatchHandler(recorder),
-		stopChan:    make(chan struct{}),
-		stoppedChan: make(chan struct{}),
-		ctx:         ctx,
-		cancel:      cancel,
+		nodeID:  nodeID,
+		wsURL:   wsURL,
+		handler: NewBatchHandler(recorder),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
 func (c *WebSocketClient) Start() {
+	c.wg.Add(1)
 	go c.run()
 }
 
 func (c *WebSocketClient) Stop() {
-	close(c.stopChan)
+	logging.Debug("WebSocket: canceling context", types.Nodes, "nodeId", c.nodeID)
 	c.cancel()
-	<-c.stoppedChan
+	logging.Debug("WebSocket: waiting for context to finish", types.Nodes, "nodeId", c.nodeID)
+	c.wg.Wait()
+	logging.Debug("WebSocket: stopped", types.Nodes, "nodeId", c.nodeID)
 }
 
 func (c *WebSocketClient) run() {
-	defer close(c.stoppedChan)
-	
+	defer c.wg.Done()
+
 	for {
-		select {
-		case <-c.stopChan:
-			c.closeConnection()
-			return
-		case <-c.ctx.Done():
-			c.closeConnection()
-			return
-		default:
-			c.connectAndHandle()
-			
-			select {
-			case <-c.stopChan:
+		// Context-aware dial with timeout
+		dialCtx, dialCancel := context.WithTimeout(c.ctx, 10*time.Second)
+		conn, _, err := websocket.Dial(dialCtx, c.wsURL, nil)
+		dialCancel()
+
+		if err != nil {
+			// Check if parent context was canceled
+			if c.ctx.Err() != nil {
 				return
+			}
+			logging.Debug("WebSocket. Failed to connect", types.PoC, "nodeId", c.nodeID, "error", err)
+
+			// Wait before reconnecting, respecting context cancellation
+			select {
 			case <-c.ctx.Done():
 				return
 			case <-time.After(reconnectInterval()):
-			}
-		}
-	}
-}
-
-func (c *WebSocketClient) connectAndHandle() {
-	if err := c.connect(); err != nil {
-		logging.Debug("WebSocket. Failed to connect", types.PoC, 
-			"nodeId", c.nodeID, "error", err)
-		return
-	}
-
-	logging.Info("WebSocket. Connected to node", types.PoC, 
-		"nodeId", c.nodeID, "wsURL", c.wsURL)
-
-	c.handleMessages()
-}
-
-func (c *WebSocketClient) connect() error {
-	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
-	}
-
-	conn, _, err := dialer.Dial(c.wsURL, nil)
-	if err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	c.conn = conn
-	c.mu.Unlock()
-
-	return nil
-}
-
-func (c *WebSocketClient) closeConnection() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
-		logging.Debug("WebSocket. Closed connection", types.PoC, "nodeId", c.nodeID)
-	}
-}
-
-func (c *WebSocketClient) handleMessages() {
-	defer c.closeConnection()
-
-	for {
-		select {
-		case <-c.stopChan:
-			return
-		case <-c.ctx.Done():
-			return
-		default:
-			c.mu.RLock()
-			conn := c.conn
-			c.mu.RUnlock()
-
-			if conn == nil {
-				return
-			}
-
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-			
-			_, rawMessage, err := conn.ReadMessage()
-			if err != nil {
-				logging.Debug("WebSocket. Read error, will reconnect", types.PoC, 
-					"nodeId", c.nodeID, "error", err)
-				return
-			}
-
-			messageID, err := c.processMessage(rawMessage)
-			if err != nil {
-				logging.Error("WebSocket. Failed to process message", types.PoC, 
-					"nodeId", c.nodeID, "error", err)
 				continue
 			}
+		}
 
-			if messageID != "" {
-				if err := c.sendAck(messageID); err != nil {
-					logging.Error("WebSocket. Failed to send acknowledgment", types.PoC, 
-						"nodeId", c.nodeID, "messageId", messageID, "error", err)
-					return
-				}
-				
-				logging.Debug("WebSocket. Sent acknowledgment", types.PoC, 
-					"nodeId", c.nodeID, "messageId", messageID)
+		logging.Info("WebSocket. Connected to node", types.PoC, "nodeId", c.nodeID, "wsURL", c.wsURL)
+
+		c.readProcessAckLoop(conn)
+
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+	}
+}
+
+func (c *WebSocketClient) readProcessAckLoop(conn *websocket.Conn) {
+	// Set read limit
+	conn.SetReadLimit(64 << 20) // 64MB limit
+
+	for {
+		// Read with context and timeout - this respects context cancellation natively
+		readCtx, readCancel := context.WithTimeout(c.ctx, 60*time.Second)
+		msgType, rawMessage, err := conn.Read(readCtx)
+		readCancel()
+
+		if err != nil {
+			// Check if parent context was canceled
+			if c.ctx.Err() != nil {
+				return
 			}
+			logging.Debug("WebSocket. Read error, will reconnect", types.PoC, "nodeId", c.nodeID, "error", err)
+			return
+		}
+
+		// Only process text/binary messages
+		if msgType != websocket.MessageText && msgType != websocket.MessageBinary {
+			continue
+		}
+
+		messageID, err := c.processMessage(rawMessage)
+		if err != nil {
+			logging.Error("WebSocket. Failed to process message", types.PoC, "nodeId", c.nodeID, "error", err)
+			// Continue reading; bad messages shouldn't tear down the connection
+			continue
+		}
+
+		if messageID != "" {
+			// Write acknowledgment with context and timeout
+			writeCtx, writeCancel := context.WithTimeout(c.ctx, 10*time.Second)
+			ack := AckMessage{Type: "ack", ID: messageID}
+			err := wsjson.Write(writeCtx, conn, ack)
+			writeCancel()
+
+			if err != nil {
+				logging.Error("WebSocket. Failed to send acknowledgment", types.PoC,
+					"nodeId", c.nodeID, "messageId", messageID, "error", err)
+				// Tear down and reconnect on write failure
+				return
+			}
+			logging.Debug("WebSocket. Sent acknowledgment", types.PoC, "nodeId", c.nodeID, "messageId", messageID)
 		}
 	}
 }
@@ -193,7 +161,7 @@ func (c *WebSocketClient) processMessage(rawMessage []byte) (string, error) {
 			return "", fmt.Errorf("failed to handle generated batch: %w", err)
 		}
 		return msg.ID, nil
-		
+
 	case "validated":
 		var batch mlnodeclient.ValidatedBatch
 		if err := json.Unmarshal(msg.Batch, &batch); err != nil {
@@ -203,37 +171,10 @@ func (c *WebSocketClient) processMessage(rawMessage []byte) (string, error) {
 			return "", fmt.Errorf("failed to handle validated batch: %w", err)
 		}
 		return msg.ID, nil
-		
+
 	default:
 		return "", fmt.Errorf("unknown message type: %s", msg.Type)
 	}
-}
-
-func (c *WebSocketClient) sendAck(messageID string) error {
-	c.mu.RLock()
-	conn := c.conn
-	c.mu.RUnlock()
-
-	if conn == nil {
-		return fmt.Errorf("connection is nil")
-	}
-
-	ack := AckMessage{
-		Type: "ack",
-		ID:   messageID,
-	}
-	
-	ackData, err := json.Marshal(ack)
-	if err != nil {
-		return fmt.Errorf("failed to marshal ack: %w", err)
-	}
-	
-	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err := conn.WriteMessage(websocket.TextMessage, ackData); err != nil {
-		return fmt.Errorf("failed to write ack: %w", err)
-	}
-	
-	return nil
 }
 
 func convertHTTPToWSURL(httpURL string) string {
@@ -251,4 +192,3 @@ func reconnectInterval() time.Duration {
 	jitter := time.Duration(rand.Intn(2000)) * time.Millisecond
 	return base + jitter
 }
-
