@@ -42,14 +42,14 @@ message GenesisOnlyParams {
 
 message TokenomicsParams {
   option (gogoproto.equal) = true;
-  Decimal subsidy_reduction_interval = 1;
-  Decimal subsidy_reduction_amount = 2;
-  Decimal current_subsidy_percentage = 3;
-  Decimal top_reward_allowed_failure = 4;
-  int64 top_miner_poc_qualification = 5;
+  Decimal subsidy_reduction_interval = 1 [deprecated = true];
+  Decimal subsidy_reduction_amount = 2 [deprecated = true];
+  Decimal current_subsidy_percentage = 3  [deprecated = true];
+  Decimal top_reward_allowed_failure = 4 [deprecated = true];
+  int64 top_miner_poc_qualification = 5 [deprecated = true];
   uint64 work_vesting_period = 6;
   uint64 reward_vesting_period = 7;
-  uint64 top_miner_vesting_period = 8;
+  uint64 top_miner_vesting_period = 8 [deprecated = true];
 }
 
 message EpochParams {
@@ -136,7 +136,7 @@ message BitcoinRewardParams {
   option (gogoproto.equal) = true;
 
   // use_bitcoin_rewards enables/disables the Bitcoin-style reward system (default: true for production, false for safe deployment)
-  bool use_bitcoin_rewards = 1;
+  bool use_bitcoin_rewards = 1 [deprecated = true];
 
   // initial_epoch_reward is the base reward amount per epoch (in native tokens)
   uint64 initial_epoch_reward = 2;

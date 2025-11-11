@@ -417,12 +417,6 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
 
-	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
-	if err != nil {
-		am.LogError("onEndOfPoCValidationStage: Unable to register top miners", types.Tokenomics, "error", err.Error())
-		return
-	}
-
 	am.LogInfo("onEndOfPoCValidationStage: computed new weights", types.Stages,
 		"upcomingEpoch.Index", upcomingEpoch.Index,
 		"PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight,
