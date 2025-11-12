@@ -275,8 +275,8 @@ func TestMultipleNodes(t *testing.T) {
 	}
 	node2 := apiconfig.InferenceNodeConfig{
 		Host:          "localhost",
-		InferencePort: 8080,
-		PoCPort:       5000,
+		InferencePort: 8081,
+		PoCPort:       5001,
 		Models:        map[string]apiconfig.ModelConfig{"model1": {Args: make([]string, 0)}},
 		Id:            "node2",
 		MaxConcurrent: 1,
