@@ -131,16 +131,15 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 
 	if exists {
 		command := broker.NewUpdateNodeCommand(newNode)
-		response := command.Response
 		err := s.nodeBroker.QueueMessage(command)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue update command: %v", err))
 		}
-		cmdResponse := <-response
-		if cmdResponse.Error != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to update node: %v", cmdResponse.Error))
+		response := <-command.Response
+		if response.Error != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to update node: %v", response.Error))
 		}
-		node := cmdResponse.Node
+		node := response.Node
 		if node == nil {
 			// Model check failed - validation already passed above
 			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node: one or more models are not valid governance models. Check logs for details.")
@@ -160,13 +159,18 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 func (s *Server) addNode(newNode apiconfig.InferenceNodeConfig) (apiconfig.InferenceNodeConfig, error) {
 	// Validate before queuing to provide clear error messages to API users
 	cmd := broker.NewRegisterNodeCommand(newNode)
-	response := cmd.Response
 	err := s.nodeBroker.QueueMessage(cmd)
 	if err != nil {
 		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue register command: %v", err))
 	}
 
-	node := <-response
+	response := <-cmd.Response
+	if response.Error != nil {
+		logging.Error("Error creating new node", types.Nodes, "error", response.Error, "node_id", newNode.Id)
+		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to create node: %v", response.Error))
+	}
+
+	node := response.Node
 	if node == nil {
 		// Model check failed - validation already passed above
 		logging.Error("Error creating new node - model validation failed", types.Nodes, "node_id", newNode.Id)
