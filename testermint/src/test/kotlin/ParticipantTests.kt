@@ -119,7 +119,7 @@ class ParticipantTests : TestermintTest() {
         assertNotNull(updatedGenesisParticipant, "Unable to get stats for new participant")
         assertThat(updatedGenesisParticipant.epochsCompleted).isEqualTo(genesisParticipant.epochsCompleted)
         assertThat(updatedGenesisParticipant.inferenceUrl).isEqualTo("https://new-url.com")
-        assertThat(updatedGenesisParticipant.status).isEqualTo(genesisParticipant.status)
+        assertThat(updatedGenesisParticipant.getStatusAsInt()).isEqualTo(genesisParticipant.getStatusAsInt())
         assertThat(updatedGenesisParticipant.joinTime).isEqualTo(genesisParticipant.joinTime)
         assertThat(updatedGenesisParticipant.joinHeight).isEqualTo(genesisParticipant.joinHeight)
         genesis.waitForNextEpoch()

@@ -1,6 +1,7 @@
 package com.productscience.data
 
 import com.productscience.LocalInferencePair
+import java.util.Locale
 
 data class ParticipantsResponse(
     val participants: List<Participant>,
@@ -31,27 +32,7 @@ data class Participant(
 ) {
     // Helper function to get status as integer, handling Int, Double, and String values
     fun getStatusAsInt(): Int {
-        return when (status) {
-            is Int -> status
-            is Double -> status.toInt()
-            is Float -> status.toInt()
-            is Number -> status.toInt()
-            is String -> {
-                when (status) {
-                    "PARTICIPANT_STATUS_UNSPECIFIED" -> 0
-                    "PARTICIPANT_STATUS_ACTIVE" -> 1
-                    "PARTICIPANT_STATUS_INACTIVE" -> 2
-                    "PARTICIPANT_STATUS_INVALID" -> 3
-                    "PARTICIPANT_STATUS_RAMPING" -> 4
-                    else -> {
-                        // Try to parse as number if it's a numeric string
-                        status.toIntOrNull() ?: 0
-                    }
-                }
-            }
-            null -> 0  // Default to UNSPECIFIED if not provided
-            else -> 0
-        }
+        return parseParticipantStatus(status)
     }
 }
 
@@ -143,9 +124,11 @@ data class RawParticipant(
     val joinTime: Long,
     val joinHeight: Long,
     val inferenceUrl: String,
-    val status: Int,
+    val status: Any? = null,
     val epochsCompleted: Long,
-) : ParticipantInfo
+) : ParticipantInfo {
+    fun getStatusAsInt(): Int = parseParticipantStatus(status)
+}
 
 data class RawParticipantWrapper(
     val participant: List<RawParticipant>
@@ -166,3 +149,30 @@ inline fun <reified T : ParticipantInfo> Iterable<T>.getParticipant(pair: LocalI
 
 inline fun <reified T: ParticipantInfo> HasParticipants<T>.getParticipant(pair: LocalInferencePair): T? =
     this.getParticipantList().getParticipant(pair)
+
+private fun parseParticipantStatus(value: Any?): Int {
+    return when (value) {
+        null -> ParticipantStatus.UNSPECIFIED.value
+        is Int -> value
+        is Double -> value.toInt()
+        is Float -> value.toInt()
+        is Number -> value.toInt()
+        is String -> {
+            val normalized = value.trim().uppercase(Locale.US)
+            normalized.toIntOrNull()?.let { numeric ->
+                return ParticipantStatus.entries.firstOrNull { it.value == numeric }?.value
+                    ?: numeric
+            }
+
+            when {
+                normalized.contains("UNSPECIFIED") -> ParticipantStatus.UNSPECIFIED.value
+                normalized.contains("RAMP") -> ParticipantStatus.RAMPING.value
+                normalized.contains("INVALID") -> ParticipantStatus.INVALID.value
+                normalized.contains("INACTIVE") -> ParticipantStatus.INACTIVE.value
+                normalized.contains("ACTIVE") -> ParticipantStatus.ACTIVE.value
+                else -> ParticipantStatus.UNSPECIFIED.value
+            }
+        }
+        else -> ParticipantStatus.UNSPECIFIED.value
+    }
+}

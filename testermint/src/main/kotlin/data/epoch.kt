@@ -1,6 +1,7 @@
 package com.productscience.data
 
 import com.google.gson.annotations.SerializedName
+import java.util.Locale
 
 data class EpochResponse(
     @SerializedName("block_height")
@@ -28,12 +29,21 @@ data class EpochResponse(
             is Float -> EpochPhase.values().find { it.value == phase.toInt() } ?: EpochPhase.Inference
             is Number -> EpochPhase.values().find { it.value == phase.toInt() } ?: EpochPhase.Inference
             is String -> {
-                when (phase) {
-                    "POC_GENERATE" -> EpochPhase.PoCGenerate
-                    "POC_GENERATE_WIND_DOWN" -> EpochPhase.PoCGenerateWindDown
-                    "POC_VALIDATE" -> EpochPhase.PoCValidate
-                    "POC_VALIDATE_WIND_DOWN" -> EpochPhase.PoCValidateWindDown
-                    "INFERENCE" -> EpochPhase.Inference
+                val normalized = phase.trim().uppercase(Locale.US)
+                normalized.toIntOrNull()?.let { value ->
+                    return EpochPhase.values().find { it.value == value } ?: EpochPhase.Inference
+                }
+
+                return when {
+                    normalized.contains("POC_GENERATE_WIND_DOWN") ||
+                        normalized.contains("POC_GENERATION_WIND_DOWN") -> EpochPhase.PoCGenerateWindDown
+                    normalized.contains("POC_VALIDATE_WIND_DOWN") ||
+                        normalized.contains("POC_VALIDATION_WIND_DOWN") -> EpochPhase.PoCValidateWindDown
+                    normalized.contains("POC_VALIDATE") ||
+                        normalized.contains("POC_VALIDATION") -> EpochPhase.PoCValidate
+                    normalized.contains("POC_GENERATE") ||
+                        normalized.contains("POC_GENERATION") -> EpochPhase.PoCGenerate
+                    normalized.contains("INFERENCE") -> EpochPhase.Inference
                     else -> EpochPhase.Inference // Default fallback
                 }
             }

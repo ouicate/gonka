@@ -1,5 +1,7 @@
 package com.productscience.data
 
+import java.util.Locale
+
 data class InferencePayload(
     val index: String,
     val inferenceId: String,
@@ -64,17 +66,20 @@ data class InferencePayload(
             is Float -> status.toInt()
             is Number -> status.toInt()
             is String -> {
-                when (status) {
-                    "STARTED" -> InferenceStatus.STARTED.value
-                    "FINISHED" -> InferenceStatus.FINISHED.value
-                    "VALIDATED" -> InferenceStatus.VALIDATED.value
-                    "INVALIDATED" -> InferenceStatus.INVALIDATED.value
-                    "VOTING" -> InferenceStatus.VOTING.value
-                    "EXPIRED" -> InferenceStatus.EXPIRED.value
-                    else -> {
-                        // Try to parse as number if it's a numeric string
-                        status.toIntOrNull() ?: InferenceStatus.STARTED.value
-                    }
+                val normalized = status.trim().uppercase(Locale.US)
+                normalized.toIntOrNull()?.let { numeric ->
+                    return InferenceStatus.entries.firstOrNull { it.value == numeric }?.value
+                        ?: numeric
+                }
+
+                when {
+                    normalized.contains("INVALID") -> InferenceStatus.INVALIDATED.value
+                    normalized.contains("VALIDATED") -> InferenceStatus.VALIDATED.value
+                    normalized.contains("EXPIRE") -> InferenceStatus.EXPIRED.value
+                    normalized.contains("VOTING") -> InferenceStatus.VOTING.value
+                    normalized.contains("FINISH") -> InferenceStatus.FINISHED.value
+                    normalized.contains("START") -> InferenceStatus.STARTED.value
+                    else -> InferenceStatus.STARTED.value
                 }
             }
             else -> InferenceStatus.STARTED.value

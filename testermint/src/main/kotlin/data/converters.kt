@@ -9,7 +9,7 @@ import com.google.gson.JsonSerializer
 import java.lang.reflect.Type
 import java.time.Duration
 import java.time.Instant
-
+import java.util.Locale
 
 class InstantDeserializer : JsonDeserializer<Instant> {
     override fun deserialize(
@@ -125,8 +125,32 @@ class ConfirmationPoCPhaseDeserializer : JsonDeserializer<ConfirmationPoCPhase> 
         typeOfT: Type?,
         context: JsonDeserializationContext?
     ): ConfirmationPoCPhase {
-        val intValue = json.asInt
-        return ConfirmationPoCPhase.values().find { it.value == intValue }
-            ?: throw IllegalArgumentException("Unknown ConfirmationPoCPhase value: $intValue")
+        val primitive = json.asJsonPrimitive
+        if (primitive.isNumber) {
+            val intValue = primitive.asInt
+            return ConfirmationPoCPhase.values().find { it.value == intValue }
+                ?: ConfirmationPoCPhase.CONFIRMATION_POC_INACTIVE
+        }
+
+        if (primitive.isString) {
+            val raw = primitive.asString.trim()
+            if (raw.isEmpty()) {
+                return ConfirmationPoCPhase.CONFIRMATION_POC_INACTIVE
+            }
+
+            raw.toIntOrNull()?.let { value ->
+                return ConfirmationPoCPhase.values().find { it.value == value }
+                    ?: ConfirmationPoCPhase.CONFIRMATION_POC_INACTIVE
+            }
+
+            val normalized = raw.uppercase(Locale.US)
+            ConfirmationPoCPhase.values().firstOrNull { enumValue ->
+                normalized == enumValue.name ||
+                    normalized.endsWith("_${enumValue.name}") ||
+                    normalized.contains(enumValue.name)
+            }?.let { return it }
+        }
+
+        return ConfirmationPoCPhase.CONFIRMATION_POC_INACTIVE
     }
 }
