@@ -101,7 +101,15 @@ func main() {
 
 	nodes := config.GetNodes()
 	for _, node := range nodes {
-		nodeBroker.LoadNodeToBroker(&node)
+		responseChan := nodeBroker.LoadNodeToBroker(&node)
+		if responseChan != nil {
+			registeredNode := <-responseChan
+			if registeredNode == nil {
+				logging.Error("Failed to load node to broker, skipping", types.Nodes, "node_id", node.Id)
+			} else {
+				logging.Info("Successfully loaded node to broker", types.Nodes, "node_id", registeredNode.Id)
+			}
+		}
 	}
 
 	if err := participant.RegisterParticipantIfNeeded(recorder, config); err != nil {

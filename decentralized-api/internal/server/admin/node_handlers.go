@@ -5,6 +5,7 @@ import (
 	"decentralized-api/broker"
 	"decentralized-api/logging"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -72,17 +73,38 @@ func (s *Server) createNewNodes(ctx echo.Context) error {
 	var newNodes []apiconfig.InferenceNodeConfig
 	if err := ctx.Bind(&newNodes); err != nil {
 		logging.Error("Error decoding request", types.Nodes, "error", err)
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 	}
 
 	var outputNodes []apiconfig.InferenceNodeConfig
-	for _, node := range newNodes {
+	var errors []string
+	for i, node := range newNodes {
 		newNode, err := s.addNode(node)
 		if err != nil {
+			errorMsg := fmt.Sprintf("node[%d] (id: %s): %v", i, node.Id, err)
+			errors = append(errors, errorMsg)
+			logging.Error("Failed to add node in batch", types.Nodes, "index", i, "node_id", node.Id, "error", err)
 			continue
 		}
 		outputNodes = append(outputNodes, newNode)
 	}
+
+	if len(errors) > 0 && len(outputNodes) == 0 {
+		// All nodes failed
+		return echo.NewHTTPError(http.StatusBadRequest, map[string]interface{}{
+			"error":  "all nodes failed validation",
+			"errors": errors,
+		})
+	}
+
+	if len(errors) > 0 {
+		// Some nodes succeeded, some failed
+		return ctx.JSON(http.StatusPartialContent, map[string]interface{}{
+			"nodes":  outputNodes,
+			"errors": errors,
+		})
+	}
+
 	return ctx.JSON(http.StatusCreated, outputNodes)
 }
 
@@ -90,14 +112,14 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 	var newNode apiconfig.InferenceNodeConfig
 	if err := ctx.Bind(&newNode); err != nil {
 		logging.Error("Error decoding request", types.Nodes, "error", err)
-		return echo.NewHTTPError(http.StatusBadRequest, err)
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid request body: %v", err))
 	}
 
 	// Upsert: if node exists, update it; otherwise, create
 	nodes, err := s.nodeBroker.GetNodes()
 	if err != nil {
 		logging.Error("Error reading nodes", types.Nodes, "error", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to read nodes: %v", err))
 	}
 
 	exists := false
@@ -109,15 +131,24 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 	}
 
 	if exists {
+		// Validate before queuing to provide clear error messages to API users
+		if err := s.nodeBroker.ValidateInferenceNode(newNode, newNode.Id); err != nil {
+			logging.Error("Node validation failed before update", types.Nodes, "node_id", newNode.Id, "error", err)
+			return echo.NewHTTPError(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("node validation failed: %v", err),
+			})
+		}
+
 		command := broker.NewUpdateNodeCommand(newNode)
 		response := command.Response
 		err := s.nodeBroker.QueueMessage(command)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err)
+			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue update command: %v", err))
 		}
 		node := <-response
 		if node == nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node")
+			// Model check failed - validation already passed above
+			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node: one or more models are not valid governance models. Check logs for details.")
 		}
 		// sync config file with updated node list
 		syncNodesWithConfig(s.nodeBroker, s.configManager)
@@ -132,26 +163,35 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 }
 
 func (s *Server) addNode(newNode apiconfig.InferenceNodeConfig) (apiconfig.InferenceNodeConfig, error) {
+	// Validate before queuing to provide clear error messages to API users
+	if err := s.nodeBroker.ValidateInferenceNode(newNode, ""); err != nil {
+		logging.Error("Node validation failed before registration", types.Nodes, "node_id", newNode.Id, "error", err)
+		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("node validation failed: %v", err),
+		})
+	}
+
 	response := make(chan *apiconfig.InferenceNodeConfig, 2)
 	err := s.nodeBroker.QueueMessage(broker.RegisterNode{
 		Node:     newNode,
 		Response: response,
 	})
 	if err != nil {
-		return apiconfig.InferenceNodeConfig{}, err
+		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue register command: %v", err))
 	}
 
 	node := <-response
 	if node == nil {
-		logging.Error("Error creating new node", types.Nodes, "error", err)
-		return apiconfig.InferenceNodeConfig{}, errors.New("error creating new node")
+		// Model check failed - validation already passed above
+		logging.Error("Error creating new node - model validation failed", types.Nodes, "node_id", newNode.Id)
+		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusBadRequest, "failed to create node: one or more models are not valid governance models. Check logs for details.")
 	}
 
 	newNodes := append(s.configManager.GetNodes(), *node)
 	err = s.configManager.SetNodes(newNodes)
 	if err != nil {
 		logging.Error("Error writing config", types.Config, "error", err, "node", newNode.Id)
-		return apiconfig.InferenceNodeConfig{}, err
+		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to save node configuration: %v", err))
 	}
 
 	return *node, nil

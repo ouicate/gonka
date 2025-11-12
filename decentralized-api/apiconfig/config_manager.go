@@ -523,13 +523,29 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 		return err
 	}
 
+	// Validate nodes and filter out invalid ones
+	validNodes := make([]InferenceNodeConfig, 0, len(newNodes))
+	for i, node := range newNodes {
+		if err := ValidateInferenceNodeBasic(node); err != nil {
+			logging.Error("Skipping invalid node from node_config.json", types.Config,
+				"index", i, "node_id", node.Id, "error", err)
+			continue
+		}
+		validNodes = append(validNodes, node)
+	}
+
+	if len(validNodes) < len(newNodes) {
+		logging.Warn("Some nodes were skipped due to validation errors", types.Config,
+			"total_nodes", len(newNodes), "valid_nodes", len(validNodes), "skipped", len(newNodes)-len(validNodes))
+	}
+
 	// Populate in-memory nodes and mark dirty. Auto-flush will persist and then set merged flag.
 	cm.mutex.Lock()
-	cm.currentConfig.Nodes = newNodes
+	cm.currentConfig.Nodes = validNodes
 	cm.mutex.Unlock()
 
 	logging.Info("Loaded node configuration into memory; will persist on next flush", types.Config,
-		"new_nodes", len(newNodes))
+		"valid_nodes", len(validNodes))
 	return nil
 }
 

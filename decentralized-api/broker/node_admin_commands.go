@@ -4,10 +4,78 @@ import (
 	"decentralized-api/apiconfig"
 	"decentralized-api/logging"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/productscience/inference/x/inference/types"
 )
+
+// ValidateInferenceNode validates an InferenceNodeConfig and returns an error if invalid.
+// The error message describes what is wrong with the node configuration.
+// excludeNodeId is used when updating a node - it excludes that node from duplicate checks.
+// This method is exported so it can be called from admin handlers to provide clear error messages.
+func (b *Broker) ValidateInferenceNode(node apiconfig.InferenceNodeConfig, excludeNodeId string) error {
+	var errors []string
+
+	// Validate required fields
+	if strings.TrimSpace(node.Id) == "" {
+		errors = append(errors, "node id is required and cannot be empty")
+	}
+
+	if strings.TrimSpace(node.Host) == "" {
+		errors = append(errors, "host is required and cannot be empty")
+	}
+
+	if node.InferencePort <= 0 || node.InferencePort > 65535 {
+		errors = append(errors, fmt.Sprintf("inference_port must be between 1 and 65535, got %d", node.InferencePort))
+	}
+
+	if node.PoCPort <= 0 || node.PoCPort > 65535 {
+		errors = append(errors, fmt.Sprintf("poc_port must be between 1 and 65535, got %d", node.PoCPort))
+	}
+
+	if node.MaxConcurrent <= 0 {
+		errors = append(errors, fmt.Sprintf("max_concurrent must be greater than 0, got %d", node.MaxConcurrent))
+	}
+
+	if len(node.Models) == 0 {
+		errors = append(errors, "at least one model must be specified")
+	}
+
+	// Segments can be empty, which is fine
+
+	// Check for duplicate host+port combinations
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	// Check inference port uniqueness
+	for id, existingNode := range b.nodes {
+		if excludeNodeId != "" && id == excludeNodeId {
+			continue
+		}
+		if existingNode.Node.Host == node.Host && existingNode.Node.InferencePort == node.InferencePort {
+			errors = append(errors, fmt.Sprintf("duplicate inference host+port combination: %s:%d (already used by node '%s')", node.Host, node.InferencePort, id))
+			break
+		}
+	}
+
+	// Check PoC port uniqueness
+	for id, existingNode := range b.nodes {
+		if excludeNodeId != "" && id == excludeNodeId {
+			continue
+		}
+		if existingNode.Node.Host == node.Host && existingNode.Node.PoCPort == node.PoCPort {
+			errors = append(errors, fmt.Sprintf("duplicate PoC host+port combination: %s:%d (already used by node '%s')", node.Host, node.PoCPort, id))
+			break
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation failed: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}
 
 type RegisterNode struct {
 	Node     apiconfig.InferenceNodeConfig
@@ -19,6 +87,13 @@ func (r RegisterNode) GetResponseChannelCapacity() int {
 }
 
 func (c RegisterNode) Execute(b *Broker) {
+	// Validate node configuration
+	if err := b.ValidateInferenceNode(c.Node, ""); err != nil {
+		logging.Error("RegisterNode. Node validation failed", types.Nodes, "node_id", c.Node.Id, "error", err)
+		c.Response <- nil
+		return
+	}
+
 	govModels, err := b.chainBridge.GetGovernanceModels()
 	if err != nil {
 		logging.Error("RegisterNode. Failed to get governance models", types.Nodes, "error", err)
@@ -127,6 +202,24 @@ func (u UpdateNode) GetResponseChannelCapacity() int {
 }
 
 func (c UpdateNode) Execute(b *Broker) {
+	// Fetch existing node first to check if it exists
+	b.mu.RLock()
+	existing, exists := b.nodes[c.Node.Id]
+	b.mu.RUnlock()
+
+	if !exists {
+		logging.Error("UpdateNode. Node not found", types.Nodes, "node_id", c.Node.Id)
+		c.Response <- nil
+		return
+	}
+
+	// Validate node configuration (exclude current node from duplicate checks)
+	if err := b.ValidateInferenceNode(c.Node, c.Node.Id); err != nil {
+		logging.Error("UpdateNode. Node validation failed", types.Nodes, "node_id", c.Node.Id, "error", err)
+		c.Response <- nil
+		return
+	}
+
 	// Validate models exist in governance
 	govModels, err := b.chainBridge.GetGovernanceModels()
 	if err != nil {
@@ -148,16 +241,9 @@ func (c UpdateNode) Execute(b *Broker) {
 		}
 	}
 
-	// Fetch existing node
+	// Apply update
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	existing, exists := b.nodes[c.Node.Id]
-	if !exists {
-		logging.Error("UpdateNode. Node not found", types.Nodes, "node_id", c.Node.Id)
-		c.Response <- nil
-		return
-	}
 
 	// Build updated Node struct, preserving node number
 	models := make(map[string]ModelArgs)

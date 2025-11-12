@@ -576,3 +576,430 @@ func TestUpdateNodeConfiguration(t *testing.T) {
 	require.Contains(t, after.Node.Models, "model1")
 	assert.Equal(t, []string{"--foo", "bar"}, after.Node.Models["model1"].Args)
 }
+
+func TestValidateInferenceNode_FieldCorrectness(t *testing.T) {
+	broker := NewTestBroker()
+
+	tests := []struct {
+		name    string
+		node    apiconfig.InferenceNodeConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid node",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty node id",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "node id is required",
+		},
+		{
+			name: "whitespace only node id",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "   ",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "node id is required",
+		},
+		{
+			name: "empty host",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "host is required",
+		},
+		{
+			name: "inference port too low",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    0,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "inference_port must be between 1 and 65535",
+		},
+		{
+			name: "inference port too high",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    65536,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "inference_port must be between 1 and 65535",
+		},
+		{
+			name: "poc port too low",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          0,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "poc_port must be between 1 and 65535",
+		},
+		{
+			name: "poc port too high",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          70000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "poc_port must be between 1 and 65535",
+		},
+		{
+			name: "max concurrent zero",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    0,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "max_concurrent must be greater than 0",
+		},
+		{
+			name: "max concurrent negative",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    -1,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "max_concurrent must be greater than 0",
+		},
+		{
+			name: "no models",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{},
+			},
+			wantErr: true,
+			errMsg:  "at least one model must be specified",
+		},
+		{
+			name: "nil models",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           nil,
+			},
+			wantErr: true,
+			errMsg:  "at least one model must be specified",
+		},
+		{
+			name: "empty segments are allowed",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    8080,
+				PoCPort:          5000,
+				InferenceSegment: "",
+				PoCSegment:       "",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid port boundaries",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node1",
+				Host:             "localhost",
+				InferencePort:    1,
+				PoCPort:          65535,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    1,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := broker.ValidateInferenceNode(tt.node, "")
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateInferenceNode_HostPortUniqueness(t *testing.T) {
+	broker := NewTestBroker()
+
+	// Register first node
+	node1 := apiconfig.InferenceNodeConfig{
+		Id:               "node1",
+		Host:             "localhost",
+		InferencePort:    8080,
+		PoCPort:          5000,
+		InferenceSegment: "/api",
+		PoCSegment:       "/api",
+		MaxConcurrent:    5,
+		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
+	err := broker.QueueMessage(RegisterNode{Node: node1, Response: responseChan})
+	require.NoError(t, err)
+	require.NotNil(t, <-responseChan)
+
+	// Give broker time to process the registration
+	time.Sleep(50 * time.Millisecond)
+
+	tests := []struct {
+		name    string
+		node    apiconfig.InferenceNodeConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "duplicate inference host+port",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node2",
+				Host:             "localhost",
+				InferencePort:    8080, // Same as node1
+				PoCPort:          6000, // Different PoC port
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "duplicate inference host+port combination",
+		},
+		{
+			name: "duplicate poc host+port",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node3",
+				Host:             "localhost",
+				InferencePort:    8081, // Different inference port
+				PoCPort:          5000, // Same as node1
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "duplicate PoC host+port combination",
+		},
+		{
+			name: "different host, same ports - should be valid",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node4",
+				Host:             "127.0.0.1", // Different host
+				InferencePort:    8080,        // Same ports
+				PoCPort:          5000,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "same host, different ports - should be valid",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node5",
+				Host:             "localhost",
+				InferencePort:    8081, // Different ports
+				PoCPort:          5001,
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "both ports duplicate on same host",
+			node: apiconfig.InferenceNodeConfig{
+				Id:               "node6",
+				Host:             "localhost",
+				InferencePort:    8080, // Same as node1
+				PoCPort:          5000, // Same as node1
+				InferenceSegment: "/api",
+				PoCSegment:       "/api",
+				MaxConcurrent:    5,
+				Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+			},
+			wantErr: true,
+			errMsg:  "duplicate inference host+port combination", // Should catch inference port first
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := broker.ValidateInferenceNode(tt.node, "")
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
+	broker := NewTestBroker()
+
+	// Register first node
+	node1 := apiconfig.InferenceNodeConfig{
+		Id:               "node1",
+		Host:             "localhost",
+		InferencePort:    8080,
+		PoCPort:          5000,
+		InferenceSegment: "/api",
+		PoCSegment:       "/api",
+		MaxConcurrent:    5,
+		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
+	err := broker.QueueMessage(RegisterNode{Node: node1, Response: responseChan})
+	require.NoError(t, err)
+	require.NotNil(t, <-responseChan)
+
+	// Give broker time to process the registration
+	time.Sleep(50 * time.Millisecond)
+
+	// Register second node with different ports
+	node2 := apiconfig.InferenceNodeConfig{
+		Id:               "node2",
+		Host:             "localhost",
+		InferencePort:    8081,
+		PoCPort:          5001,
+		InferenceSegment: "/api",
+		PoCSegment:       "/api",
+		MaxConcurrent:    5,
+		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	responseChan2 := make(chan *apiconfig.InferenceNodeConfig, 2)
+	err = broker.QueueMessage(RegisterNode{Node: node2, Response: responseChan2})
+	require.NoError(t, err)
+	require.NotNil(t, <-responseChan2)
+
+	// Give broker time to process the second registration
+	time.Sleep(50 * time.Millisecond)
+
+	// Update node1 to use node2's ports - should fail (duplicate)
+	updatedNode1 := apiconfig.InferenceNodeConfig{
+		Id:               "node1",
+		Host:             "localhost",
+		InferencePort:    8081, // node2's port
+		PoCPort:          5001, // node2's port
+		InferenceSegment: "/api",
+		PoCSegment:       "/api",
+		MaxConcurrent:    5,
+		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	err = broker.ValidateInferenceNode(updatedNode1, "node1") // Exclude node1 from check
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+
+	// Update node1 to use same ports as itself - should succeed (excluded from check)
+	samePortsNode1 := apiconfig.InferenceNodeConfig{
+		Id:               "node1",
+		Host:             "localhost",
+		InferencePort:    8080, // node1's original port
+		PoCPort:          5000, // node1's original port
+		InferenceSegment: "/api",
+		PoCSegment:       "/api",
+		MaxConcurrent:    10, // Changed max concurrent
+		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	err = broker.ValidateInferenceNode(samePortsNode1, "node1") // Exclude node1 from check
+	require.NoError(t, err, "Should allow updating node to keep same ports when excluding self")
+}

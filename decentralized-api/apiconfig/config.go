@@ -1,5 +1,10 @@
 package apiconfig
 
+import (
+	"fmt"
+	"strings"
+)
+
 type Config struct {
 	Api                 ApiConfig             `koanf:"api" json:"api"`
 	Nodes               []InferenceNodeConfig `koanf:"nodes" json:"nodes"`
@@ -77,6 +82,46 @@ type InferenceNodeConfig struct {
 	Id               string                 `koanf:"id" json:"id"`
 	MaxConcurrent    int                    `koanf:"max_concurrent" json:"max_concurrent"`
 	Hardware         []Hardware             `koanf:"hardware" json:"hardware"`
+}
+
+// ValidateInferenceNodeBasic validates basic fields of an InferenceNodeConfig without checking for duplicates.
+// This is useful when loading from JSON before the broker exists.
+// Returns an error describing what is wrong, or nil if valid.
+func ValidateInferenceNodeBasic(node InferenceNodeConfig) error {
+	var errors []string
+
+	// Validate required fields
+	if strings.TrimSpace(node.Id) == "" {
+		errors = append(errors, "node id is required and cannot be empty")
+	}
+
+	if strings.TrimSpace(node.Host) == "" {
+		errors = append(errors, "host is required and cannot be empty")
+	}
+
+	if node.InferencePort <= 0 || node.InferencePort > 65535 {
+		errors = append(errors, fmt.Sprintf("inference_port must be between 1 and 65535, got %d", node.InferencePort))
+	}
+
+	if node.PoCPort <= 0 || node.PoCPort > 65535 {
+		errors = append(errors, fmt.Sprintf("poc_port must be between 1 and 65535, got %d", node.PoCPort))
+	}
+
+	if node.MaxConcurrent <= 0 {
+		errors = append(errors, fmt.Sprintf("max_concurrent must be greater than 0, got %d", node.MaxConcurrent))
+	}
+
+	if len(node.Models) == 0 {
+		errors = append(errors, "at least one model must be specified")
+	}
+
+	// Segments can be empty, which is fine
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation failed: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
 }
 
 func (n InferenceNodeConfig) DeepCopy() InferenceNodeConfig {
