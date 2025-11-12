@@ -67,6 +67,7 @@ func TestSetValidatorsProof(t *testing.T) {
 	})
 	err = keeper.SetBlockProof(ctx2, types.BlockProof{
 		CreatedAtBlockHeight: validProofEpochBlockHeight,
+		TotalPower:           100,
 		AppHashHex:           "29213E6A386DE8F6BA3882A87490347B91D8C9B3D63FBBEB2400A2967B5F6939",
 		Commits: []*types.CommitInfo{
 			{
