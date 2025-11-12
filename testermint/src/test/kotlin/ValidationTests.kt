@@ -30,8 +30,7 @@ class ValidationTests : TestermintTest() {
             mergeSpec = ignoreDowntime
         )
 
-        genesis.node.waitForMinimumBlock(35)
-        genesis.waitForNextInferenceWindow(20)
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         logSection("Making inference requests in parallel")
         val requests = 50
         val inferenceRequest = inferenceRequestObject.copy(
