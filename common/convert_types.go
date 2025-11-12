@@ -53,13 +53,13 @@ func ToContractsBlockProof(src *types.BlockProof) *contracts.BlockProof {
 		CreatedAtBlockHeight: src.CreatedAtBlockHeight,
 		AppHashHex:           src.AppHashHex,
 		TotalPower:           src.TotalPower,
-		TotalVotedPower:      src.TotalVotedPower,
 		Commits:              make([]*contracts.CommitInfo, len(src.Commits)),
 	}
 	for i, c := range src.Commits {
 		out.Commits[i] = &contracts.CommitInfo{
 			ValidatorAddress: c.ValidatorAddress,
 			ValidatorPubKey:  c.ValidatorPubKey,
+			VotingPower:      c.VotingPower,
 		}
 	}
 	return out

@@ -8,7 +8,10 @@ import (
 	"strings"
 )
 
-var ErrEmptyCommits = errors.New("empty commits")
+var (
+	ErrEmptyCommits    = errors.New("empty commits")
+	ErrEmptyTotalPower = errors.New("empty total power")
+)
 
 func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error {
 	h := uint64(proof.CreatedAtBlockHeight)
@@ -18,6 +21,10 @@ func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error
 
 	if len(proof.Commits) == 0 {
 		return ErrEmptyCommits
+	}
+
+	if proof.TotalPower == 0 {
+		return ErrEmptyTotalPower
 	}
 
 	// verify validators, which signed this block: they all must be in active participants set
@@ -40,6 +47,9 @@ func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error
 
 	participantsData := make(map[string]string)
 	for _, participant := range prevParticipants.Participants {
+		if participant.ValidatorKey == "" {
+			continue
+		}
 		addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
 		if err != nil {
 			return err
@@ -50,13 +60,17 @@ func (k Keeper) SetBlockProof(ctx context.Context, proof types.BlockProof) error
 	for _, commit := range proof.Commits {
 		key, ok := participantsData[strings.ToUpper(commit.ValidatorAddress)]
 		if !ok {
-			return errors.New("commit validator address not found in participants")
+			k.logger.With("validator address", commit.ValidatorAddress).Warn("participant not found for validator consensus address")
+			continue
 		}
 		if strings.ToUpper(key) != strings.ToUpper(commit.ValidatorPubKey) {
-			return errors.New("commit validator key and participant validator key are not matching")
+			k.logger.
+				With("expected", key).
+				With("got", commit.ValidatorPubKey).
+				Warn("validator pub key mismatch")
+			continue
 		}
 	}
-
 	return k.BlockProofs.Set(ctx, h, proof)
 }
 

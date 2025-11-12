@@ -35,7 +35,7 @@ func (k Keeper) SetValidatorsProof(ctx context.Context, proof types.ValidatorsPr
 		validatorsData[commit.ValidatorAddress] = &contracts.CommitInfo{
 			ValidatorAddress: commit.ValidatorAddress,
 			ValidatorPubKey:  commit.ValidatorPubKey,
-			VotingPower:      commit.Power,
+			VotingPower:      commit.VotingPower,
 		}
 	}
 

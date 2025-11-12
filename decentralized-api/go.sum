@@ -307,6 +307,8 @@ github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf
 github.com/btcsuite/btcd/btcec/v2 v2.3.2/go.mod h1:zYzJ8etWJQIv1Ogk7OzpWjowwOdXY1W/17j2MW85J04=
 github.com/btcsuite/btcd/btcutil v1.1.6 h1:zFL2+c3Lb9gEgqKNzowKUPQNb8jV7v5Oaodi/AYFd6c=
 github.com/btcsuite/btcd/btcutil v1.1.6/go.mod h1:9dFymx8HpuLqBnsPELrImQeTQfKBQqzqGbbV3jK55aE=
+github.com/btcsuite/btcutil v1.0.2 h1:9iZ1Terx9fMIOtq1VrwdqfsATL9MC2l8ZrUY6YZ2uts=
+github.com/btcsuite/btcutil v1.0.2/go.mod h1:j9HUFwoQRsZL3V4n+qG+CUnEGHOarIxfC3Le2Yhbcts=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/bytedance/sonic v1.14.0 h1:/OfKt8HFw0kh2rj8N0F6C/qPGRESq0BbaNZgcNXXzQQ=
@@ -593,14 +595,8 @@ github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb h1:PBC98N2aIaM3XXi
 github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/gonka-ai/cosmos-sdk v0.53.3-ps13 h1:5/8GzgGwnWubVtO/0YKPlMITlbh1C/SMJpS+mxTuywg=
 github.com/gonka-ai/cosmos-sdk v0.53.3-ps13/go.mod h1:90S054hIbadFB1MlXVZVC5w0QbKfd1P4b79zT+vvJxw=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251031164130-050eebb085ee h1:BIkm9PDEfrpSXb/8tS3WEKviJ9nl2DTHhanK4sl+7O0=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251031164130-050eebb085ee/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251103194014-9c8cbdd890ee h1:HkLgS4THJUdF40C0Cjhu2jAxziJw7tWqHbK/fPXjuLQ=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251103194014-9c8cbdd890ee/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251106183404-0352607cacf3 h1:T9vTng+njA3jeLO0qJxEDcqgb75HOtyBahbrE1nQKeg=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251106183404-0352607cacf3/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251109185649-9d06cebd023d h1:4LCbbx4lvsI66yVtYx4YW0lJw6CDJxkWZkKJjo2aAiQ=
-github.com/gonka-ai/gonka-utils/go v0.0.0-20251109185649-9d06cebd023d/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
+github.com/gonka-ai/gonka-utils/go v0.0.0-20251112133956-3127dbb5e1bd h1:u7lrA/28ltVYPfPPEbCv9aPEF+RcTsqyLLiINAQz6nw=
+github.com/gonka-ai/gonka-utils/go v0.0.0-20251112133956-3127dbb5e1bd/go.mod h1:7T07sIiwZykFYDSJJZfbXxucL1X5hVxT8ftdcqWKlFQ=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.1.3 h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=

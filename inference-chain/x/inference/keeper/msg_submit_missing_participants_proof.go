@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -99,65 +98,62 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 	}
 
 	members := epochgroup.ParticipantsToMembers(prevParticipants.Participants)
-	results := epochgroup.ComputeResultsForMembers(members)
-	results = s.ApplyEarlyNetworkProtection(ctx, results)
+	updatedParticipants := s.ApplyEarlyNetworkProtection(ctx, epochgroup.ComputeResultsForMembers(members))
 
-	prevParticipantsData := make(map[string]*contracts.CommitInfo)
+	votedParticipants := make(map[string]struct{})
+	for _, sign := range msg.CurrentBlockValidatorsProof.Signatures {
+		votedParticipants[sign.ValidatorAddressHex] = struct{}{}
+	}
+
+	participantsCommits := make(map[string]*contracts.CommitInfo)
+	commitsToStore := make([]*types.CommitInfo, 0)
 	totalPower := int64(0)
+	totalVotedPower := int64(0)
 
-	for _, participant := range results {
-		s.logger.Info(fmt.Sprintf(
-			"SubmitMissingProof: participant: op addr %v  val key %v\n", participant.OperatorAddress, participant.ValidatorPubKey))
-		prevParticipantsData[participant.ValidatorPubKey.Address().String()] = &contracts.CommitInfo{
-			ValidatorAddress: participant.ValidatorPubKey.Address().String(),
-			ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Bytes()),
-			VotingPower:      participant.Power,
+	for _, participant := range updatedParticipants {
+		if _, ok := votedParticipants[participant.ValidatorPubKey.Address().String()]; ok {
+			participantsCommits[participant.ValidatorPubKey.Address().String()] = &contracts.CommitInfo{
+				ValidatorAddress: participant.ValidatorPubKey.Address().String(),
+				ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Bytes()),
+				VotingPower:      participant.Power,
+			}
+
+			commitsToStore = append(commitsToStore, &types.CommitInfo{
+				ValidatorAddress: participant.ValidatorPubKey.Address().String(),
+				ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Bytes()),
+				VotingPower:      participant.Power,
+			})
+			totalVotedPower += participant.Power
 		}
 		totalPower += participant.Power
 	}
 
-	s.logger.Info(fmt.Sprintf("SubmitMissingProof: totalPower %v\n", totalPower))
+	s.logger.
+		With("totalPower", totalPower).
+		With("totalVotedPower", totalVotedPower).
+		Info("SubmitMissingProof: computed power")
 
-	if err := verifyGivenProofs(msg, prevParticipantsData); err != nil {
-		s.logger.Error("error verifying  proofs", "block height", int64(msg.BlockHeight), "err", err)
-		return nil, err
-	}
-
-	// success, store proofs
-	commits := make([]*types.CommitInfo, len(msg.CurrentBlockValidatorsProof.Signatures))
-	totalVotedPower := int64(0)
-	for i, sign := range msg.CurrentBlockValidatorsProof.Signatures {
-		data, ok := prevParticipantsData[sign.ValidatorAddressHex]
-		if !ok {
-			continue
-		}
-		commits[i] = &types.CommitInfo{
-			ValidatorAddress: sign.ValidatorAddressHex,
-			ValidatorPubKey:  data.ValidatorPubKey,
-			Power:            data.VotingPower,
-		}
-		totalVotedPower += data.VotingPower
-	}
-
-	s.logger.Info(fmt.Sprintf("SubmitMissingProof: total voted power %v\n", totalPower))
-
-	minPowerNeed := float64(totalPower) / 100.0 * 51.0 // need at least 51% validators signed
-	if float64(totalVotedPower) < minPowerNeed {
+	if !utils.IsEnoughPower(totalPower, totalVotedPower) {
 		s.logger.
 			With("height", int64(msg.BlockHeight)).
+			With("epoch", msg.EpochId).
 			With("totalVotedPower", totalVotedPower).
 			With("totalPower", totalPower).
 			Error("voted power too low")
 		return nil, errors.New("voted power too low")
 	}
 
+	if err := verifyGivenProofs(msg, participantsCommits); err != nil {
+		s.logger.Error("error verifying  proofs", "block height", int64(msg.BlockHeight), "err", err)
+		return nil, err
+	}
+
 	if err := s.Keeper.SetBlockProof(ctx, types.BlockProof{
 		CreatedAtBlockHeight: int64(msg.BlockHeight),
 		AppHashHex:           hex.EncodeToString(msg.BlockProof.AppHash),
-		TotalVotedPower:      totalVotedPower,
 		TotalPower:           totalPower,
 		EpochIndex:           msg.EpochId,
-		Commits:              commits,
+		Commits:              commitsToStore,
 	}); err != nil {
 		s.logger.Error("error setting block proof", "block height", int64(msg.BlockHeight), "err", err)
 		return nil, err
@@ -178,26 +174,14 @@ func (s msgServer) SubmitMissingParticipantsProofData(ctx context.Context, msg *
 }
 
 func verifyGivenProofs(msg *types.MsgSubmitActiveParticipantsProofData, participantsData map[string]*contracts.CommitInfo) error {
-	//for _, sign := range msg.CurrentBlockValidatorsProof.Signatures {
-	//	if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
-	//		return errors.New("validator address not found in previous participants")
-	//	}
-	//}
-	//
-	//for _, sign := range msg.NextBlockValidatorsProof.Signatures {
-	//	if _, found := participantsData[strings.ToUpper(sign.ValidatorAddressHex)]; !found {
-	//		return errors.New("validator address not found in previous participants")
-	//	}
-	//}
-
-	// 2. verify current block signatures
+	// 1. verify current block signatures
 	currentProof := common.ToContractsValidatorsProof(msg.CurrentBlockValidatorsProof)
 	err := utils.VerifySignatures(*currentProof, msg.BlockProof.ChainId, participantsData)
 	if err != nil {
 		return err
 	}
 
-	// 3. verify app hash: validators in next block must sign header of current block
+	// 2. verify app hash: validators in next block must sign header of current block
 	// hash of header == hash of block id
 	lastBlockIDHashBytes, err := hex.DecodeString(msg.BlockProof.LastBlockId.Hash)
 	if err != nil {

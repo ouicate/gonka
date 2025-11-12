@@ -36,7 +36,7 @@ func TestBlockProof(t *testing.T) {
 		assert.ErrorIs(t, err, keeper.ErrEmptyCommits)
 	})
 
-	t.Run("try to set proof with wrong validator key", func(t *testing.T) {
+	t.Run("try to set proof with unknown validator key", func(t *testing.T) {
 		err := k.SetBlockProof(ctx, types.BlockProof{
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
@@ -48,10 +48,10 @@ func TestBlockProof(t *testing.T) {
 				},
 			},
 		})
-		assert.ErrorContains(t, err, "commit validator address not found in participants")
+		assert.NoError(t, err)
 	})
 
-	t.Run("try to set proof with wrong validator key", func(t *testing.T) {
+	t.Run("try to set proof with mismatching validator key", func(t *testing.T) {
 		err := k.SetBlockProof(ctx, types.BlockProof{
 			CreatedAtBlockHeight: 10,
 			AppHashHex:           "apphash-10",
@@ -64,7 +64,23 @@ func TestBlockProof(t *testing.T) {
 				},
 			},
 		})
-		assert.ErrorContains(t, err, "commit validator key and participant validator key are not matching")
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty power", func(t *testing.T) {
+		err := k.SetBlockProof(ctx, types.BlockProof{
+			CreatedAtBlockHeight: 10,
+			AppHashHex:           "apphash-10",
+			TotalPower:           0,
+			EpochIndex:           1,
+			Commits: []*types.CommitInfo{
+				{
+					ValidatorAddress: "901ADC33D3A63CBF9EF17B8CB5F04F99087D47E0",
+					ValidatorPubKey:  "BUWZfCeWI3O+UXcmCbnjacmi0RY0PzX/8aJKdy3rP49=",
+				},
+			},
+		})
+		assert.ErrorIs(t, err, keeper.ErrEmptyTotalPower)
 	})
 
 	t.Run("set block proof", func(t *testing.T) {
@@ -90,7 +106,6 @@ func TestBlockProof(t *testing.T) {
 		assert.Equal(t, proof.CreatedAtBlockHeight, got.CreatedAtBlockHeight)
 		assert.Equal(t, proof.AppHashHex, got.AppHashHex)
 		assert.Equal(t, proof.TotalPower, got.TotalPower)
-
 		err = k.SetBlockProof(ctx, proof)
 		assert.NoError(t, err)
 	})

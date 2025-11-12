@@ -200,7 +200,7 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 	voteInfos := sdkCtx.VoteInfos()
 
 	var (
-		totalVotedPower  int64
+		totalPower       int64
 		prevParticipants types.ActiveParticipants
 	)
 
@@ -225,70 +225,45 @@ func (am AppModule) createBlockProof(sdkCtx sdk.Context, ctx context.Context, cu
 		}
 	}
 
-	// get validator's consensus key and voting power and match with known participants by validator (consensus) key
-	commits := make([]*types.CommitInfo, 0, len(voteInfos))
-	type data struct {
-		pk ed25519.PubKey
-	}
-
-	vals := make(map[string]data)
-	// for each participant convert validator key (consensus key) to consensus addr
-	for _, v := range prevParticipants.Participants {
-		if v.ValidatorKey == "" {
-			am.LogWarn("validator cons pub key is empty", types.ParticipantsVerification)
-			continue
-		}
-
-		keyBytes, err := base64.StdEncoding.DecodeString(v.ValidatorKey)
-		if err != nil {
-			am.LogError("Failed to unpack cons pub key", types.ParticipantsVerification, "error", err)
-			continue
-		}
-		pk := ed25519.PubKey(keyBytes)
-		if len(keyBytes) != ed25519.PubKeySize {
-			am.LogError("Invalid ed25519 pubkey length from participants", types.ParticipantsVerification,
-				"got_bytes", len(keyBytes), "want_bytes", ed25519.PubKeySize)
-			continue
-		}
-
-		addr := strings.ToUpper(pk.Address().String())
-		am.LogDebug("participant address", types.ParticipantsVerification, "consensus_addr_hex", addr)
-		vals[addr] = data{pk: pk}
-	}
-
-	// match consensus addr from previous step with Commit
-	for _, v := range voteInfos {
-		var pubKey string
-		addr := strings.ToUpper(hex.EncodeToString(v.Validator.Address))
-		participantData, ok := vals[addr]
-		if !ok {
-			am.LogError("Failed to find validator for consensus address", types.ParticipantsVerification, "consensus_addr_hex", addr)
-		} else {
-			pubKey = base64.StdEncoding.EncodeToString(participantData.pk.Bytes())
-		}
-
-		commits = append(commits, &types.CommitInfo{
-			ValidatorAddress: addr,
-			ValidatorPubKey:  pubKey,
-			Power:            v.Validator.Power,
-		})
-		totalVotedPower += v.Validator.Power
-	}
-
-	// calculate, which total would be if all participants would vote
+	// get participants weights according to enchansment rules
 	members := epochgroup.ParticipantsToMembers(prevParticipants.Participants)
 	results := epochgroup.ComputeResultsForMembers(members)
 	results = am.keeper.ApplyEarlyNetworkProtection(ctx, results)
 
-	var totalPower int64
-	for _, result := range results {
-		totalPower += result.Power
+	// make commit messages for all participants
+	commits := make([]*types.CommitInfo, 0, len(voteInfos))
+	vals := make(map[string]*types.CommitInfo)
+	for _, v := range results {
+		if v.ValidatorPubKey == nil || len(v.ValidatorPubKey.Bytes()) != ed25519.PubKeySize {
+			am.LogWarn("validator cons pub key has wrong len", types.ParticipantsVerification)
+			continue
+		}
+
+		addr := strings.ToUpper(v.ValidatorPubKey.Address().String())
+
+		am.LogDebug("participant address", types.ParticipantsVerification, "consensus_addr_hex", addr)
+		vals[addr] = &types.CommitInfo{
+			ValidatorAddress: addr,
+			ValidatorPubKey:  base64.StdEncoding.EncodeToString(v.ValidatorPubKey.Bytes()),
+			VotingPower:      v.Power,
+		}
+		totalPower += v.Power
+	}
+
+	// include in final commits list only commits of validators, which signed block
+	for _, v := range voteInfos {
+		addr := strings.ToUpper(hex.EncodeToString(v.Validator.Address))
+		commit, ok := vals[addr]
+		if !ok {
+			am.LogWarn("Failed to find validator for consensus address", types.ParticipantsVerification, "consensus_addr_hex", addr)
+			continue
+		}
+		commits = append(commits, commit)
 	}
 
 	proof := types.BlockProof{
 		CreatedAtBlockHeight: target,
 		AppHashHex:           strings.ToUpper(hex.EncodeToString(appHashForTarget)),
-		TotalVotedPower:      totalVotedPower,
 		TotalPower:           totalPower,
 		Commits:              commits,
 		EpochIndex:           upcomingEpochIndex,

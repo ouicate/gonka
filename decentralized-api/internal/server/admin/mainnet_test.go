@@ -124,126 +124,171 @@ func getParticipants(archiveClient *rpcclient.HTTP, epochId uint64) (*types.Acti
 	return &activeParticipants, activeParticipantsBytes, nil
 }
 
-func getDataFormMainnetfunc(ctx context.Context, epoch string) (*contracts.ActiveParticipantWithProof, error) {
-	const (
-		archiveNodeEndpoint = "http://204.12.168.157:26657"
-	)
-	archiveClient, err := rpcclient.New(archiveNodeEndpoint, "/websocket")
-	if err != nil {
-		return nil, err
-	}
+func getDataFormMainnetFunc(t *testing.T, _ context.Context, _ string) func(ctx context.Context, epoch string) (*contracts.ActiveParticipantWithProof, error) {
+	return func(ctx context.Context, epoch string) (*contracts.ActiveParticipantWithProof, error) {
 
-	epochId, err := strconv.Atoi(epoch)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Printf("epochId %v\n", epochId)
-	var (
-		prevParticipants *types.ActiveParticipants
-	)
-
-	activeParticipants, activeParticipantsBytes, err := getParticipants(archiveClient, uint64(epochId))
-	if err != nil {
-		return nil, err
-	}
-
-	if epochId > 0 {
-		prevParticipants, _, err = getParticipants(archiveClient, uint64(epochId-1))
-	} else {
-		prevParticipants, _, err = getParticipants(archiveClient, uint64(epochId))
-	}
-
-	proofBlockHeight := activeParticipants.CreatedAtBlockHeight + 1
-	proofBlock, err := archiveClient.Block(ctx, &proofBlockHeight)
-	if err != nil {
-		return nil, err
-	}
-
-	var proofOps *types.ProofOps
-	if epochId != 0 {
-		proofOps, err = utils.GetParticipantsMerkleProof(archiveClient, uint64(epochId), activeParticipants.CreatedAtBlockHeight)
+		const (
+			archiveNodeEndpoint = "http://204.12.168.157:26657"
+		)
+		archiveClient, err := rpcclient.New(archiveNodeEndpoint, "/websocket")
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	proofBlockId := &types.BlockID{
-		Hash:               proofBlock.Block.Header.LastBlockID.Hash.String(),
-		PartSetHeaderTotal: int64(proofBlock.Block.Header.LastBlockID.PartSetHeader.Total),
-		PartSetHeaderHash:  proofBlock.Block.Header.LastBlockID.PartSetHeader.Hash.String(),
-	}
-
-	currentValidatorsProof := createValidatorsProofFromBlock(proofBlockId, proofBlock.Block.LastCommit)
-
-	finalParticipants := contracts.ActiveParticipants{
-		Participants:         make([]*contracts.ActiveParticipant, len(activeParticipants.Participants)),
-		EpochGroupId:         activeParticipants.EpochGroupId,
-		PocStartBlockHeight:  activeParticipants.PocStartBlockHeight,
-		EffectiveBlockHeight: activeParticipants.EffectiveBlockHeight,
-		CreatedAtBlockHeight: activeParticipants.CreatedAtBlockHeight,
-		EpochId:              activeParticipants.EpochId,
-	}
-
-	for i, participant := range activeParticipants.Participants {
-		finalParticipants.Participants[i] = &contracts.ActiveParticipant{
-			Index:        participant.Index,
-			ValidatorKey: participant.ValidatorKey,
-			Weight:       participant.Weight,
-			InferenceUrl: participant.InferenceUrl,
-			Models:       participant.Models,
-		}
-	}
-
-	participantsData := make(map[string]string)
-	for _, participant := range prevParticipants.Participants {
-		// fmt.Printf("participant.ValidatorKey %v \n", participant.ValidatorKey)
-		if participant.ValidatorKey == "" {
-			continue
-		}
-
-		addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
+		epochId, err := strconv.Atoi(epoch)
 		if err != nil {
 			return nil, err
 		}
-		participantsData[strings.ToUpper(addrHex)] = participant.ValidatorKey
-	}
 
-	commits := make([]*types.CommitInfo, 0)
-	for _, sign := range currentValidatorsProof.Signatures {
-		pubKey, ok := participantsData[sign.ValidatorAddressHex]
-		if !ok {
-			continue
+		fmt.Printf("epochId %v\n", epochId)
+		var (
+			prevParticipants *types.ActiveParticipants
+		)
+
+		activeParticipants, activeParticipantsBytes, err := getParticipants(archiveClient, uint64(epochId))
+		if err != nil {
+			return nil, err
 		}
-		commits = append(commits, &types.CommitInfo{
-			ValidatorAddress: sign.ValidatorAddressHex,
-			ValidatorPubKey:  pubKey,
+
+		if epochId > 0 {
+			prevParticipants, _, err = getParticipants(archiveClient, uint64(epochId-1))
+		} else {
+			prevParticipants, _, err = getParticipants(archiveClient, uint64(epochId))
+		}
+
+		proofBlockHeight := activeParticipants.CreatedAtBlockHeight + 1
+		proofBlock, err := archiveClient.Block(ctx, &proofBlockHeight)
+		if err != nil {
+			return nil, err
+		}
+
+		var proofOps *types.ProofOps
+		if epochId != 0 {
+			proofOps, err = utils.GetParticipantsMerkleProof(archiveClient, uint64(epochId), activeParticipants.CreatedAtBlockHeight)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		proofBlockId := &types.BlockID{
+			Hash:               proofBlock.Block.Header.LastBlockID.Hash.String(),
+			PartSetHeaderTotal: int64(proofBlock.Block.Header.LastBlockID.PartSetHeader.Total),
+			PartSetHeaderHash:  proofBlock.Block.Header.LastBlockID.PartSetHeader.Hash.String(),
+		}
+
+		currentValidatorsProof := createValidatorsProofFromBlock(proofBlockId, proofBlock.Block.LastCommit)
+
+		finalParticipants := contracts.ActiveParticipants{
+			Participants:         make([]*contracts.ActiveParticipant, len(activeParticipants.Participants)),
+			EpochGroupId:         activeParticipants.EpochGroupId,
+			PocStartBlockHeight:  activeParticipants.PocStartBlockHeight,
+			EffectiveBlockHeight: activeParticipants.EffectiveBlockHeight,
+			CreatedAtBlockHeight: activeParticipants.CreatedAtBlockHeight,
+			EpochId:              activeParticipants.EpochId,
+		}
+
+		for i, participant := range activeParticipants.Participants {
+			finalParticipants.Participants[i] = &contracts.ActiveParticipant{
+				Index:        participant.Index,
+				ValidatorKey: participant.ValidatorKey,
+				Weight:       participant.Weight,
+				InferenceUrl: participant.InferenceUrl,
+				Models:       participant.Models,
+			}
+		}
+
+		participantsData := make(map[string]string)
+		for _, participant := range prevParticipants.Participants {
+			// fmt.Printf("participant.ValidatorKey %v \n", participant.ValidatorKey)
+			if participant.ValidatorKey == "" {
+				continue
+			}
+
+			addrHex, err := common.ConsensusKeyToConsensusAddress(participant.ValidatorKey)
+			if err != nil {
+				return nil, err
+			}
+			participantsData[strings.ToUpper(addrHex)] = participant.ValidatorKey
+		}
+
+		k, ctx, _ := keepertest.InferenceKeeperReturningMocks(t)
+		genesisParams := &types.GenesisOnlyParams{
+			TotalSupply:                             1000000000000000000,
+			OriginatorSupply:                        200000000000000000,
+			StandardRewardAmount:                    680000000000000000,
+			PreProgrammedSaleAmount:                 120000000000000000,
+			TopRewards:                              3,
+			SupplyDenom:                             "ngonka",
+			TopRewardPeriod:                         31536000,
+			TopRewardPayouts:                        12,
+			TopRewardPayoutsPerMiner:                4,
+			TopRewardMaxDuration:                    126144000,
+			GenesisGuardianNetworkMaturityThreshold: 2000000,
+			GenesisGuardianMultiplier:               types.DecimalFromFloat(0.52),
+			GenesisGuardianEnabled:                  true,
+			MaxIndividualPowerPercentage:            types.DecimalFromFloat(0.30),
+			GenesisGuardianAddresses: []string{
+				"gonkavaloper1y2a9p56kv044327uycmqdexl7zs82fs5lyang5",
+				"gonkavaloper1dkl4mah5erqggvhqkpc8j3qs5tyuetgdc59d0v",
+				"gonkavaloper1kx9mca3xm8u8ypzfuhmxey66u0ufxhs70mtf0e"},
+		}
+		k.SetGenesisOnlyParams(ctx, genesisParams)
+
+		members := epochgroup.ParticipantsToMembers(prevParticipants.Participants)
+		results := epochgroup.ComputeResultsForMembers(members)
+		results = k.ApplyEarlyNetworkProtection(ctx, results)
+		commits := make([]*types.CommitInfo, 0)
+
+		prevParticipantsData := make(map[string]*contracts.CommitInfo)
+		totalPower := int64(0)
+		totalVotedPower := int64(0)
+
+		for _, participant := range results {
+			prevParticipantsData[participant.ValidatorPubKey.Address().String()] = &contracts.CommitInfo{
+				ValidatorAddress: participant.ValidatorPubKey.Address().String(),
+				ValidatorPubKey:  base64.StdEncoding.EncodeToString(participant.ValidatorPubKey.Bytes()),
+				VotingPower:      participant.Power,
+			}
+			totalPower += participant.Power
+		}
+
+		for _, sign := range currentValidatorsProof.Signatures {
+			data, ok := prevParticipantsData[sign.ValidatorAddressHex]
+			if !ok {
+				continue
+			}
+			commits = append(commits, &types.CommitInfo{
+				ValidatorAddress: sign.ValidatorAddressHex,
+				ValidatorPubKey:  data.ValidatorPubKey,
+			})
+			totalVotedPower += data.VotingPower
+		}
+
+		block := common.ToContractsBlockProof(&types.BlockProof{
+			CreatedAtBlockHeight: activeParticipants.CreatedAtBlockHeight,
+			AppHashHex:           proofBlock.Block.Header.AppHash.String(),
+			EpochIndex:           activeParticipants.EpochId,
+			Commits:              commits,
+			TotalPower:           totalPower,
 		})
+
+		validators := common.ToContractsValidatorsProof(&currentValidatorsProof)
+		proofOpsConverted := common.ToCryptoProofOps(proofOps)
+
+		return &contracts.ActiveParticipantWithProof{
+			ActiveParticipants:      finalParticipants,
+			ProofOps:                proofOpsConverted,
+			ActiveParticipantsBytes: activeParticipantsBytes,
+			BlockProof:              block,
+			ValidatorsProof:         validators,
+			ChainId:                 "gonka-mainnet",
+		}, nil
 	}
-
-	block := common.ToContractsBlockProof(&types.BlockProof{
-		CreatedAtBlockHeight: activeParticipants.CreatedAtBlockHeight,
-		AppHashHex:           proofBlock.Block.Header.AppHash.String(),
-		EpochIndex:           activeParticipants.EpochId,
-		Commits:              commits,
-	})
-
-	validators := common.ToContractsValidatorsProof(&currentValidatorsProof)
-	proofOpsConverted := common.ToCryptoProofOps(proofOps)
-
-	return &contracts.ActiveParticipantWithProof{
-		ActiveParticipants:      finalParticipants,
-		ProofOps:                proofOpsConverted,
-		ActiveParticipantsBytes: activeParticipantsBytes,
-		BlockProof:              block,
-		ValidatorsProof:         validators,
-		ChainId:                 "gonka-mainnet",
-	}, nil
 }
 
 func Test_Verification(t *testing.T) {
 	const expectedAppHash = "9A3FAFD33F4694FD906B41860C6D3AE1DA5DA8F6F6A8C58BE56CFABBD8384E13"
-	err := externalutils.VerifyParticipants(context.Background(), expectedAppHash, getDataFormMainnetfunc, "75")
+	err := externalutils.VerifyParticipants(context.Background(), expectedAppHash, getDataFormMainnetFunc(t, context.Background(), ""), "75")
 	assert.NoError(t, err)
 }
 
