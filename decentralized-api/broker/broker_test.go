@@ -5,6 +5,7 @@ import (
 	"decentralized-api/chainphase"
 	"decentralized-api/mlnodeclient"
 	"decentralized-api/participant"
+	"fmt"
 	"testing"
 	"time"
 
@@ -809,6 +810,98 @@ func TestValidateInferenceNode_FieldCorrectness(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestValidateInferenceNode_QwenConfigs(t *testing.T) {
+	broker := NewTestBroker()
+
+	nodes := []apiconfig.InferenceNodeConfig{
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/Qwen2.5-7B-Instruct": {
+					Args: []string{
+						"--quantization", "fp8",
+						"--gpu-memory-utilization", "0.9",
+					},
+				},
+			},
+		},
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/Qwen2.5-7B-Instruct": {
+					Args: []string{
+						"--quantization", "fp8",
+						"--tensor-parallel-size", "4",
+						"--pipeline-parallel-size", "2",
+					},
+				},
+			},
+		},
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/QwQ-32B": {
+					Args: []string{
+						"--quantization", "fp8",
+						"--kv-cache-dtype", "fp8",
+					},
+				},
+			},
+		},
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/QwQ-32B": {
+					Args: []string{
+						"--quantization", "fp8",
+						"--tensor-parallel-size", "4",
+						"--kv-cache-dtype", "fp8",
+					},
+				},
+			},
+		},
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/QwQ-32B": {
+					Args: []string{
+						"--quantization", "fp8",
+						"--tensor-parallel-size", "4",
+						"--pipeline-parallel-size", "2",
+						"--kv-cache-dtype", "fp8",
+					},
+				},
+			},
+		},
+	}
+
+	for i, node := range nodes {
+		t.Run(fmt.Sprintf("QwenConfig%d", i+1), func(t *testing.T) {
+			require.NoError(t, broker.validateInferenceNode(node, ""))
 		})
 	}
 }
