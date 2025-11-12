@@ -1,5 +1,7 @@
 package com.productscience.data
 
+import java.util.Locale
+
 data class NodeResponse(val node: InferenceNode, val state: NodeState)
 
 data class InferenceNode(
@@ -33,6 +35,41 @@ data class NodeState(
     val epochModels: Map<String, EpochModel>?,
     val epochMlNodes: Map<String, EpochMlNode>?,
 )
+
+fun NodeState.normalized(): NodeState =
+    copy(
+        intendedStatus = normalizeNodeStatus(intendedStatus),
+        currentStatus = normalizeNodeStatus(currentStatus),
+        pocIntendedStatus = normalizeNodeStatus(pocIntendedStatus),
+        pocCurrentStatus = normalizeNodeStatus(pocCurrentStatus),
+    )
+
+fun NodeState.normalizedCurrentStatus(): String = normalizeNodeStatus(currentStatus)
+
+fun NodeState.normalizedIntendedStatus(): String = normalizeNodeStatus(intendedStatus)
+
+private fun normalizeNodeStatus(status: String?): String {
+    if (status.isNullOrBlank()) return "UNKNOWN"
+    val upper = status.trim().uppercase(Locale.US)
+    val cleaned = sequenceOf(
+        "INFERENCE_NODE_STATUS_",
+        "INFERENCE_NODE_STATE_",
+        "NODE_STATUS_",
+        "NODE_STATE_",
+        "STATUS_",
+        "STATE_",
+    ).fold(upper) { acc, prefix ->
+        if (acc.startsWith(prefix)) acc.removePrefix(prefix) else acc
+    }
+    val finalValue = cleaned.replace('-', '_')
+    return when (finalValue) {
+        "0", "UNKNOWN", "UNSPECIFIED", "" -> "UNKNOWN"
+        "1", "INFERENCE", "READY", "ACTIVE" -> "INFERENCE"
+        "2", "POC" -> "POC"
+        "3", "MAINTENANCE" -> "MAINTENANCE"
+        else -> finalValue
+    }
+}
 
 data class AdminState(
     val enabled: Boolean,

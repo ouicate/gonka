@@ -497,7 +497,8 @@ data class LocalInferencePair(
         while (true) {
             val nodes = api.getNodes()
             if (nodes.isNotEmpty() && nodes.all { n ->
-                    n.state.currentStatus != "UNKNOWN" && n.state.intendedStatus != "UNKNOWN"
+                    n.state.normalizedCurrentStatus() != "UNKNOWN" &&
+                        n.state.normalizedIntendedStatus() != "UNKNOWN"
                 }) {
                 Logger.info("All nodes are loaded and ready. numNodes = ${nodes.size}. nodes = $nodes")
                 break

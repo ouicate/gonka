@@ -11,6 +11,7 @@ import com.github.kittinunf.fuel.gson.jsonBody
 import com.github.kittinunf.fuel.gson.responseObject
 import com.github.kittinunf.result.Result
 import com.productscience.data.*
+import com.productscience.data.normalized
 import org.tinylog.kotlin.Logger
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -192,7 +193,10 @@ data class ApplicationAPI(
                         .timeoutRead(1000 * 10)  // 10 seconds read timeout
                         .responseObject<List<NodeResponse>>(gsonDeserializer(cosmosJson))
                     logResponse(response)
-                    return@wrapLog response.third.get()
+                    val nodes = response.third.get().map { node ->
+                        node.copy(state = node.state.normalized())
+                    }
+                    return@wrapLog nodes
                 } catch (e: Exception) {
                     lastException = e
                     Logger.warn(e, "Exception during getNodes, retrying")

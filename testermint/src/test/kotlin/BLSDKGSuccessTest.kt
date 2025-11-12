@@ -677,30 +677,7 @@ private fun parseEpochBLSDataFromQuery(result: Map<String, Any>): EpochBLSData? 
         }
         
         // Parse DKG phase (server can return numeric values like "dkg_phase": 1 or string values like "DKG_PHASE_COMPLETED")
-        val dkgPhase = when (val phase = epochData["dkg_phase"]) {
-            is Number -> DKGPhase.values().find { it.value == phase.toInt() } ?: DKGPhase.UNDEFINED
-            is String -> {
-                // First try to parse as string enum name
-                when (phase) {
-                    "DKG_PHASE_UNDEFINED" -> DKGPhase.UNDEFINED
-                    "DKG_PHASE_DEALING" -> DKGPhase.DEALING
-                    "DKG_PHASE_VERIFYING" -> DKGPhase.VERIFYING
-                    "DKG_PHASE_COMPLETED" -> DKGPhase.COMPLETED
-                    "DKG_PHASE_FAILED" -> DKGPhase.FAILED
-                    "DKG_PHASE_SIGNED" -> DKGPhase.SIGNED
-                    else -> {
-                        // Try to parse as numeric string
-                        val phaseNum = phase.toIntOrNull()
-                        if (phaseNum != null) {
-                            DKGPhase.values().find { it.value == phaseNum } ?: DKGPhase.UNDEFINED
-                        } else {
-                            DKGPhase.UNDEFINED
-                        }
-                    }
-                }
-            }
-            else -> DKGPhase.UNDEFINED
-        }
+        val dkgPhase = parseDkgPhase(epochData["dkg_phase"])
         
         // Parse participants
         @Suppress("UNCHECKED_CAST")
@@ -794,6 +771,26 @@ private fun parseEpochBLSDataFromQuery(result: Map<String, Any>): EpochBLSData? 
         null
     }
 }
+
+private fun parseDkgPhase(phase: Any?): DKGPhase =
+    when (phase) {
+        null -> DKGPhase.UNDEFINED
+        is DKGPhase -> phase
+        is Number -> DKGPhase.values().firstOrNull { it.value == phase.toInt() } ?: DKGPhase.UNDEFINED
+        is String -> {
+            phase.toIntOrNull()?.let { numeric ->
+                return DKGPhase.values().firstOrNull { it.value == numeric } ?: DKGPhase.UNDEFINED
+            }
+            val normalized = phase.uppercase(Locale.US)
+            DKGPhase.values().firstOrNull { enum ->
+                normalized == enum.name ||
+                    normalized == "DKG_PHASE_${enum.name}" ||
+                    normalized.endsWith("_${enum.name}") ||
+                    normalized.contains(enum.name)
+            } ?: DKGPhase.UNDEFINED
+        }
+        else -> DKGPhase.UNDEFINED
+    }
 
 /**
  * Helper function to parse byte arrays from the chain - handles multiple formats
