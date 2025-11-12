@@ -25,7 +25,7 @@ func TestComputeStatus(t *testing.T) {
 			params:      nil,
 			participant: types.Participant{},
 			wantStatus:  types.ParticipantStatus_ACTIVE,
-			wantReason:  NoSpecificReason,
+			wantReason:  NoReason,
 		},
 		{
 			name: "consecutive failures returns invalid",
@@ -82,7 +82,7 @@ func TestComputeStatus(t *testing.T) {
 				},
 			},
 			wantStatus: types.ParticipantStatus_ACTIVE,
-			wantReason: NoSpecificReason,
+			wantReason: NoReason,
 		},
 	}
 
