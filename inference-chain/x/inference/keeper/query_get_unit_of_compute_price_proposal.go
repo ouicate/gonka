@@ -18,7 +18,10 @@ func (k Keeper) GetUnitOfComputePriceProposal(goCtx context.Context, req *types.
 
 	proposal, _ := k.GettUnitOfComputePriceProposal(ctx, req.Participant)
 
-	params := k.GetParams(ctx)
+	params, err := k.GetParams(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	return &types.QueryGetUnitOfComputePriceProposalResponse{
 		Proposal: proposal,

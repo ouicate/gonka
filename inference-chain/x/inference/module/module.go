@@ -265,9 +265,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 			if pu.NodeVersion != "" {
 				am.LogInfo("PartialUpgradeActive - updating current MLNode version", types.Upgrades,
 					"partialUpgradeHeight", pu.Height, "blockHeight", blockHeight, "nodeVersion", pu.NodeVersion)
-				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
+				err = am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
 					CurrentVersion: pu.NodeVersion,
 				})
+				if err != nil {
+					am.LogError("Unable to update MLNode version", types.Upgrades, "error", err.Error())
+				}
 			}
 		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
@@ -289,7 +292,10 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	if epochContext.IsSetNewValidatorsStage(blockHeight) {
 		am.LogInfo("StartStage:onSetNewValidatorsStage", types.Stages, "blockHeight", blockHeight)
 		am.onSetNewValidatorsStage(ctx, blockHeight, blockTime)
-		am.keeper.SetEffectiveEpochIndex(ctx, getNextEpochIndex(*currentEpoch))
+		err := am.keeper.EffectiveEpochIndex.Set(ctx, getNextEpochIndex(*currentEpoch))
+		if err != nil {
+			am.LogError("Unable to set effective epoch index", types.EpochGroup, "error", err.Error())
+		}
 	}
 
 	if epochContext.IsStartOfPocStage(blockHeight) {
@@ -493,7 +499,12 @@ func (am AppModule) onSetNewValidatorsStage(ctx context.Context, blockHeight int
 }
 
 func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.EpochGroup, activeParticipants []*types.ActiveParticipant) {
-	validationParams := am.keeper.GetParams(ctx).ValidationParams
+	params, err := am.keeper.GetParams(ctx)
+	if err != nil {
+		am.LogError("addEpochMembers: Unable to get params", types.EpochGroup, "error", err.Error())
+		return
+	}
+	validationParams := params.ValidationParams
 
 	for _, p := range activeParticipants {
 		reputation, err := am.calculateParticipantReputation(ctx, p, validationParams)
@@ -525,7 +536,12 @@ func (am AppModule) computePrice(ctx context.Context, upcomingEpoch types.Epoch,
 		}
 		defaultPrice = currentEg.GroupData.UnitOfComputePrice
 	} else {
-		defaultPrice = am.keeper.GetParams(ctx).EpochParams.DefaultUnitOfComputePrice
+		params, err := am.keeper.GetParams(ctx)
+		if err != nil {
+			am.LogError("computePrice: Unable to get params", types.Pricing, "error", err.Error())
+			return 0, err
+		}
+		defaultPrice = params.EpochParams.DefaultUnitOfComputePrice
 	}
 
 	proposals, err := am.keeper.AllUnitOfComputePriceProposals(ctx)
@@ -597,7 +613,11 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 		am.LogWarn("PreviousEpochGroupDataNotFound", types.EpochGroup, "blockHeight", blockHeight, "previousEpochIndex", previousEpochIndex)
 		return
 	}
-	params := am.keeper.GetParams(ctx)
+	params, err := am.keeper.GetParams(ctx)
+	if err != nil {
+		am.LogError("moveUpcomingToEffectiveGroup: Unable to get params", types.EpochGroup, "error", err.Error())
+		return
+	}
 	newGroupData.EffectiveBlockHeight = blockHeight
 	newGroupData.UnitOfComputePrice = int64(unitOfComputePrice)
 	newGroupData.PreviousEpochRequests = previousGroupData.NumberOfRequests
@@ -631,7 +651,7 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 	}
 
 	// At this point, clear all active invalidations in case of any hanging invalidations
-	err := am.keeper.ActiveInvalidations.Clear(ctx, nil)
+	err = am.keeper.ActiveInvalidations.Clear(ctx, nil)
 	if err != nil {
 		am.LogError("Unable to clear active invalidations", types.EpochGroup, "error", err.Error())
 	}

@@ -21,7 +21,11 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 
 	currentBlockHeight := ctx.BlockHeight()
 	startBlockHeight := msg.PocStageStartBlockHeight
-	epochParams := k.Keeper.GetParams(goCtx).EpochParams
+	params, err := k.Keeper.GetParams(goCtx)
+	if err != nil {
+		return nil, err
+	}
+	epochParams := params.EpochParams
 	upcomingEpoch, found := k.Keeper.GetUpcomingEpoch(ctx)
 	if !found {
 		k.LogError(PocFailureTag+"[SubmitPocBatch] Failed to get upcoming epoch", types.PoC,

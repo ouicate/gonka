@@ -8,15 +8,18 @@ import (
 )
 
 // GetParams get all parameters as types.Params
-func (k Keeper) GetParams(ctx context.Context) (params types.Params) {
+func (k Keeper) GetParams(ctx context.Context) (params types.Params, err error) {
 	store := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
 	bz := store.Get(types.ParamsKey)
 	if bz == nil {
-		return params
+		return params, nil
 	}
 
-	k.cdc.MustUnmarshal(bz, &params)
-	return params
+	err = k.cdc.Unmarshal(bz, &params)
+	if err != nil {
+		return types.Params{}, err
+	}
+	return params, nil
 }
 
 func (k Keeper) GetParamsSafe(ctx context.Context) (params types.Params, err error) {
@@ -61,7 +64,10 @@ func (k Keeper) GetV1Params(ctx context.Context) (params types.ParamsV1, err err
 
 // GetBandwidthLimitsParams returns bandwidth limits parameters
 func (k Keeper) GetBandwidthLimitsParams(ctx context.Context) (*types.BandwidthLimitsParams, error) {
-	params := k.GetParams(ctx)
+	params, err := k.GetParams(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if params.BandwidthLimitsParams == nil {
 		// Return default values if not set
 		return &types.BandwidthLimitsParams{

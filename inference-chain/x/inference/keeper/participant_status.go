@@ -27,7 +27,10 @@ func (k Keeper) UpdateParticipantStatus(ctx context.Context, participant *types.
 		oldParticipant = *participant
 	}
 
-	params := k.GetParams(ctx)
+	params, err := k.GetParams(ctx)
+	if err != nil {
+		return err
+	}
 	originalStatus := participant.Status
 	newStatus, reason, newStats := calculations.ComputeStatus(params.ValidationParams, *participant, *oldParticipant.CurrentEpochStats)
 	participant.CurrentEpochStats = &newStats

@@ -29,7 +29,10 @@ func (k Keeper) GetActiveParticipants(ctx context.Context, epochId uint64) (val 
 		return types.ActiveParticipants{}, false
 	}
 
-	k.cdc.MustUnmarshal(b, &val)
+	err := k.cdc.Unmarshal(b, &val)
+	if err != nil {
+		return types.ActiveParticipants{}, false
+	}
 	return val, true
 }
 

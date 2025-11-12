@@ -139,9 +139,14 @@ func (k msgServer) validateTimestamp(
 }
 
 func (k msgServer) addTimeout(ctx sdk.Context, inference *types.Inference) {
-	expirationBlocks := k.GetParams(ctx).ValidationParams.ExpirationBlocks
+	params, err := k.GetParams(ctx)
+	if err != nil {
+		k.LogError("Unable to get params for timeout", types.Inferences, "error", err)
+		return
+	}
+	expirationBlocks := params.ValidationParams.ExpirationBlocks
 	expirationHeight := uint64(inference.StartBlockHeight + expirationBlocks)
-	err := k.SetInferenceTimeout(ctx, types.InferenceTimeout{
+	err = k.SetInferenceTimeout(ctx, types.InferenceTimeout{
 		ExpirationHeight: expirationHeight,
 		InferenceId:      inference.InferenceId,
 	})

@@ -15,7 +15,11 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 
 	currentBlockHeight := ctx.BlockHeight()
 	startBlockHeight := msg.PocStageStartBlockHeight
-	epochParams := k.Keeper.GetParams(ctx).EpochParams
+	params, err := k.Keeper.GetParams(ctx)
+	if err != nil {
+		return nil, err
+	}
+	epochParams := params.EpochParams
 	upcomingEpoch, found := k.Keeper.GetUpcomingEpoch(ctx)
 	if !found {
 		k.LogError(PocFailureTag+"[SubmitPocValidation] Failed to get upcoming epoch", types.PoC,

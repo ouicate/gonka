@@ -107,7 +107,10 @@ func InitGenesisEpoch(ctx sdk.Context, k keeper.Keeper) {
 		PocStartBlockHeight: 0,
 	}
 	k.SetEpoch(ctx, genesisEpoch)
-	k.SetEffectiveEpochIndex(ctx, genesisEpoch.Index)
+	err := k.EffectiveEpochIndex.Set(ctx, genesisEpoch.Index)
+	if err != nil {
+		panic(err)
+	}
 
 	InitGenesisEpochGroup(ctx, k, uint64(genesisEpoch.PocStartBlockHeight))
 }
@@ -239,7 +242,11 @@ func LoadMetadataToSdk(metadata banktypes.Metadata) error {
 // ExportGenesis returns the module's exported genesis.
 func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *types.GenesisState {
 	genesis := &types.GenesisState{}
-	genesis.Params = k.GetParams(ctx)
+	params, err := k.GetParams(ctx)
+	if err != nil {
+		panic(err)
+	}
+	genesis.Params = params
 
 	genesisOnlyParams, found := k.GetGenesisOnlyParams(ctx)
 	if found {

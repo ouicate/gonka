@@ -195,7 +195,8 @@ func NewMockInferenceHelper(t *testing.T) (*MockInferenceHelper, keeper.Keeper, 
 	inference.InitGenesis(ctx, k, mocks.StubGenesisState())
 
 	// Disable grace period for tests so we get actual pricing instead of 0
-	params := k.GetParams(ctx)
+	params, err := k.GetParams(ctx)
+	require.NoError(t, err)
 	params.DynamicPricingParams.GracePeriodEndEpoch = 0
 	k.SetParams(ctx, params)
 
