@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -525,8 +526,35 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 
 	// Validate nodes and filter out invalid ones
 	validNodes := make([]InferenceNodeConfig, 0, len(newNodes))
+	idSet := make(map[string]bool)
+	hostPortSet := make(map[string]bool)
 	for i, node := range newNodes {
+		id := node.Id
+		if _, exists := idSet[id]; exists {
+			logging.Error("Skipping duplicate node from node_config.json", types.Config, "node_id", id, "index_in_file", i)
+			continue
+		} else {
+			idSet[id] = true
+		}
+
+		hostPort := strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.InferencePort)
+		if _, exists := hostPortSet[hostPort]; exists {
+			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostPort, "index_in_file", i)
+			continue
+		} else {
+			hostPortSet[hostPort] = true
+		}
+
+		hostPort = strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.PoCPort)
+		if _, exists := hostPortSet[hostPort]; exists {
+			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostPort, "index_in_file", i)
+			continue
+		} else {
+			hostPortSet[hostPort] = true
+		}
+
 		validationErrors := ValidateInferenceNodeBasic(node)
+
 		if len(validationErrors) > 0 {
 			logging.Error("Skipping invalid node from node_config.json", types.Config,
 				"index", i, "node_id", node.Id, "errors", validationErrors)
