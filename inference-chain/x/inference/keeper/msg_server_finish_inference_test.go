@@ -308,6 +308,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 	}
 
 	_, err = h.MessageServer.FinishInference(h.context, &types.MsgFinishInference{
+		Creator:              h.MockExecutor.address,
 		InferenceId:          inferenceId,
 		ResponseHash:         "responseHash",
 		ResponsePayload:      "responsePayload",

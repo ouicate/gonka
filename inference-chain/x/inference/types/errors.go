@@ -57,4 +57,7 @@ var (
 	ErrSignatureInFuture                     = sdkerrors.Register(ModuleName, 1151, "signature is in the future")
 	ErrValidationPayloadDeprecated           = sdkerrors.Register(ModuleName, 1152, "validation response payload is deprecated")
 	ErrBridgeAddressNotFound                 = sdkerrors.Register(ModuleName, 1153, "bridge addresses not found")
+	ErrTrainingAssignmentEmpty               = sdkerrors.Register(ModuleName, 1154, "training assignment has no assignees")
+	ErrInvalidPermission                     = sdkerrors.Register(ModuleName, 1155, "invalid permission for message")
+	ErrAccountNotFound                       = sdkerrors.Register(ModuleName, 1156, "account not found")
 )

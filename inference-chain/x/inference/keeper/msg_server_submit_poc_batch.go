@@ -10,6 +10,9 @@ import (
 )
 
 func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPocBatch) (*types.MsgSubmitPocBatchResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+		return nil, err
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	if msg.NodeId == "" {

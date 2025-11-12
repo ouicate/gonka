@@ -10,6 +10,9 @@ import (
 )
 
 func (k msgServer) InvalidateInference(ctx context.Context, msg *types.MsgInvalidateInference) (*types.MsgInvalidateInferenceResponse, error) {
+	if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
+		return nil, err
+	}
 	inference, executor, err := k.validateDecisionMessage(ctx, msg)
 	if err != nil {
 		return nil, err

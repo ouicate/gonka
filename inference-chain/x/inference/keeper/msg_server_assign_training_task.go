@@ -15,6 +15,18 @@ func (k msgServer) AssignTrainingTask(goCtx context.Context, msg *types.MsgAssig
 		return nil, err
 	}
 
+	if len(msg.Assignees) == 0 {
+		return nil, types.ErrTrainingAssignmentEmpty
+	}
+
+	for _, a := range msg.Assignees {
+		_, found := k.GetParticipant(ctx, a.Participant)
+		if !found {
+			k.LogError("MsgAssignTrainingTask: assignee not a valid participant", types.Training, "participant", a.Participant)
+			return nil, types.ErrParticipantNotFound
+		}
+	}
+
 	err := k.StartTask(ctx, msg.TaskId, msg.Assignees)
 	if err != nil {
 		k.LogError("MsgAssignTrainingTask: failed to StartTask", types.Training, "error", err)

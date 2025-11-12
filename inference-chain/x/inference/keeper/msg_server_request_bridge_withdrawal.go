@@ -28,6 +28,10 @@ var (
 )
 
 func (k msgServer) RequestBridgeWithdrawal(goCtx context.Context, msg *types.MsgRequestBridgeWithdrawal) (*types.MsgRequestBridgeWithdrawalResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+		return nil, err
+	}
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	// 1. Get the actual transaction signer (this is validated by the Cosmos SDK framework)

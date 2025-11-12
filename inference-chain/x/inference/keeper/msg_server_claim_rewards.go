@@ -16,6 +16,10 @@ import (
 )
 
 func (k msgServer) ClaimRewards(goCtx context.Context, msg *types.MsgClaimRewards) (*types.MsgClaimRewardsResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+		return nil, err
+	}
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	settleAmount, response := k.validateRequest(ctx, msg)

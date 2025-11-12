@@ -8,16 +8,6 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
-func (k Keeper) SetActiveParticipantsV1(ctx context.Context, participants types.ActiveParticipants) {
-	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
-	store := prefix.NewStore(storeAdapter, []byte{})
-
-	key := types.ActiveParticipantsFullKeyV1(participants.EpochGroupId)
-
-	b := k.cdc.MustMarshal(&participants)
-	store.Set(key, b)
-}
-
 func (k Keeper) GetActiveParticipants(ctx context.Context, epochId uint64) (val types.ActiveParticipants, found bool) {
 	storeAdapter := runtime.KVStoreAdapter(k.storeService.OpenKVStore(ctx))
 	store := prefix.NewStore(storeAdapter, []byte{})
