@@ -335,9 +335,9 @@ func (setup *IntegrationTestSetup) addTestNode(nodeId string, port int) {
 		Id:               nodeId,
 		Host:             "localhost",
 		InferenceSegment: "/inference",
-		InferencePort:    8080,
+		InferencePort:    port - 1, // Use different ports to distinguish nodes
 		PoCSegment:       "/poc",
-		PoCPort:          port, // Use different ports to distinguish nodes
+		PoCPort:          port,
 		MaxConcurrent:    1,
 		Models: map[string]apiconfig.ModelConfig{
 			keeper.GenesisModelsTest_QWQ: {Args: []string{}},
@@ -350,7 +350,10 @@ func (setup *IntegrationTestSetup) addTestNode(nodeId string, port int) {
 	responseChan := setup.NodeBroker.LoadNodeToBroker(&node)
 
 	// Wait for the node to be loaded
-	_ = <-responseChan
+	registeredNode := <-responseChan
+	if registeredNode == nil {
+		panic(fmt.Sprintf("failed to register node %s - node validation failed", nodeId))
+	}
 }
 
 func (setup *IntegrationTestSetup) advanceBlockHeight(blockHeight int64) {
