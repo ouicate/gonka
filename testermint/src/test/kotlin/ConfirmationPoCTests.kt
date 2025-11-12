@@ -819,7 +819,7 @@ class ConfirmationPoCTests : TestermintTest() {
                     Thread.sleep(connectionRetry * 100L)
                     continue
                 }
-            connectionRetry += 1
+            connectionRetry = 0  // Reset on successful call
             if (epochData.isConfirmationPocActive && 
                 epochData.activeConfirmationPocEvent?.phase == targetPhase) {
                 return
