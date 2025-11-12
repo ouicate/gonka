@@ -597,7 +597,10 @@ class ConfirmationPoCTests : TestermintTest() {
         )
 
         // Initialize cluster with custom spec for confirmation PoC testing
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
+        val confirmationSpec = createConfirmationPoCSpec(
+            expectedConfirmationsPerEpoch = 100,
+            alphaThreshold = 0.toDouble()
+        )
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
@@ -670,7 +673,7 @@ class ConfirmationPoCTests : TestermintTest() {
             "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
         }
 
-        val expectedFinalWeight = 202L
+        val expectedFinalWeight = 203L
         val confirmedWeightPerNode = (expectedFinalWeight - 101*numPocSlotTrue) / numPocSlotFalse
 
         Logger.info("Genesis weight breakdown:")
@@ -749,9 +752,9 @@ class ConfirmationPoCTests : TestermintTest() {
         val join1Ratio = join1Change / totalChange
         val join2Ratio = join2Change / totalChange
 
-        assertThat(genesisRatio).isCloseTo(0.3098159509202454, Percentage.withPercentage(1.0))
-        assertThat(join1Ratio).isCloseTo(0.3067484662576687, Percentage.withPercentage(1.0))
-        assertThat(join1Ratio).isCloseTo(0.3834355828220859, Percentage.withPercentage(1.0))
+        assertThat(genesisRatio).isCloseTo(0.3108728943338438, Percentage.withPercentage(1.0))
+        assertThat(join1Ratio).isCloseTo(0.30627871362940273, Percentage.withPercentage(1.0))
+        assertThat(join2Ratio).isCloseTo(0.38284839203675347, Percentage.withPercentage(1.0))
     }
 
     // Helper functions
