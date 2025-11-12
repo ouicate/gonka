@@ -14,14 +14,16 @@ const (
 	Ramping ParticipantStatusReason = "ramping"
 	// StatisticalInvalidations indicates the participant has statistically significant invalidations
 	StatisticalInvalidations ParticipantStatusReason = "statistical_invalidations"
-	// NoSpecificReason indicates no specific reason for the status
-	NoSpecificReason ParticipantStatusReason = ""
+	// NoReason indicates no specific reason for the status
+	NoReason ParticipantStatusReason = ""
 	// AlgorithmError Should NEVER happen unless we have bad algorithms or parameters
 	AlgorithmError ParticipantStatusReason = "algorithm_error"
 	// AlreadySet when we are already invalid or inactive
 	AlreadySet ParticipantStatusReason = "already_set"
 	// Downtime when missed inferences exceeds the threshold
 	Downtime ParticipantStatusReason = "downtime"
+	// Failed Confirmation PoC
+	FailedConfirmationPoC ParticipantStatusReason = "failed_confirmation_poc"
 )
 
 const (
@@ -30,11 +32,16 @@ const (
 )
 
 // Note that newValue is passed in BY VALUE, so changes to newValue directly will not pass back
-func ComputeStatus(validationParameters *types.ValidationParams, newValue types.Participant, oldStats types.CurrentEpochStats) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
+func ComputeStatus(
+	validationParameters *types.ValidationParams,
+	confirmationPocParams *types.ConfirmationPoCParams,
+	newValue types.Participant,
+	oldStats types.CurrentEpochStats,
+) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
 	// Genesis only (for tests)
 	newStats := getStats(&newValue)
 	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
-		return types.ParticipantStatus_ACTIVE, NoSpecificReason, newStats
+		return types.ParticipantStatus_ACTIVE, NoReason, newStats
 	}
 
 	// Once INVALID or INACTIVE, this can only be reset deliberately (at epoch start)
@@ -63,7 +70,14 @@ func ComputeStatus(validationParameters *types.ValidationParams, newValue types.
 		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
-	return types.ParticipantStatus_ACTIVE, NoSpecificReason, newStats
+	failedConfirmationPoCDecision := getFailedConfirmationPoCStatus(&newStats, confirmationPocParams)
+	if failedConfirmationPoCDecision == Fail {
+		return types.ParticipantStatus_INACTIVE, FailedConfirmationPoC, newStats
+	} else if failedConfirmationPoCDecision == Error {
+		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
+	}
+
+	return types.ParticipantStatus_ACTIVE, NoReason, newStats
 }
 
 func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
@@ -105,6 +119,19 @@ func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.Cur
 	return invalidationSprt.Decision()
 }
 
+func getFailedConfirmationPoCStatus(newStats *types.CurrentEpochStats, parameters *types.ConfirmationPoCParams) Decision {
+	if parameters == nil || parameters.AlphaThreshold == nil || parameters.AlphaThreshold.ToDecimal().Equal(decimal.Zero) {
+		return Pass
+	}
+	if newStats.ConfirmationPoCRatio == nil {
+		return Pass
+	}
+	if newStats.ConfirmationPoCRatio.ToDecimal().LessThan(parameters.AlphaThreshold.ToDecimal()) {
+		return Fail
+	}
+	return Pass
+}
+
 func getStats(newValue *types.Participant) types.CurrentEpochStats {
 	var newStats types.CurrentEpochStats
 	if newValue == nil || newValue.CurrentEpochStats == nil {
@@ -130,8 +157,7 @@ func getStats(newValue *types.Participant) types.CurrentEpochStats {
 // probabilityOfConsecutiveFailures returns P(F^N|G) = x^N
 func probabilityOfConsecutiveFailures(expectedFailureRate decimal.Decimal, consecutiveFailures int64) decimal.Decimal {
 	if expectedFailureRate.LessThan(decimal.Zero) || expectedFailureRate.GreaterThan(decimal.NewFromInt(1)) {
-		// This won't happen
-		return decimal.Zero
+		panic("expectedFailureRate must be between 0 and 1")
 	}
 	if consecutiveFailures < 0 {
 		return decimal.Zero

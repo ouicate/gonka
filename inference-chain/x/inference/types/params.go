@@ -79,13 +79,14 @@ func DefaultGenesisOnlyParams() GenesisOnlyParams {
 // DefaultParams returns a default set of parameters
 func DefaultParams() Params {
 	return Params{
-		EpochParams:          DefaultEpochParams(),
-		ValidationParams:     DefaultValidationParams(),
-		PocParams:            DefaultPocParams(),
-		TokenomicsParams:     DefaultTokenomicsParams(),
-		CollateralParams:     DefaultCollateralParams(),
-		BitcoinRewardParams:  DefaultBitcoinRewardParams(),
-		DynamicPricingParams: DefaultDynamicPricingParams(),
+		EpochParams:           DefaultEpochParams(),
+		ValidationParams:      DefaultValidationParams(),
+		PocParams:             DefaultPocParams(),
+		ConfirmationPocParams: DefaultConfirmationPoCParams(),
+		TokenomicsParams:      DefaultTokenomicsParams(),
+		CollateralParams:      DefaultCollateralParams(),
+		BitcoinRewardParams:   DefaultBitcoinRewardParams(),
+		DynamicPricingParams:  DefaultDynamicPricingParams(),
 	}
 }
 
@@ -135,6 +136,15 @@ func DefaultPocParams() *PocParams {
 		DefaultDifficulty:            5,
 		ValidationSampleSize:         200,
 		PocDataPruningEpochThreshold: 1, // Number of epochs after which PoC data can be pruned
+	}
+}
+
+func DefaultConfirmationPoCParams() *ConfirmationPoCParams {
+	return &ConfirmationPoCParams{
+		ExpectedConfirmationsPerEpoch: 0,                     // Feature disabled by default
+		AlphaThreshold:                DecimalFromFloat(0.0), // 70% minimum ratio
+		SlashFraction:                 DecimalFromFloat(0.0), // 10% slash
+		UpgradeProtectionWindow:       500,                   // 500 blocks before/after upgrade
 	}
 }
 

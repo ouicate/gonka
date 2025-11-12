@@ -222,6 +222,14 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	blockHeight := sdkCtx.BlockHeight()
 	blockTime := sdkCtx.BlockTime().Unix()
+
+	// Handle confirmation PoC trigger decisions and phase transitions
+	err := am.handleConfirmationPoC(ctx, blockHeight)
+	if err != nil {
+		am.LogError("Failed to handle confirmation PoC", types.PoC, "error", err)
+		// Don't return error - allow block processing to continue
+	}
+
 	params, err := am.keeper.GetParamsSafe(ctx)
 	if err != nil {
 		am.LogError("Unable to get parameters", types.Settle, "error", err.Error())
@@ -259,6 +267,17 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		am.LogError("Error during pruning", types.Pruning, "error", err.Error())
 	}
 
+	// Track full chain upgrades from UpgradeKeeper
+	upgradePlan, err := am.keeper.GetUpgradePlan(ctx)
+	if err == nil && upgradePlan.Height > 0 && upgradePlan.Height == blockHeight {
+		am.LogInfo("FullUpgradeActive - tracking height", types.Upgrades,
+			"upgradeHeight", upgradePlan.Height, "blockHeight", blockHeight, "name", upgradePlan.Name)
+		err = am.keeper.SetLastUpgradeHeight(ctx, blockHeight)
+		if err != nil {
+			am.LogError("Failed to set last upgrade height for full upgrade", types.Upgrades, "error", err)
+		}
+	}
+
 	partialUpgrades := am.keeper.GetAllPartialUpgrade(ctx)
 	for _, pu := range partialUpgrades {
 		if pu.Height == uint64(blockHeight) {
@@ -268,6 +287,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
 					CurrentVersion: pu.NodeVersion,
 				})
+			}
+
+			// Track last upgrade height
+			err = am.keeper.SetLastUpgradeHeight(ctx, blockHeight)
+			if err != nil {
+				am.LogError("Failed to set last upgrade height", types.Upgrades, "error", err)
 			}
 		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
@@ -512,7 +537,8 @@ func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.
 				"participantIndex", p.Index)
 			continue
 		}
-		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation)
+
+		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation, 0)
 		err = upcomingEg.AddMember(ctx, member)
 		if err != nil {
 			am.LogError("onSetNewValidatorsStage: Unable to add member", types.EpochGroup, "error", err.Error())
@@ -776,6 +802,7 @@ type ModuleInputs struct {
 	StreamVestingKeeper types.StreamVestingKeeper
 	AuthzKeeper         authzkeeper.Keeper
 	GetWasmKeeper       func() wasmkeeper.Keeper `optional:"true"`
+	UpgradeKeeper       types.UpgradeKeeper
 }
 
 type ModuleOutputs struct {
@@ -809,6 +836,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.StreamVestingKeeper,
 		in.AuthzKeeper,
 		in.GetWasmKeeper,
+		in.UpgradeKeeper,
 	)
 
 	m := NewAppModule(
