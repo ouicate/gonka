@@ -94,7 +94,7 @@ type Signer interface {
 }
 
 func Sign(signer Signer, components SignatureComponents, signatureType SignatureType) (string, error) {
-	slog.Info("Signing components", "type", signatureType, "payload", components.Payload, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
+	slog.Debug("Signing components", "type", signatureType, "payload", components.Payload, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
 	bytes := getSignatureBytes(components, signatureType)
 	hash := crypto.Sha256(bytes)
 	slog.Info("Hash for signing", "hash", hash)
