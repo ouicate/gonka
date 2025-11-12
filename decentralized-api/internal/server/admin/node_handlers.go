@@ -4,7 +4,6 @@ import (
 	"decentralized-api/apiconfig"
 	"decentralized-api/broker"
 	"decentralized-api/logging"
-	"errors"
 	"fmt"
 	"net/http"
 

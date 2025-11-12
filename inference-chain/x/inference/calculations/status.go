@@ -14,8 +14,8 @@ const (
 	Ramping ParticipantStatusReason = "ramping"
 	// StatisticalInvalidations indicates the participant has statistically significant invalidations
 	StatisticalInvalidations ParticipantStatusReason = "statistical_invalidations"
-	// NoSpecificReason indicates no specific reason for the status
-	NoSpecificReason ParticipantStatusReason = ""
+	// NoReason indicates no reason for the status
+	NoReason ParticipantStatusReason = ""
 	// AlgorithmError Should NEVER happen unless we have bad algorithms or parameters
 	AlgorithmError ParticipantStatusReason = "algorithm_error"
 	// AlreadySet when we are already invalid or inactive
@@ -77,7 +77,7 @@ func ComputeStatus(
 		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
-	return types.ParticipantStatus_ACTIVE, NoSpecificReason, newStats
+	return types.ParticipantStatus_ACTIVE, NoReason, newStats
 }
 
 func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
