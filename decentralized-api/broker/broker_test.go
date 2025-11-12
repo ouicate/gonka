@@ -814,10 +814,34 @@ func TestValidateInferenceNode_FieldCorrectness(t *testing.T) {
 	}
 }
 
-func TestValidateInferenceNode_QwenConfigs(t *testing.T) {
+func TestValidateInferenceNode_StandardConfigs(t *testing.T) {
 	broker := NewTestBroker()
 
 	nodes := []apiconfig.InferenceNodeConfig{
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       8080,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/Qwen3-32B-FP8": {
+					Args: []string{},
+				},
+			},
+		},
+		{
+			Id:            "node1",
+			Host:          "inference",
+			InferencePort: 5000,
+			PoCPort:       5000,
+			MaxConcurrent: 500,
+			Models: map[string]apiconfig.ModelConfig{
+				"Qwen/Qwen3-32B-FP8": {
+					Args: []string{},
+				},
+			},
+		},
 		{
 			Id:            "node1",
 			Host:          "inference",
