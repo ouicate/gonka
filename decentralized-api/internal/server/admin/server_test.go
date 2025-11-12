@@ -140,8 +140,8 @@ func TestPostVersionStatus(t *testing.T) {
 	assert.NoError(t, err)
 	respChan := s.nodeBroker.LoadNodeToBroker(&nodeConfig)
 	select {
-	case registeredNode := <-respChan:
-		if registeredNode == nil {
+	case response := <-respChan:
+		if response.Error != nil || response.Node == nil {
 			t.Fatal("failed to register node - node validation failed")
 		}
 	case <-time.After(1 * time.Second):

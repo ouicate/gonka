@@ -103,11 +103,13 @@ func main() {
 	for _, node := range nodes {
 		responseChan := nodeBroker.LoadNodeToBroker(&node)
 		if responseChan != nil {
-			registeredNode := <-responseChan
-			if registeredNode == nil {
-				logging.Error("Failed to load node to broker, skipping", types.Nodes, "node_id", node.Id)
+			response := <-responseChan
+			if response.Error != nil {
+				logging.Error("Failed to load node to broker. Skipping", types.Nodes, "node_id", node.Id, "error", response.Error)
+			} else if response.Node == nil {
+				logging.Error("Failed to load node to broker, response.Node == nil and response.Error == nil. Skipping", types.Nodes, "node_id", node.Id)
 			} else {
-				logging.Info("Successfully loaded node to broker", types.Nodes, "node_id", registeredNode.Id)
+				logging.Info("Successfully loaded node to broker", types.Nodes, "node_id", response.Node.Id)
 			}
 		}
 	}

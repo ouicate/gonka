@@ -339,19 +339,19 @@ func (b *Broker) GetChainBridge() BrokerChainBridge {
 	return b.chainBridge
 }
 
-func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan *apiconfig.InferenceNodeConfig {
+func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan NodeCommandResponse {
 	if node == nil {
 		return nil
 	}
 
-	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := b.QueueMessage(NewRegisterNodeCommand(*node))
+	cmd := NewRegisterNodeCommand(*node)
+	err := b.QueueMessage(cmd)
 	if err != nil {
 		logging.Error("Error loading node to broker", types.Nodes, "error", err)
 		panic(err)
 		// return nil
 	}
-	return responseChan
+	return cmd.Response
 }
 
 func nodeSyncWorker(broker *Broker) {

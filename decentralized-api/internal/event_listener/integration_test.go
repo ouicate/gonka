@@ -350,9 +350,9 @@ func (setup *IntegrationTestSetup) addTestNode(nodeId string, port int) {
 	responseChan := setup.NodeBroker.LoadNodeToBroker(&node)
 
 	// Wait for the node to be loaded
-	registeredNode := <-responseChan
-	if registeredNode == nil {
-		panic(fmt.Sprintf("failed to register node %s - node validation failed", nodeId))
+	response := <-responseChan
+	if response.Error != nil || response.Node == nil {
+		panic(fmt.Sprintf("failed to register node %s: %v", nodeId, response.Error))
 	}
 }
 
