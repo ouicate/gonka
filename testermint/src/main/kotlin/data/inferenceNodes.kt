@@ -24,10 +24,10 @@ data class Hardware(
 )
 
 data class NodeState(
-    val intendedStatus: String,
-    val currentStatus: String,
-    val pocIntendedStatus: String,
-    val pocCurrentStatus: String,
+    val intendedStatus: Any?,
+    val currentStatus: Any?,
+    val pocIntendedStatus: Any?,
+    val pocCurrentStatus: Any?,
     val lockCount: Int,
     val failureReason: String,
     val statusTimestamp: String,
@@ -36,21 +36,39 @@ data class NodeState(
     val epochMlNodes: Map<String, EpochMlNode>?,
 )
 
-fun NodeState.normalized(): NodeState =
-    copy(
+fun NodeState.normalized(): NodeState {
+    return copy(
         intendedStatus = normalizeNodeStatus(intendedStatus),
         currentStatus = normalizeNodeStatus(currentStatus),
         pocIntendedStatus = normalizeNodeStatus(pocIntendedStatus),
         pocCurrentStatus = normalizeNodeStatus(pocCurrentStatus),
     )
+}
 
 fun NodeState.normalizedCurrentStatus(): String = normalizeNodeStatus(currentStatus)
 
 fun NodeState.normalizedIntendedStatus(): String = normalizeNodeStatus(intendedStatus)
 
-private fun normalizeNodeStatus(status: String?): String {
-    if (status.isNullOrBlank()) return "UNKNOWN"
-    val upper = status.trim().uppercase(Locale.US)
+private fun normalizeNodeStatus(status: Any?): String {
+    when (status) {
+        null -> return "UNKNOWN"
+        is NodeState -> return normalizeNodeStatus(status.currentStatus)
+        is Number -> {
+            val numeric = status.toInt()
+            return when (numeric) {
+                0 -> "UNKNOWN"
+                1 -> "INFERENCE"
+                2 -> "POC"
+                3 -> "MAINTENANCE"
+                else -> numeric.toString()
+            }
+        }
+        is Boolean -> return if (status) "INFERENCE" else "UNKNOWN"
+    }
+
+    val upper = status.toString().trim().uppercase(Locale.US)
+    if (upper.isBlank()) return "UNKNOWN"
+
     val cleaned = sequenceOf(
         "INFERENCE_NODE_STATUS_",
         "INFERENCE_NODE_STATE_",
@@ -58,16 +76,30 @@ private fun normalizeNodeStatus(status: String?): String {
         "NODE_STATE_",
         "STATUS_",
         "STATE_",
+        "ENUM_",
     ).fold(upper) { acc, prefix ->
         if (acc.startsWith(prefix)) acc.removePrefix(prefix) else acc
-    }
-    val finalValue = cleaned.replace('-', '_')
-    return when (finalValue) {
-        "0", "UNKNOWN", "UNSPECIFIED", "" -> "UNKNOWN"
-        "1", "INFERENCE", "READY", "ACTIVE" -> "INFERENCE"
+    }.replace('-', '_')
+
+    if (cleaned.isBlank()) return "UNKNOWN"
+
+    val terminalToken = cleaned.substringAfterLast('_', cleaned)
+
+    return when (terminalToken) {
+        "0", "UNKNOWN", "UNSPECIFIED" -> "UNKNOWN"
+        "1", "INFERENCE" -> "INFERENCE"
         "2", "POC" -> "POC"
-        "3", "MAINTENANCE" -> "MAINTENANCE"
-        else -> finalValue
+        "TRAINING" -> "TRAINING"
+        "STOPPED" -> "STOPPED"
+        "FAILED" -> "FAILED"
+        else -> when {
+            cleaned.contains("INFERENCE") -> "INFERENCE"
+            cleaned.contains("POC") -> "POC"
+            cleaned.contains("TRAIN") -> "TRAINING"
+            cleaned.contains("STOP") -> "STOPPED"
+            cleaned.contains("FAIL") -> "FAILED"
+            else -> cleaned
+        }
     }
 }
 
