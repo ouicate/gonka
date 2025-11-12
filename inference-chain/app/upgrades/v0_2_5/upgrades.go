@@ -27,12 +27,16 @@ func CreateUpgradeHandler(
 		}
 
 		err := setNewInvalidationParams(ctx, k, fromVM)
+		if err != nil {
+			return nil, err
+		}
+
 		sdkCtx := sdk.UnwrapSDKContext(ctx)
 		if cleared := k.ClearWrappedTokenCodeID(sdkCtx); cleared {
 			k.Logger().Info("v0.2.5 upgrade: cleared wrapped token code ID from state")
 		}
 
-		// Run default module migrations.
+		// Run default module migrations (includes confirmation weight initialization).
 		toVM, err := mm.RunMigrations(ctx, configurator, fromVM)
 		if err != nil {
 			return toVM, err
@@ -56,6 +60,15 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ValidationParams.DowntimeHThreshold = types.DecimalFromFloat(4.0)
 	params.ValidationParams.DowntimeReputationPreserve = types.DecimalFromFloat(0.0)
 	params.ValidationParams.QuickFailureThreshold = types.DecimalFromFloat(0.000001)
+	params.ValidationParams.ExpirationBlocks = 50
 	params.BandwidthLimitsParams.MinimumConcurrentInvalidations = 1
+	if params.ConfirmationPocParams == nil {
+		params.ConfirmationPocParams = &types.ConfirmationPoCParams{}
+	}
+	params.ConfirmationPocParams.ExpectedConfirmationsPerEpoch = 1
+	params.ConfirmationPocParams.AlphaThreshold = types.DecimalFromFloat(0.5)
+	params.ConfirmationPocParams.SlashFraction = types.DecimalFromFloat(0.0)
+	params.ConfirmationPocParams.UpgradeProtectionWindow = 500
+	params.EpochParams.PocSlotAllocation = types.DecimalFromFloat(0.1)
 	return k.SetParams(ctx, params)
 }

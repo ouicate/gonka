@@ -88,7 +88,7 @@ func TestComputeStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, reason, _ := ComputeStatus(tt.params, tt.participant, zeroStats)
+			status, reason, _ := ComputeStatus(tt.params, nil, tt.participant, zeroStats)
 			require.Equal(t, tt.wantStatus, status)
 			require.Equal(t, tt.wantReason, reason)
 		})
@@ -115,7 +115,7 @@ func TestDowntimeTriggersInactive(t *testing.T) {
 		},
 	}
 
-	status, reason, _ := ComputeStatus(params, participant, zeroStats)
+	status, reason, _ := ComputeStatus(params, nil, participant, zeroStats)
 	require.Equal(t, types.ParticipantStatus_INACTIVE, status)
 	require.Equal(t, Downtime, reason)
 }
@@ -141,14 +141,39 @@ func TestDowntimeParamsOutOfRangeReturnAlgorithmError(t *testing.T) {
 			QuickFailureThreshold:          types.DecimalFromFloat(0.000001),
 		}
 		participant := types.Participant{CurrentEpochStats: &types.CurrentEpochStats{}}
-		status, reason, _ := ComputeStatus(params, participant, zeroStats)
+		status, reason, _ := ComputeStatus(params, nil, participant, zeroStats)
 		require.Equal(t, types.ParticipantStatus_ACTIVE, status)
 		require.Equal(t, AlgorithmError, reason)
 	}
 }
 
 func TestProbabilityOfConsecutiveFailures_PanicOnBadRate(t *testing.T) {
-	// expectedFailureRate must be in [0,1]
-	defer func() { _ = recover() }()
-	_ = probabilityOfConsecutiveFailures(types.DecimalFromFloat(1.1).ToDecimal(), 3)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expected panic on invalid expectedFailureRate")
+		}
+	}()
+
+	_ = probabilityOfConsecutiveFailures(types.DecimalFromFloat(1.5).ToDecimal(), 1)
+}
+
+func TestGetStats(t *testing.T) {
+	part := &types.Participant{
+		CurrentEpochStats: &types.CurrentEpochStats{
+			InvalidLLR:  types.DecimalFromFloat(1.5),
+			InactiveLLR: types.DecimalFromFloat(2.0),
+		},
+	}
+
+	result := getStats(part)
+	require.NotNil(t, result.InvalidLLR)
+	require.NotNil(t, result.InactiveLLR)
+
+	// Test with nil participant
+	part2 := &types.Participant{}
+	result2 := getStats(part2)
+	require.NotNil(t, result2.InvalidLLR)
+	require.NotNil(t, result2.InactiveLLR)
+	require.Equal(t, int64(0), result2.InvalidLLR.Value)
+	require.Equal(t, int64(0), result2.InactiveLLR.Value)
 }

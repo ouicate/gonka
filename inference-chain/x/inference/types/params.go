@@ -79,13 +79,14 @@ func DefaultGenesisOnlyParams() GenesisOnlyParams {
 // DefaultParams returns a default set of parameters
 func DefaultParams() Params {
 	return Params{
-		EpochParams:          DefaultEpochParams(),
-		ValidationParams:     DefaultValidationParams(),
-		PocParams:            DefaultPocParams(),
-		TokenomicsParams:     DefaultTokenomicsParams(),
-		CollateralParams:     DefaultCollateralParams(),
-		BitcoinRewardParams:  DefaultBitcoinRewardParams(),
-		DynamicPricingParams: DefaultDynamicPricingParams(),
+		EpochParams:           DefaultEpochParams(),
+		ValidationParams:      DefaultValidationParams(),
+		PocParams:             DefaultPocParams(),
+		ConfirmationPocParams: DefaultConfirmationPoCParams(),
+		TokenomicsParams:      DefaultTokenomicsParams(),
+		CollateralParams:      DefaultCollateralParams(),
+		BitcoinRewardParams:   DefaultBitcoinRewardParams(),
+		DynamicPricingParams:  DefaultDynamicPricingParams(),
 	}
 }
 
@@ -102,6 +103,10 @@ func DefaultEpochParams() *EpochParams {
 		SetNewValidatorsDelay:          1,
 		InferenceValidationCutoff:      0,
 		InferencePruningEpochThreshold: 2, // Number of epochs after which inferences can be pruned
+		PocSlotAllocation: &Decimal{ // Default 0.5 (50%) fraction of nodes allocated to PoC slots
+			Value:    5,
+			Exponent: -1,
+		},
 	}
 }
 
@@ -123,9 +128,11 @@ func DefaultValidationParams() *ValidationParams {
 		TimestampAdvance:               30,
 		BadParticipantInvalidationRate: DecimalFromFloat(0.20),
 		InvalidationHThreshold:         DecimalFromFloat(4),
+		InvalidReputationPreserve:      DecimalFromFloat(0.0),
 		DowntimeBadPercentage:          DecimalFromFloat(0.20),
 		DowntimeGoodPercentage:         DecimalFromFloat(0.1),
 		DowntimeHThreshold:             DecimalFromFloat(4),
+		DowntimeReputationPreserve:     DecimalFromFloat(0.0),
 		QuickFailureThreshold:          DecimalFromFloat(0.000001),
 	}
 }
@@ -135,6 +142,15 @@ func DefaultPocParams() *PocParams {
 		DefaultDifficulty:            5,
 		ValidationSampleSize:         200,
 		PocDataPruningEpochThreshold: 1, // Number of epochs after which PoC data can be pruned
+	}
+}
+
+func DefaultConfirmationPoCParams() *ConfirmationPoCParams {
+	return &ConfirmationPoCParams{
+		ExpectedConfirmationsPerEpoch: 0,                     // Feature disabled by default
+		AlphaThreshold:                DecimalFromFloat(0.0), // 70% minimum ratio
+		SlashFraction:                 DecimalFromFloat(0.0), // 10% slash
+		UpgradeProtectionWindow:       500,                   // 500 blocks before/after upgrade
 	}
 }
 
@@ -342,6 +358,31 @@ func (p *ValidationParams) Validate() error {
 	}
 	if p.MissRequestsPenalty == nil {
 		return fmt.Errorf("miss requests penalty cannot be nil")
+	}
+	// v0.2.5 parameters
+	if p.BadParticipantInvalidationRate == nil {
+		return fmt.Errorf("bad participant invalidation rate cannot be nil")
+	}
+	if p.InvalidationHThreshold == nil {
+		return fmt.Errorf("invalidation h threshold cannot be nil")
+	}
+	if p.DowntimeGoodPercentage == nil {
+		return fmt.Errorf("downtime good percentage cannot be nil")
+	}
+	if p.DowntimeBadPercentage == nil {
+		return fmt.Errorf("downtime bad percentage cannot be nil")
+	}
+	if p.DowntimeHThreshold == nil {
+		return fmt.Errorf("downtime h threshold cannot be nil")
+	}
+	if p.QuickFailureThreshold == nil {
+		return fmt.Errorf("quick failure threshold cannot be nil")
+	}
+	if p.InvalidReputationPreserve == nil {
+		return fmt.Errorf("invalid reputation preserve cannot be nil")
+	}
+	if p.DowntimeReputationPreserve == nil {
+		return fmt.Errorf("downtime reputation preserve cannot be nil")
 	}
 	// Validate timestamp parameters
 	if p.TimestampExpiration <= 0 {
