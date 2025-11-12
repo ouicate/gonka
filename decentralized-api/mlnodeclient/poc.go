@@ -216,7 +216,7 @@ func (api *Client) InitGenerate(context context.Context, dto InitDto) error {
 		return err
 	}
 
-	_, err = utils.SendPostJsonRequest(context, &api.client, requestUrl, dto)
+	_, err = utils.SendPostJsonRequestWithAuth(context, &api.client, requestUrl, dto, api.authToken)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (api *Client) InitValidate(context context.Context, dto InitDto) error {
 		return err
 	}
 
-	_, err = utils.SendPostJsonRequest(context, &api.client, requestUrl, dto)
+	_, err = utils.SendPostJsonRequestWithAuth(context, &api.client, requestUrl, dto, api.authToken)
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (api *Client) ValidateBatch(context context.Context, batch ProofBatch) erro
 		return err
 	}
 
-	_, err = utils.SendPostJsonRequest(context, &api.client, requestUrl, batch)
+	_, err = utils.SendPostJsonRequestWithAuth(context, &api.client, requestUrl, batch, api.authToken)
 	if err != nil {
 		return err
 	}

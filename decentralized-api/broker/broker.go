@@ -143,6 +143,8 @@ type Node struct {
 	InferencePort    int                  `json:"inference_port"`
 	PoCSegment       string               `json:"poc_segment"`
 	PoCPort          int                  `json:"poc_port"`
+	BaseURL          string               `json:"base_url"`
+	AuthToken        string               `json:"auth_token"`
 	Models           map[string]ModelArgs `json:"models"`
 	Id               string               `json:"id"`
 	MaxConcurrent    int                  `json:"max_concurrent"`
@@ -155,6 +157,14 @@ func (n *Node) InferenceUrl() string {
 }
 
 func (n *Node) InferenceUrlWithVersion(version string) string {
+	// If BaseURL is provided, build on top of it
+	if n.BaseURL != "" {
+		base := strings.TrimRight(n.BaseURL, "/")
+		if version == "" {
+			return fmt.Sprintf("%s%s", base, n.InferenceSegment)
+		}
+		return fmt.Sprintf("%s/%s%s", base, version, n.InferenceSegment)
+	}
 	if version == "" {
 		return n.InferenceUrl()
 	}
@@ -166,6 +176,14 @@ func (n *Node) PoCUrl() string {
 }
 
 func (n *Node) PoCUrlWithVersion(version string) string {
+	// If BaseURL is provided, build on top of it
+	if n.BaseURL != "" {
+		base := strings.TrimRight(n.BaseURL, "/")
+		if version == "" {
+			return fmt.Sprintf("%s%s", base, n.PoCSegment)
+		}
+		return fmt.Sprintf("%s/%s%s", base, version, n.PoCSegment)
+	}
 	if version == "" {
 		return n.PoCUrl()
 	}
@@ -443,7 +461,7 @@ func (b *Broker) QueueMessage(command Command) error {
 
 func (b *Broker) NewNodeClient(node *Node) mlnodeclient.MLNodeClient {
 	version := b.configManager.GetCurrentNodeVersion()
-	return b.mlNodeClientFactory.CreateClient(node.PoCUrlWithVersion(version), node.InferenceUrlWithVersion(version))
+	return b.mlNodeClientFactory.CreateClient(node.PoCUrlWithVersion(version), node.InferenceUrlWithVersion(version), node.AuthToken)
 }
 
 func (b *Broker) lockAvailableNode(command LockAvailableNode) {
@@ -597,7 +615,7 @@ func (b *Broker) GetNodes() ([]NodeResponse, error) {
 	nodes := <-command.Response
 
 	if nodes == nil {
-		return nil, errors.New("Error getting nodes")
+		return nil, errors.New("error getting nodes")
 	}
 	logging.Debug("Got nodes", types.Nodes, "size", len(nodes))
 	return nodes, nil
