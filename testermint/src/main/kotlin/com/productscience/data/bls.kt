@@ -71,14 +71,21 @@ data class EpochBLSData(
 data class BLSParticipantInfo(
     val address: String,
     @SerializedName("percentage_weight")
-    val percentageWeight: String,
+    private val percentageWeightRaw: Any?,
     @SerializedName("secp256k1_public_key")
     val secp256k1PublicKey: String,
     @SerializedName("slot_start_index")
     val slotStartIndex: Int,
     @SerializedName("slot_end_index")
     val slotEndIndex: Int
-)
+) {
+    val percentageWeight: Double =
+        when (percentageWeightRaw) {
+            is Number -> percentageWeightRaw.toDouble()
+            is String -> percentageWeightRaw.toDoubleOrNull() ?: 0.0
+            else -> 0.0
+        }
+}
 
 data class DealerPartStorage(
     @SerializedName("dealer_address")

@@ -685,7 +685,11 @@ private fun parseEpochBLSDataFromQuery(result: Map<String, Any>): EpochBLSData? 
         val participants = participantsList.map { participantMap ->
             BLSParticipantInfo(
                 address = participantMap["address"] as? String ?: "",
-                percentageWeight = (participantMap["percentage_weight"] as? String ?: "0").toDouble(),  // Already in percentage format (0-100)
+                percentageWeight = when (val weight = participantMap["percentage_weight"]) {
+                    is Number -> weight.toDouble()
+                    is String -> weight.toDoubleOrNull() ?: 0.0
+                    else -> 0.0
+                },  // Already in percentage format (0-100)
                 secp256k1PublicKey = parseByteArrayFromChain(participantMap["secp256k1_public_key"]),
                 slotStartIndex = when (val value = participantMap["slot_start_index"]) {
                     is String -> value.toIntOrNull() ?: 0
