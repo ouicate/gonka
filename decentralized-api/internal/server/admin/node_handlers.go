@@ -130,21 +130,17 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 	}
 
 	if exists {
-		// Validate before queuing to provide clear error messages to API users
-		if err := s.nodeBroker.ValidateInferenceNode(newNode, newNode.Id); err != nil {
-			logging.Error("Node validation failed before update", types.Nodes, "node_id", newNode.Id, "error", err)
-			return echo.NewHTTPError(http.StatusBadRequest, map[string]string{
-				"error": fmt.Sprintf("node validation failed: %v", err),
-			})
-		}
-
 		command := broker.NewUpdateNodeCommand(newNode)
 		response := command.Response
 		err := s.nodeBroker.QueueMessage(command)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue update command: %v", err))
 		}
-		node := <-response
+		cmdResponse := <-response
+		if cmdResponse.Error != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to update node: %v", cmdResponse.Error))
+		}
+		node := cmdResponse.Node
 		if node == nil {
 			// Model check failed - validation already passed above
 			return echo.NewHTTPError(http.StatusBadRequest, "failed to update node: one or more models are not valid governance models. Check logs for details.")
@@ -163,18 +159,9 @@ func (s *Server) createNewNode(ctx echo.Context) error {
 
 func (s *Server) addNode(newNode apiconfig.InferenceNodeConfig) (apiconfig.InferenceNodeConfig, error) {
 	// Validate before queuing to provide clear error messages to API users
-	if err := s.nodeBroker.ValidateInferenceNode(newNode, ""); err != nil {
-		logging.Error("Node validation failed before registration", types.Nodes, "node_id", newNode.Id, "error", err)
-		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusBadRequest, map[string]string{
-			"error": fmt.Sprintf("node validation failed: %v", err),
-		})
-	}
-
-	response := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := s.nodeBroker.QueueMessage(broker.RegisterNode{
-		Node:     newNode,
-		Response: response,
-	})
+	cmd := broker.NewRegisterNodeCommand(newNode)
+	response := cmd.Response
+	err := s.nodeBroker.QueueMessage(cmd)
 	if err != nil {
 		return apiconfig.InferenceNodeConfig{}, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to queue register command: %v", err))
 	}

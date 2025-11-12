@@ -138,8 +138,9 @@ func TestSingleNode(t *testing.T) {
 }
 
 func registerNodeAndSetInferenceStatus(t *testing.T, broker *Broker, node apiconfig.InferenceNodeConfig) {
-	nodeIsRegistered := make(chan *apiconfig.InferenceNodeConfig, 2)
-	queueMessage(t, broker, RegisterNode{node, nodeIsRegistered})
+	cmd := NewRegisterNodeCommand(node)
+	nodeIsRegistered := cmd.Response
+	queueMessage(t, broker, cmd)
 
 	// Wait for the 1st command to be propagated,
 	// so our set status timestamp comes after the initial registration timestamp
@@ -377,7 +378,7 @@ func TestCapacityCheck(t *testing.T) {
 		Id:            "node1",
 		MaxConcurrent: 1,
 	}
-	if err := broker.QueueMessage(RegisterNode{node, make(chan *apiconfig.InferenceNodeConfig, 0)}); err == nil {
+	if err := broker.QueueMessage(RegisterNode{node, make(chan NodeCommandResponse, 0)}); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 }
@@ -556,6 +557,8 @@ func TestUpdateNodeConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	out := <-resp
 	require.NotNil(t, out)
+	require.NotNil(t, out.Node)
+	require.Nil(t, out.Error)
 
 	// Validate updated view
 	nodesAfter, err := broker.GetNodes()
@@ -797,7 +800,7 @@ func TestValidateInferenceNode_FieldCorrectness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := broker.ValidateInferenceNode(tt.node, "")
+			err := broker.validateInferenceNode(tt.node, "")
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errMsg != "" {
@@ -825,10 +828,13 @@ func TestValidateInferenceNode_HostPortUniqueness(t *testing.T) {
 		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
 	}
 
-	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := broker.QueueMessage(RegisterNode{Node: node1, Response: responseChan})
+	cmd := NewRegisterNodeCommand(node1)
+	err := broker.QueueMessage(cmd)
 	require.NoError(t, err)
-	require.NotNil(t, <-responseChan)
+	response := <-cmd.Response
+	require.NotNil(t, response)
+	require.Nil(t, response.Error)
+	require.NotNil(t, response.Node)
 
 	// Give broker time to process the registration
 	time.Sleep(50 * time.Millisecond)
@@ -916,7 +922,7 @@ func TestValidateInferenceNode_HostPortUniqueness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := broker.ValidateInferenceNode(tt.node, "")
+			err := broker.validateInferenceNode(tt.node, "")
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errMsg != "" {
@@ -944,10 +950,13 @@ func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
 		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
 	}
 
-	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := broker.QueueMessage(RegisterNode{Node: node1, Response: responseChan})
+	cmd := NewRegisterNodeCommand(node1)
+	err := broker.QueueMessage(cmd)
 	require.NoError(t, err)
-	require.NotNil(t, <-responseChan)
+	response1 := <-cmd.Response
+	require.NotNil(t, response1)
+	require.Nil(t, response1.Error)
+	require.NotNil(t, response1.Node)
 
 	// Give broker time to process the registration
 	time.Sleep(50 * time.Millisecond)
@@ -964,10 +973,13 @@ func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
 		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
 	}
 
-	responseChan2 := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err = broker.QueueMessage(RegisterNode{Node: node2, Response: responseChan2})
+	cmd2 := NewRegisterNodeCommand(node2)
+	err = broker.QueueMessage(cmd2)
 	require.NoError(t, err)
-	require.NotNil(t, <-responseChan2)
+	response2 := <-cmd2.Response
+	require.NotNil(t, response2)
+	require.Nil(t, response2.Error)
+	require.NotNil(t, response2.Node)
 
 	// Give broker time to process the second registration
 	time.Sleep(50 * time.Millisecond)
@@ -984,7 +996,7 @@ func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
 		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
 	}
 
-	err = broker.ValidateInferenceNode(updatedNode1, "node1") // Exclude node1 from check
+	err = broker.validateInferenceNode(updatedNode1, "node1") // Exclude node1 from check
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
 
@@ -1000,6 +1012,6 @@ func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
 		Models:           map[string]apiconfig.ModelConfig{"model1": {}},
 	}
 
-	err = broker.ValidateInferenceNode(samePortsNode1, "node1") // Exclude node1 from check
+	err = broker.validateInferenceNode(samePortsNode1, "node1") // Exclude node1 from check
 	require.NoError(t, err, "Should allow updating node to keep same ports when excluding self")
 }

@@ -345,10 +345,7 @@ func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan *api
 	}
 
 	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := b.QueueMessage(RegisterNode{
-		Node:     *node,
-		Response: responseChan,
-	})
+	err := b.QueueMessage(NewRegisterNodeCommand(*node))
 	if err != nil {
 		logging.Error("Error loading node to broker", types.Nodes, "error", err)
 		panic(err)
