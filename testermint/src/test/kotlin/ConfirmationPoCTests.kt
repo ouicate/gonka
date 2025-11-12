@@ -397,7 +397,7 @@ class ConfirmationPoCTests : TestermintTest() {
         )
         
         // Initialize cluster with custom spec for confirmation PoC testing
-        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100)
+        val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100, pocSlotAllocation = 0.05)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
@@ -471,9 +471,7 @@ class ConfirmationPoCTests : TestermintTest() {
             "All ${pocSlotAllocation.size} nodes were allocated POC_SLOT=true, leaving no nodes for confirmation validation. " +
             "This test requires some nodes to remain POC_SLOT=false. Try lowering pocSlotAllocation parameter."
         }
-        
-        // During confirmation, POC_SLOT=false nodes will return weight=8 (instead of 10)
-        // POC_SLOT=true nodes preserve their original weight=10
+
         val confirmedWeightPerNode = 8L
         val expectedFinalWeight = (numPocSlotTrue * 10) + (numPocSlotFalse * confirmedWeightPerNode)
         
