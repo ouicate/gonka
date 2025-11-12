@@ -526,12 +526,13 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 	// Validate nodes and filter out invalid ones
 	validNodes := make([]InferenceNodeConfig, 0, len(newNodes))
 	for i, node := range newNodes {
-		if err := ValidateInferenceNodeBasic(node); err != nil {
+		validationErrors := ValidateInferenceNodeBasic(node)
+		if len(validationErrors) > 0 {
 			logging.Error("Skipping invalid node from node_config.json", types.Config,
-				"index", i, "node_id", node.Id, "error", err)
-			continue
+				"index", i, "node_id", node.Id, "errors", validationErrors)
+		} else {
+			validNodes = append(validNodes, node)
 		}
-		validNodes = append(validNodes, node)
 	}
 
 	if len(validNodes) < len(newNodes) {

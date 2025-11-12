@@ -87,7 +87,7 @@ type InferenceNodeConfig struct {
 // ValidateInferenceNodeBasic validates basic fields of an InferenceNodeConfig without checking for duplicates.
 // This is useful when loading from JSON before the broker exists.
 // Returns an error describing what is wrong, or nil if valid.
-func ValidateInferenceNodeBasic(node InferenceNodeConfig) error {
+func ValidateInferenceNodeBasic(node InferenceNodeConfig) []string {
 	var errors []string
 
 	// Validate required fields
@@ -115,13 +115,7 @@ func ValidateInferenceNodeBasic(node InferenceNodeConfig) error {
 		errors = append(errors, "at least one model must be specified")
 	}
 
-	// Segments can be empty, which is fine
-
-	if len(errors) > 0 {
-		return fmt.Errorf("validation failed: %s", strings.Join(errors, "; "))
-	}
-
-	return nil
+	return errors
 }
 
 func (n InferenceNodeConfig) DeepCopy() InferenceNodeConfig {

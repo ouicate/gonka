@@ -15,34 +15,7 @@ import (
 // excludeNodeId is used when updating a node - it excludes that node from duplicate checks.
 // This method is exported so it can be called from admin handlers to provide clear error messages.
 func (b *Broker) validateInferenceNode(node apiconfig.InferenceNodeConfig, excludeNodeId string) error {
-	var errors []string
-
-	// Validate required fields
-	if strings.TrimSpace(node.Id) == "" {
-		errors = append(errors, "node id is required and cannot be empty")
-	}
-
-	if strings.TrimSpace(node.Host) == "" {
-		errors = append(errors, "host is required and cannot be empty")
-	}
-
-	if node.InferencePort <= 0 || node.InferencePort > 65535 {
-		errors = append(errors, fmt.Sprintf("inference_port must be between 1 and 65535, got %d", node.InferencePort))
-	}
-
-	if node.PoCPort <= 0 || node.PoCPort > 65535 {
-		errors = append(errors, fmt.Sprintf("poc_port must be between 1 and 65535, got %d", node.PoCPort))
-	}
-
-	if node.MaxConcurrent <= 0 {
-		errors = append(errors, fmt.Sprintf("max_concurrent must be greater than 0, got %d", node.MaxConcurrent))
-	}
-
-	if len(node.Models) == 0 {
-		errors = append(errors, "at least one model must be specified")
-	}
-
-	// Segments can be empty, which is fine
+	errors := apiconfig.ValidateInferenceNodeBasic(node)
 
 	// Check for duplicate host+port combinations
 	b.mu.RLock()
