@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"net/url"
 
 	errorsmod "cosmossdk.io/errors"
@@ -18,6 +19,23 @@ func ValidateBase64RSig64(fieldName, sigB64 string) error {
 	b, err := base64.StdEncoding.DecodeString(sigB64)
 	if err != nil {
 		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s must be base64: %v", fieldName, err)
+	}
+	if len(b) != 64 {
+		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s must decode to 64 bytes (r||s), got %d bytes", fieldName, len(b))
+	}
+	return nil
+}
+
+// ValidateHexRSig64 validates that the provided string is hex-encoded
+// and decodes to exactly 64 bytes, representing r||s concatenated signature bytes.
+// This is curve-agnostic and matches the spec that signatures are bytes of r + s, padded as needed.
+func ValidateHexRSig64(fieldName, sigHex string) error {
+	if len(sigHex) == 0 {
+		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s is required", fieldName)
+	}
+	b, err := hex.DecodeString(sigHex)
+	if err != nil {
+		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s must be hex: %v", fieldName, err)
 	}
 	if len(b) != 64 {
 		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "%s must decode to 64 bytes (r||s), got %d bytes", fieldName, len(b))
