@@ -13,20 +13,24 @@ import (
 func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *types.MsgSubmitNewUnfundedParticipant) (*types.MsgSubmitNewUnfundedParticipantResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	actualAddress, err := sdk.AccAddressFromBech32(msg.Address)
+	if err != nil {
+		return nil, err
+	}
 	k.LogInfo("Adding new account directly", types.Participants, "address", msg.Address)
 	// First, add the account
-	if k.AccountKeeper.GetAccount(ctx, sdk.MustAccAddressFromBech32(msg.Address)) != nil {
+	if k.AccountKeeper.GetAccount(ctx, actualAddress) != nil {
 		k.LogError("Account already exists", types.Participants, "address", msg.Address)
 		return nil, types.ErrAccountAlreadyExists
 	}
-	newAccount := k.AccountKeeper.NewAccountWithAddress(ctx, sdk.MustAccAddressFromBech32(msg.Address))
+	newAccount := k.AccountKeeper.NewAccountWithAddress(ctx, actualAddress)
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(msg.PubKey)
 	if err != nil {
 		return nil, err
 	}
 	actualKey := secp256k1.PubKey{Key: pubKeyBytes}
 	expectedAddress := sdk.AccAddress(actualKey.Address())
-	if msg.Address != expectedAddress.String() {
+	if !actualAddress.Equals(expectedAddress) {
 		k.LogError("Pubkey does not match address", types.Participants, "address", msg.Address, "expected", expectedAddress.String())
 		return nil, types.ErrPubKeyDoesNotMatchAddress
 	}
