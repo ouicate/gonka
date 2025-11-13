@@ -537,21 +537,20 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 			idSet[id] = true
 		}
 
-		hostPort := strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.InferencePort)
-		if _, exists := hostPortSet[hostPort]; exists {
-			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostPort, "index_in_file", i)
+		hostInfPort := strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.InferencePort)
+		if _, exists := hostPortSet[hostInfPort]; exists {
+			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostInfPort, "index_in_file", i)
 			continue
-		} else {
-			hostPortSet[hostPort] = true
 		}
 
-		hostPort = strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.PoCPort)
-		if _, exists := hostPortSet[hostPort]; exists {
-			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostPort, "index_in_file", i)
+		hostPocPort := strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.PoCPort)
+		if _, exists := hostPortSet[hostPocPort]; exists {
+			logging.Error("Skipping node with duplicate host:port from node_config.json", types.Config, "host_port", hostPocPort, "index_in_file", i)
 			continue
-		} else {
-			hostPortSet[hostPort] = true
 		}
+
+		hostPortSet[hostInfPort] = true
+		hostPortSet[hostPocPort] = true
 
 		validationErrors := ValidateInferenceNodeBasic(node)
 
