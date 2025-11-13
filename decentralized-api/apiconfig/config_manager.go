@@ -525,6 +525,24 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 	}
 
 	// Validate nodes and filter out invalid ones
+	validNodes := getValidNodes(newNodes)
+
+	if len(validNodes) < len(newNodes) {
+		logging.Warn("Some nodes were skipped due to validation errors", types.Config,
+			"total_nodes", len(newNodes), "valid_nodes", len(validNodes), "skipped", len(newNodes)-len(validNodes))
+	}
+
+	// Populate in-memory nodes and mark dirty. Auto-flush will persist and then set merged flag.
+	cm.mutex.Lock()
+	cm.currentConfig.Nodes = validNodes
+	cm.mutex.Unlock()
+
+	logging.Info("Loaded node configuration into memory; will persist on next flush", types.Config,
+		"valid_nodes", len(validNodes))
+	return nil
+}
+
+func getValidNodes(newNodes []InferenceNodeConfig) []InferenceNodeConfig {
 	validNodes := make([]InferenceNodeConfig, 0, len(newNodes))
 	idSet := make(map[string]bool)
 	hostPortSet := make(map[string]bool)
@@ -559,20 +577,7 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 			hostPortSet[hostPocPort] = true
 		}
 	}
-
-	if len(validNodes) < len(newNodes) {
-		logging.Warn("Some nodes were skipped due to validation errors", types.Config,
-			"total_nodes", len(newNodes), "valid_nodes", len(validNodes), "skipped", len(newNodes)-len(validNodes))
-	}
-
-	// Populate in-memory nodes and mark dirty. Auto-flush will persist and then set merged flag.
-	cm.mutex.Lock()
-	cm.currentConfig.Nodes = validNodes
-	cm.mutex.Unlock()
-
-	logging.Info("Loaded node configuration into memory; will persist on next flush", types.Config,
-		"valid_nodes", len(validNodes))
-	return nil
+	return validNodes
 }
 
 func parseInferenceNodesFromNodeConfigJson(nodeConfigPath string) ([]InferenceNodeConfig, error) {
