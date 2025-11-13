@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -11,12 +12,13 @@ import (
 type Permission string
 
 const (
-	GovernancePermission        Permission = "governance"
-	TrainingExecPermission      Permission = "training_execution"
-	TrainingStartPermission     Permission = "training_start"
-	ParticipantPermission       Permission = "participant"
-	ActiveParticipantPermission Permission = "active_participant"
-	AccountPermission           Permission = "account"
+	GovernancePermission               Permission = "governance"
+	TrainingExecPermission             Permission = "training_execution"
+	TrainingStartPermission            Permission = "training_start"
+	ParticipantPermission              Permission = "participant"
+	ActiveParticipantPermission        Permission = "active_participant"
+	AccountPermission                  Permission = "account"
+	CurrentActiveParticipantPermission Permission = "current_active_participant"
 )
 
 var MessagePermissions = map[reflect.Type][]Permission{
@@ -62,7 +64,8 @@ var MessagePermissions = map[reflect.Type][]Permission{
 	reflect.TypeOf((*types.MsgInvalidateInference)(nil)): {ActiveParticipantPermission},
 	reflect.TypeOf((*types.MsgRevalidateInference)(nil)): {ActiveParticipantPermission},
 	reflect.TypeOf((*types.MsgStartInference)(nil)):      {ActiveParticipantPermission},
-	reflect.TypeOf((*types.MsgValidation)(nil)):          {ActiveParticipantPermission},
+
+	reflect.TypeOf((*types.MsgValidation)(nil)): {ActiveParticipantPermission},
 }
 
 func (k msgServer) CheckPermission(ctx context.Context, msg sdk.Msg, actor string) error {
@@ -79,20 +82,35 @@ func (k msgServer) CheckPermission(ctx context.Context, msg sdk.Msg, actor strin
 	for _, perm := range permission {
 		switch perm {
 		case GovernancePermission:
-			return k.checkGovernancePermission(ctx, actorAddr)
+			if err := k.checkGovernancePermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		case AccountPermission:
-			return k.checkAccountPermission(ctx, actorAddr)
+			if err := k.checkAccountPermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		case ParticipantPermission:
-			return k.checkParticipantPermission(ctx, actorAddr)
+			if err := k.checkParticipantPermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		case ActiveParticipantPermission:
-			return k.checkActiveParticipantPermission(ctx, actorAddr)
+			if err := k.checkActiveParticipantPermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		case TrainingExecPermission:
-			return k.checkTrainingExecPermission(ctx, actorAddr)
+			if err := k.checkTrainingExecPermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		case TrainingStartPermission:
-			return k.checkTrainingStartPermission(ctx, actorAddr)
+			if err := k.checkTrainingStartPermission(ctx, actorAddr); err != nil {
+				return err
+			}
+		case CurrentActiveParticipantPermission:
+			if err := k.checkCurrentActiveParticipantPermission(ctx, actorAddr); err != nil {
+				return err
+			}
 		default:
 			return types.ErrInvalidPermission
-
 		}
 	}
 	return nil
@@ -127,6 +145,25 @@ func (k msgServer) checkActiveParticipantPermission(ctx context.Context, actor s
 		}
 	}
 	return types.ErrParticipantNotFound
+}
+
+func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, actor sdk.AccAddress) error {
+	err := k.checkActiveParticipantPermission(ctx, actor)
+	if err != nil {
+		return err
+	}
+	currentEpoch, err := k.EffectiveEpochIndex.Get(ctx)
+	if err != nil {
+		return err
+	}
+	has, err := k.ExcludedParticipantsMap.Has(ctx, collections.Join(currentEpoch, actor))
+	if err != nil {
+		return err
+	}
+	if !has {
+		return types.ErrParticipantNotFound
+	}
+	return nil
 }
 
 func (k msgServer) checkTrainingExecPermission(ctx context.Context, actor sdk.AccAddress) error {

@@ -9,11 +9,11 @@ import (
 )
 
 func (k msgServer) AssignTrainingTask(goCtx context.Context, msg *types.MsgAssignTrainingTask) (*types.MsgAssignTrainingTaskResponse, error) {
-	ctx := sdk.UnwrapSDKContext(goCtx)
-
-	if err := k.CheckTrainingAllowList(ctx, msg); err != nil {
+	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
 		return nil, err
 	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	if len(msg.Assignees) == 0 {
 		return nil, types.ErrTrainingAssignmentEmpty

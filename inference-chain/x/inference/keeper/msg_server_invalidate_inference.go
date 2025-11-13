@@ -10,9 +10,11 @@ import (
 )
 
 func (k msgServer) InvalidateInference(ctx context.Context, msg *types.MsgInvalidateInference) (*types.MsgInvalidateInferenceResponse, error) {
-	if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
-		return nil, err
-	}
+	// Invalidate uses the Inference and the group policy id to get permissions,
+	// so it and revalidate don't go through the usual permissions path
+	//if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
+	//	return nil, err
+	//}
 	inference, executor, err := k.validateDecisionMessage(ctx, msg)
 	if err != nil {
 		return nil, err

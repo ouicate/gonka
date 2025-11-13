@@ -7,9 +7,12 @@ import (
 )
 
 func (k msgServer) RevalidateInference(ctx context.Context, msg *types.MsgRevalidateInference) (*types.MsgRevalidateInferenceResponse, error) {
-	if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
-		return nil, err
-	}
+	// Revalidate is a special case for permissions!
+	// The Creator needs to be the policy-id of the GROUP that the revalidation vote happened in.
+
+	//if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
+	//	return nil, err
+	//}
 
 	inference, executor, err := k.validateDecisionMessage(ctx, msg)
 	if err != nil {

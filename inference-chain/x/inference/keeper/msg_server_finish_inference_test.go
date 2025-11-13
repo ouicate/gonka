@@ -219,12 +219,36 @@ func NewMockInferenceHelper(t *testing.T) (*MockInferenceHelper, keeper.Keeper, 
 	}, k, ctx
 }
 
+func (h *MockInferenceHelper) EnsureActiveParticipants() {
+	currentEpoch, found := h.keeper.GetEffectiveEpochIndex(h.context)
+	require.True(h.testingT, found)
+	err := h.keeper.SetActiveParticipants(h.context, types.ActiveParticipants{
+		EpochId: currentEpoch,
+		Participants: []*types.ActiveParticipant{
+			{
+				Index: h.MockRequester.address,
+			},
+			{
+				Index: h.MockTransferAgent.address,
+			},
+			{
+				Index: h.MockExecutor.address,
+			},
+			{
+				Index: testutil.Validator,
+			},
+		},
+	})
+	require.NoError(h.testingT, err)
+}
+
 func (h *MockInferenceHelper) StartInference(
 	promptPayload string, model string, requestTimestamp int64, maxTokens uint64) (*types.Inference, error) {
 	h.Mocks.BankKeeper.EXPECT().SendCoinsFromAccountToModule(gomock.Any(), gomock.Any(), types.ModuleName, gomock.Any(), gomock.Any()).Return(nil)
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockRequester.GetBechAddress()).Return(h.MockRequester)
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockTransferAgent.GetBechAddress()).Return(h.MockTransferAgent).AnyTimes()
 	h.Mocks.AuthzKeeper.EXPECT().GranterGrants(gomock.Any(), gomock.Any()).Return(&authztypes.QueryGranterGrantsResponse{Grants: []*authztypes.GrantAuthorization{}}, nil).AnyTimes()
+	h.EnsureActiveParticipants()
 
 	components := calculations.SignatureComponents{
 		Payload:         promptPayload,
@@ -275,7 +299,7 @@ func (h *MockInferenceHelper) StartInference(
 		OriginalPrompt:      promptPayload,
 		PerTokenPrice:       calculations.PerTokenCost, // Set expected dynamic pricing value
 	}
-	return h.previousInference, nil
+	return h.previousInference, err
 }
 
 func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
@@ -287,6 +311,8 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockRequester.GetBechAddress()).Return(h.MockRequester).AnyTimes()
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockTransferAgent.GetBechAddress()).Return(h.MockTransferAgent).AnyTimes()
 	h.Mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), h.MockExecutor.GetBechAddress()).Return(h.MockExecutor).AnyTimes()
+	h.EnsureActiveParticipants()
+
 	components := calculations.SignatureComponents{
 		Payload:         h.previousInference.PromptPayload,
 		Timestamp:       h.previousInference.RequestTimestamp,
