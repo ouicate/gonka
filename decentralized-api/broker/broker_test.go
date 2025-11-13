@@ -1132,3 +1132,242 @@ func TestValidateInferenceNode_UpdateExcludesSelf(t *testing.T) {
 	err = broker.validateInferenceNode(samePortsNode1, "node1") // Exclude node1 from check
 	require.NoError(t, err, "Should allow updating node to keep same ports when excluding self")
 }
+
+// registerTwoNodesOnSameHost is a helper function that registers 2 nodes with the same host but different ports
+// and asserts both are successfully registered. Returns the broker and both node configs.
+func registerTwoNodesOnSameHost(t *testing.T, broker *Broker) (apiconfig.InferenceNodeConfig, apiconfig.InferenceNodeConfig) {
+	node1 := apiconfig.InferenceNodeConfig{
+		Id:            "node1",
+		Host:          "localhost",
+		InferencePort: 8080,
+		PoCPort:       5000,
+		MaxConcurrent: 5,
+		Models:        map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	node2 := apiconfig.InferenceNodeConfig{
+		Id:            "node2",
+		Host:          "localhost",
+		InferencePort: 8081,
+		PoCPort:       5001,
+		MaxConcurrent: 5,
+		Models:        map[string]apiconfig.ModelConfig{"model1": {}},
+	}
+
+	// Register node1
+	cmd1 := NewRegisterNodeCommand(node1)
+	err := broker.QueueMessage(cmd1)
+	require.NoError(t, err)
+	response1 := <-cmd1.Response
+	require.NotNil(t, response1)
+	require.Nil(t, response1.Error, "node1 registration should succeed")
+	require.NotNil(t, response1.Node)
+	require.Equal(t, node1.Id, response1.Node.Id)
+
+	// Give broker time to process the registration
+	time.Sleep(50 * time.Millisecond)
+
+	// Register node2
+	cmd2 := NewRegisterNodeCommand(node2)
+	err = broker.QueueMessage(cmd2)
+	require.NoError(t, err)
+	response2 := <-cmd2.Response
+	require.NotNil(t, response2)
+	require.Nil(t, response2.Error, "node2 registration should succeed")
+	require.NotNil(t, response2.Node)
+	require.Equal(t, node2.Id, response2.Node.Id)
+
+	// Give broker time to process the second registration
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify both nodes are registered
+	nodes, err := broker.GetNodes()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(nodes), "Both nodes should be registered")
+
+	// Verify node IDs
+	nodeIds := make(map[string]bool)
+	for _, node := range nodes {
+		nodeIds[node.Node.Id] = true
+	}
+	require.True(t, nodeIds["node1"], "node1 should be registered")
+	require.True(t, nodeIds["node2"], "node2 should be registered")
+
+	return node1, node2
+}
+
+func TestRegisterTwoNodesOnSameHost(t *testing.T) {
+	broker := NewTestBroker()
+	node1, node2 := registerTwoNodesOnSameHost(t, broker)
+
+	// Additional verification: check ports are different
+	nodes, err := broker.GetNodes()
+	require.NoError(t, err)
+
+	var foundNode1, foundNode2 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node1.Id {
+			foundNode1 = &nodes[i]
+		}
+		if nodes[i].Node.Id == node2.Id {
+			foundNode2 = &nodes[i]
+		}
+	}
+
+	require.NotNil(t, foundNode1, "node1 should be found")
+	require.NotNil(t, foundNode2, "node2 should be found")
+	require.Equal(t, node1.InferencePort, foundNode1.Node.InferencePort)
+	require.Equal(t, node1.PoCPort, foundNode1.Node.PoCPort)
+	require.Equal(t, node2.InferencePort, foundNode2.Node.InferencePort)
+	require.Equal(t, node2.PoCPort, foundNode2.Node.PoCPort)
+	require.NotEqual(t, foundNode1.Node.InferencePort, foundNode2.Node.InferencePort, "Inference ports should be different")
+	require.NotEqual(t, foundNode1.Node.PoCPort, foundNode2.Node.PoCPort, "PoC ports should be different")
+}
+
+func TestUpdateNodePortCollision(t *testing.T) {
+	broker := NewTestBroker()
+	node1, node2 := registerTwoNodesOnSameHost(t, broker)
+
+	// Try to update node2 to use node1's ports - should fail
+	updatedNode2 := apiconfig.InferenceNodeConfig{
+		Id:            node2.Id,
+		Host:          node2.Host,
+		InferencePort: node1.InferencePort, // Collision with node1
+		PoCPort:       node1.PoCPort,       // Collision with node1
+		MaxConcurrent: node2.MaxConcurrent,
+		Models:        node2.Models,
+	}
+
+	cmd := NewUpdateNodeCommand(updatedNode2)
+	err := broker.QueueMessage(cmd)
+	require.NoError(t, err)
+	response := <-cmd.Response
+	require.NotNil(t, response)
+	require.NotNil(t, response.Error, "Update should fail due to port collision")
+	require.Contains(t, response.Error.Error(), "duplicate", "Error should mention duplicate ports")
+	require.Nil(t, response.Node, "Node should be nil on error")
+
+	// Verify node2's ports haven't changed
+	nodes, err := broker.GetNodes()
+	require.NoError(t, err)
+	var foundNode2 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node2.Id {
+			foundNode2 = &nodes[i]
+			break
+		}
+	}
+	require.NotNil(t, foundNode2)
+	require.Equal(t, node2.InferencePort, foundNode2.Node.InferencePort, "node2 inference port should remain unchanged")
+	require.Equal(t, node2.PoCPort, foundNode2.Node.PoCPort, "node2 PoC port should remain unchanged")
+}
+
+func TestUpdateNodeNoCollision(t *testing.T) {
+	broker := NewTestBroker()
+	node1, node2 := registerTwoNodesOnSameHost(t, broker)
+
+	// Update node2 to use different ports that don't collide with node1
+	updatedNode2 := apiconfig.InferenceNodeConfig{
+		Id:            node2.Id,
+		Host:          node2.Host,
+		InferencePort: 8082, // Different from both node1 (8080) and original node2 (8081)
+		PoCPort:       5002, // Different from both node1 (5000) and original node2 (5001)
+		MaxConcurrent: node2.MaxConcurrent,
+		Models:        node2.Models,
+	}
+
+	cmd := NewUpdateNodeCommand(updatedNode2)
+	err := broker.QueueMessage(cmd)
+	require.NoError(t, err)
+	response := <-cmd.Response
+	require.NotNil(t, response)
+	require.Nil(t, response.Error, "Update should succeed")
+	require.NotNil(t, response.Node)
+	require.Equal(t, node2.Id, response.Node.Id)
+
+	// Give broker time to process the update
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify node2's ports have been updated
+	nodes, err := broker.GetNodes()
+	require.NoError(t, err)
+	var foundNode2 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node2.Id {
+			foundNode2 = &nodes[i]
+			break
+		}
+	}
+	require.NotNil(t, foundNode2)
+	require.Equal(t, updatedNode2.InferencePort, foundNode2.Node.InferencePort, "node2 inference port should be updated")
+	require.Equal(t, updatedNode2.PoCPort, foundNode2.Node.PoCPort, "node2 PoC port should be updated")
+
+	// Verify node1's ports remain unchanged
+	var foundNode1 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node1.Id {
+			foundNode1 = &nodes[i]
+			break
+		}
+	}
+	require.NotNil(t, foundNode1)
+	require.Equal(t, node1.InferencePort, foundNode1.Node.InferencePort, "node1 inference port should remain unchanged")
+	require.Equal(t, node1.PoCPort, foundNode1.Node.PoCPort, "node1 PoC port should remain unchanged")
+}
+
+func TestUpdateNodeSwapPorts(t *testing.T) {
+	broker := NewTestBroker()
+	node1, node2 := registerTwoNodesOnSameHost(t, broker)
+
+	// Swap PoC and inference ports of node2
+	// Original: InferencePort=8081, PoCPort=5001
+	// After swap: InferencePort=5001, PoCPort=8081
+	swappedNode2 := apiconfig.InferenceNodeConfig{
+		Id:            node2.Id,
+		Host:          node2.Host,
+		InferencePort: node2.PoCPort,       // Swap: use old PoC port for inference
+		PoCPort:       node2.InferencePort, // Swap: use old inference port for PoC
+		MaxConcurrent: node2.MaxConcurrent,
+		Models:        node2.Models,
+	}
+
+	cmd := NewUpdateNodeCommand(swappedNode2)
+	err := broker.QueueMessage(cmd)
+	require.NoError(t, err)
+	response := <-cmd.Response
+	require.NotNil(t, response)
+	require.Nil(t, response.Error, "Update should succeed when swapping ports")
+	require.NotNil(t, response.Node)
+	require.Equal(t, node2.Id, response.Node.Id)
+
+	// Give broker time to process the update
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify node2's ports have been swapped
+	nodes, err := broker.GetNodes()
+	require.NoError(t, err)
+	var foundNode2 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node2.Id {
+			foundNode2 = &nodes[i]
+			break
+		}
+	}
+	require.NotNil(t, foundNode2)
+	require.Equal(t, swappedNode2.InferencePort, foundNode2.Node.InferencePort, "node2 inference port should be swapped")
+	require.Equal(t, swappedNode2.PoCPort, foundNode2.Node.PoCPort, "node2 PoC port should be swapped")
+	require.Equal(t, node2.PoCPort, foundNode2.Node.InferencePort, "Inference port should equal original PoC port")
+	require.Equal(t, node2.InferencePort, foundNode2.Node.PoCPort, "PoC port should equal original inference port")
+
+	// Verify no collision occurred - node1 should still have its original ports
+	var foundNode1 *NodeResponse
+	for i := range nodes {
+		if nodes[i].Node.Id == node1.Id {
+			foundNode1 = &nodes[i]
+			break
+		}
+	}
+	require.NotNil(t, foundNode1)
+	require.Equal(t, node1.InferencePort, foundNode1.Node.InferencePort, "node1 inference port should remain unchanged")
+	require.Equal(t, node1.PoCPort, foundNode1.Node.PoCPort, "node1 PoC port should remain unchanged")
+}
