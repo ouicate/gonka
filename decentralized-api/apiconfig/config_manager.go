@@ -533,8 +533,6 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 		if _, exists := idSet[id]; exists {
 			logging.Error("Skipping duplicate node from node_config.json", types.Config, "node_id", id, "index_in_file", i)
 			continue
-		} else {
-			idSet[id] = true
 		}
 
 		hostInfPort := strings.ToLower(strings.TrimSpace(node.Host)) + ":" + strconv.Itoa(node.InferencePort)
@@ -549,9 +547,6 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 			continue
 		}
 
-		hostPortSet[hostInfPort] = true
-		hostPortSet[hostPocPort] = true
-
 		validationErrors := ValidateInferenceNodeBasic(node)
 
 		if len(validationErrors) > 0 {
@@ -559,6 +554,9 @@ func (cm *ConfigManager) LoadNodeConfig(ctx context.Context, nodeConfigPathOverr
 				"index", i, "node_id", node.Id, "errors", validationErrors)
 		} else {
 			validNodes = append(validNodes, node)
+			idSet[id] = true
+			hostPortSet[hostInfPort] = true
+			hostPortSet[hostPocPort] = true
 		}
 	}
 
