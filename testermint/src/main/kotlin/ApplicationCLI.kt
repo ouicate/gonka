@@ -571,35 +571,27 @@ data class ApplicationCLI(
         try {
             val accountData = queryAccount(address)
             val account = accountData["account"] as? Map<String, Any> ?: return@wrapLog false
-            val accountType = account["@type"] as? String ?: return@wrapLog false
+            val accountType = account["type"] as? String ?: (account["@type"] as? String) ?: return@wrapLog false
             
             // Check if it's a Cosmos SDK vesting account type
-            accountType.contains("cosmos.vesting") && accountType.contains("VestingAccount")
+            // Format can be either "cosmos-sdk/ContinuousVestingAccount" or "/cosmos.vesting.v1beta1.ContinuousVestingAccount"
+            accountType.contains("VestingAccount") && 
+                (accountType.contains("cosmos-sdk/") || accountType.contains("cosmos.vesting"))
         } catch (e: Exception) {
             false
         }
     }
 
     // Get locked (vesting) coins amount for an account
+    // This calculates the CURRENT locked amount: Total Balance - Spendable Balance
     fun getLockedCoins(address: String, denom: String = this.config.denom): Long = wrapLog("getLockedCoins", false) {
         try {
-            val accountData = queryAccount(address)
-            val account = accountData["account"] as? Map<String, Any> ?: return@wrapLog 0L
-            val value = account["value"] as? Map<String, Any> ?: return@wrapLog 0L
-            
-            // Get base_vesting_account from the account value
-            val baseVestingAccount = value["base_vesting_account"] as? Map<String, Any> ?: return@wrapLog 0L
-            val originalVesting = baseVestingAccount["original_vesting"] as? List<*> ?: return@wrapLog 0L
-            
-            // Find the coin with matching denom and return its amount
-            for (item in originalVesting) {
-                val coinMap = item as? Map<*, *> ?: continue
-                if (coinMap["denom"] as? String == denom) {
-                    val amountStr = coinMap["amount"] as? String ?: continue
-                    return@wrapLog amountStr.toLongOrNull() ?: 0L
-                }
-            }
-            0L
+            // To get current locked amount, we calculate: Total - Spendable
+            // Note: original_vesting never decreases, so we can't use it
+            val totalBalance = getBalance(address, denom).balance.amount
+            val spendableBalance = getSpendableBalance(address, denom)
+            val locked = totalBalance - spendableBalance
+            return@wrapLog if (locked > 0) locked else 0L
         } catch (e: Exception) {
             Logger.warn("Failed to get locked coins for $address: ${e.message}")
             0L
