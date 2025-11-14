@@ -542,7 +542,12 @@ class GenesisTransferTests : TestermintTest() {
             output
         }
         
-        if (listKeysResult.isFailure || !listKeysResult.getOrNull()!!.any { it.contains(TEST_VESTING_ACCOUNT_NAME) }) {
+        if (listKeysResult.isFailure) {
+            logHighlight("❌ Failed to list keys in keyring!")
+            throw AssertionError("Could not list keys in keyring")
+        }
+        val keysOutput = listKeysResult.getOrNull() ?: emptyList()
+        if (!keysOutput.any { it.contains(TEST_VESTING_ACCOUNT_NAME) }) {
             logHighlight("❌ Vesting account key not found in keyring!")
             throw AssertionError("Vesting account key not found after import")
         }
@@ -572,16 +577,21 @@ class GenesisTransferTests : TestermintTest() {
         assertThat(totalBalance).isGreaterThan(0)
         logHighlight("✅ Vesting account has balance")
         
-        val vestingVerified = verifyVestingAccount(genesis, vestingAddress)
-        assertThat(vestingVerified).isTrue()
-        logHighlight("✅ Vesting account properly configured with vesting schedule")
+        // Check it's a Cosmos SDK vesting account
+        val isVestingAccount = genesis.node.isCosmosVestingAccount(vestingAddress)
+        assertThat(isVestingAccount).isTrue()
+        logHighlight("✅ Vesting account properly configured as Cosmos SDK vesting account")
         
-        // Get initial balances
+        // Get initial balances and locked amounts
         val initialVestingBalance = totalBalance
         val initialRecipientBalance = genesis.getBalance(recipientAddress)
+        val initialSourceLocked = genesis.node.getLockedCoins(vestingAddress)
+        val initialSourceSpendable = genesis.node.getSpendableBalance(vestingAddress)
         
         logSection("Initial balances:")
-        logHighlight("  Vesting account: $initialVestingBalance ngonka")
+        logHighlight("  Vesting account total: $initialVestingBalance ngonka")
+        logHighlight("  Vesting account spendable: $initialSourceSpendable ngonka")
+        logHighlight("  Vesting account locked: $initialSourceLocked ngonka")
         logHighlight("  Recipient: $initialRecipientBalance ngonka")
         
         // Execute transfer
@@ -632,19 +642,38 @@ class GenesisTransferTests : TestermintTest() {
         
         // Verify vesting schedule transferred
         logSection("=== Verify Vesting Schedule Transfer ===")
-        val recipientVestingVerified = verifyVestingAccount(genesis, recipientAddress)
-        assertThat(recipientVestingVerified).isTrue()
-        logHighlight("✅ Vesting schedule transferred to recipient")
-        logHighlight("✅ Recipient now has vesting account with schedule")
         
-        // Verify source account no longer has vesting
-        val sourceStillVesting = runCatching {
-            val vestingInfo = genesis.node.queryVestingSchedule(vestingAddress)
-            vestingInfo.vestingSchedule != null
-        }.getOrDefault(false)
+        // Check recipient has Cosmos SDK vesting account
+        val recipientIsVesting = genesis.node.isCosmosVestingAccount(recipientAddress)
+        assertThat(recipientIsVesting).isTrue()
+        logHighlight("✅ Recipient is now a Cosmos SDK vesting account")
         
+        // Get recipient's locked and spendable amounts
+        val recipientLocked = genesis.node.getLockedCoins(recipientAddress)
+        val recipientSpendable = genesis.node.getSpendableBalance(recipientAddress)
+        val recipientTotal = finalRecipientBalance
+        
+        logHighlight("Recipient vesting breakdown:")
+        logHighlight("  Total balance: $recipientTotal ngonka")
+        logHighlight("  Spendable: $recipientSpendable ngonka")
+        logHighlight("  Locked (vesting): $recipientLocked ngonka")
+        
+        // Verify locked amount is close to what source had (within 1% tolerance for rounding)
+        val lockedDifference = kotlin.math.abs(recipientLocked - initialSourceLocked)
+        val tolerance = initialSourceLocked / 100 // 1% tolerance
+        assertThat(lockedDifference).isLessThanOrEqualTo(tolerance)
+        logHighlight("✅ Locked amount preserved: $initialSourceLocked → $recipientLocked ngonka")
+        
+        // Verify source account no longer has Cosmos SDK vesting
+        val sourceStillVesting = genesis.node.isCosmosVestingAccount(vestingAddress)
         assertThat(sourceStillVesting).isFalse()
-        logHighlight("✅ Source account converted to regular account (no vesting)")
+        logHighlight("✅ Source account converted to regular BaseAccount (no vesting)")
+        
+        // Verify source has minimal/no remaining locked coins (allow for coins that vested during transfer)
+        val sourceRemainingLocked = genesis.node.getLockedCoins(vestingAddress)
+        val maxAllowedRemaining = initialSourceLocked / 100 // Allow up to 1% remaining due to vesting during transfer
+        assertThat(sourceRemainingLocked).isLessThanOrEqualTo(maxAllowedRemaining)
+        logHighlight("✅ Source has minimal remaining locked coins: $sourceRemainingLocked ngonka (initial: $initialSourceLocked ngonka)")
         
         logSection("=== VESTING TRANSFER TEST COMPLETED SUCCESSFULLY ===")
         logHighlight("✅ All vesting transfer scenarios verified:")

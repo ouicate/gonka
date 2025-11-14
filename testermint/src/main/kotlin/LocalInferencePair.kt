@@ -569,9 +569,13 @@ data class LocalInferencePair(
 
     fun submitGovernanceProposal(proposal: GovernanceProposal): TxResponse =
         wrapLog("submitGovProposal", infoLevel = false) {
+            val govAccount = this.node.getModuleAccount("gov")
+            val govValue = govAccount.account.value as? AccountValue 
+                ?: throw IllegalStateException("Gov module account value is not AccountValue")
+            
             val finalProposal = proposal.copy(
                 messages = proposal.messages.map {
-                    it.withAuthority(this.node.getModuleAccount("gov").account.value.address)
+                    it.withAuthority(govValue.address)
                 },
             )
             val governanceJson = gsonCamelCase.toJson(finalProposal)

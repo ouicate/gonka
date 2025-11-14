@@ -560,6 +560,65 @@ data class ApplicationCLI(
         execAndParse(listOf("query", "auth", "module-account", accountName))
     }
 
+    // Query regular account (works for all account types)
+    fun queryAccount(address: String): Map<String, Any> = wrapLog("queryAccount", false) {
+        val output = execCli(listOf("query", "auth", "account", address))
+        cosmosJson.fromJson(output, Map::class.java) as Map<String, Any>
+    }
+
+    // Check if account is a Cosmos SDK vesting account
+    fun isCosmosVestingAccount(address: String): Boolean = wrapLog("isCosmosVestingAccount", false) {
+        try {
+            val accountData = queryAccount(address)
+            val account = accountData["account"] as? Map<String, Any> ?: return@wrapLog false
+            val accountType = account["@type"] as? String ?: return@wrapLog false
+            
+            // Check if it's a Cosmos SDK vesting account type
+            accountType.contains("cosmos.vesting") && accountType.contains("VestingAccount")
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Get locked (vesting) coins amount for an account
+    fun getLockedCoins(address: String, denom: String = this.config.denom): Long = wrapLog("getLockedCoins", false) {
+        try {
+            val accountData = queryAccount(address)
+            val account = accountData["account"] as? Map<String, Any> ?: return@wrapLog 0L
+            val value = account["value"] as? Map<String, Any> ?: return@wrapLog 0L
+            
+            // Get base_vesting_account from the account value
+            val baseVestingAccount = value["base_vesting_account"] as? Map<String, Any> ?: return@wrapLog 0L
+            val originalVesting = baseVestingAccount["original_vesting"] as? List<*> ?: return@wrapLog 0L
+            
+            // Find the coin with matching denom and return its amount
+            for (item in originalVesting) {
+                val coinMap = item as? Map<*, *> ?: continue
+                if (coinMap["denom"] as? String == denom) {
+                    val amountStr = coinMap["amount"] as? String ?: continue
+                    return@wrapLog amountStr.toLongOrNull() ?: 0L
+                }
+            }
+            0L
+        } catch (e: Exception) {
+            Logger.warn("Failed to get locked coins for $address: ${e.message}")
+            0L
+        }
+    }
+
+    // Get spendable coins from bank query
+    fun getSpendableBalance(address: String, denom: String = this.config.denom): Long = wrapLog("getSpendableBalance", false) {
+        try {
+            val output = execCli(listOf("query", "bank", "spendable-balances", address))
+            val response = cosmosJson.fromJson(output, BalanceListResponse::class.java)
+            val coin = response.balances?.find { it.denom == denom }
+            coin?.amount?.toLongOrNull() ?: 0L
+        } catch (e: Exception) {
+            Logger.warn("Failed to get spendable balance for $address: ${e.message}")
+            0L
+        }
+    }
+
 
     fun sendTransactionDirectly(args: List<String>, useColdAccount: Boolean = true): TxResponse {
         val from = if (useColdAccount) this.getColdAccountName() else this.getWarmAccountName()
