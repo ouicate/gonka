@@ -37,7 +37,7 @@ func (b *Broker) validateInferenceNode(node apiconfig.InferenceNodeConfig, exclu
 		if excludeNodeId != "" && id == excludeNodeId {
 			continue
 		}
-		if existingNode.Node.Host == node.Host && (existingNode.Node.PoCPort == node.PoCPort || existingNode.Node.InferencePort == node.InferencePort) {
+		if existingNode.Node.Host == node.Host && existingNode.Node.PoCPort == node.PoCPort {
 			errors = append(errors, fmt.Sprintf("duplicate PoC host+port combination: %s:%d (already used by node '%s')", node.Host, node.PoCPort, id))
 			break
 		}
