@@ -492,4 +492,165 @@ class GenesisTransferTests : TestermintTest() {
 
         logHighlight("✅ Transfer records and audit trail verification completed")
     }
+
+    @Test
+    fun `vesting account ownership transfer with schedule preservation`() {
+        // Create cluster with vesting account using custom init script via docker-compose overlay
+        val vestingConfig = inferenceConfig.copy(
+            additionalDockerFilesByKeyName = mapOf(
+                GENESIS_KEY_NAME to listOf("docker-compose.genesis-vesting.yml")
+            )
+        )
+        val (cluster, genesis) = initCluster(config = vestingConfig, reboot = true)
+        
+        logSection("=== VESTING ACCOUNT OWNERSHIP TRANSFER TEST ===")
+        logHighlight("Testing vesting schedule transfer functionality:")
+        logHighlight("  • ContinuousVestingAccount as source")
+        logHighlight("  • Both liquid and vesting coins transfer")
+        logHighlight("  • Vesting schedule preserved for recipient")
+        logHighlight("  • Timeline and amounts correctly calculated")
+        
+        // Import the test vesting account key so we can sign transactions from it
+        logSection("Importing test vesting account key")
+        logHighlight("Using keyring backend: ${genesis.node.config.keyringBackend}")
+        logHighlight("Using mnemonic: $TEST_VESTING_ACCOUNT_MNEMONIC")
+        logHighlight("Expected address: $TEST_VESTING_ACCOUNT_ADDRESS")
+        
+        val importResult = runCatching {
+            // Use keys add --recover to import from mnemonic
+            val output = genesis.node.exec(
+                listOf(genesis.node.config.execName, "keys", "add", TEST_VESTING_ACCOUNT_NAME, "--recover", "--output", "json") + genesis.node.config.keychainParams,
+                stdin = TEST_VESTING_ACCOUNT_MNEMONIC + "\n"
+            )
+            logHighlight("Import output: ${output.joinToString("\n")}")
+            output
+        }
+        
+        if (importResult.isFailure) {
+            logHighlight("Failed to import vesting account key: ${importResult.exceptionOrNull()?.message}")
+            throw AssertionError("Could not import test vesting account key")
+        }
+        logHighlight("✅ Vesting account key imported successfully")
+        
+        // Verify the key was imported by listing keys
+        logSection("Verifying key import")
+        val listKeysResult = runCatching {
+            val output = genesis.node.exec(
+                listOf(genesis.node.config.execName, "keys", "list") + genesis.node.config.keychainParams
+            )
+            logHighlight("Keys in keyring: ${output.joinToString("\n")}")
+            output
+        }
+        
+        if (listKeysResult.isFailure || !listKeysResult.getOrNull()!!.any { it.contains(TEST_VESTING_ACCOUNT_NAME) }) {
+            logHighlight("❌ Vesting account key not found in keyring!")
+            throw AssertionError("Vesting account key not found after import")
+        }
+        logHighlight("✅ Vesting account key verified in keyring")
+        
+        // Create new recipient account
+        logSection("Creating recipient account")
+        val recipientKeyName = "vesting_recipient_${System.currentTimeMillis()}"
+        val recipientKey = genesis.node.createKey(recipientKeyName)
+        val recipientAddress = recipientKey.address
+        logHighlight("Created recipient account: $recipientAddress")
+        
+        val vestingAddress = TEST_VESTING_ACCOUNT_ADDRESS
+        
+        logSection("Test setup:")
+        logHighlight("  Vesting account: $vestingAddress")
+        logHighlight("  Recipient: $recipientAddress (newly created)")
+        
+        // Wait for system ready
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS)
+        
+        // Verify vesting account setup
+        logSection("=== Verify Vesting Account Configuration ===")
+        val totalBalance = genesis.getBalance(vestingAddress)
+        logHighlight("Total balance: $totalBalance ngonka")
+        
+        assertThat(totalBalance).isGreaterThan(0)
+        logHighlight("✅ Vesting account has balance")
+        
+        val vestingVerified = verifyVestingAccount(genesis, vestingAddress)
+        assertThat(vestingVerified).isTrue()
+        logHighlight("✅ Vesting account properly configured with vesting schedule")
+        
+        // Get initial balances
+        val initialVestingBalance = totalBalance
+        val initialRecipientBalance = genesis.getBalance(recipientAddress)
+        
+        logSection("Initial balances:")
+        logHighlight("  Vesting account: $initialVestingBalance ngonka")
+        logHighlight("  Recipient: $initialRecipientBalance ngonka")
+        
+        // Execute transfer
+        logSection("=== Execute Vesting Ownership Transfer ===")
+        val transferResult = runCatching {
+            genesis.node.submitGenesisTransferOwnership(
+                vestingAddress, 
+                recipientAddress,
+                TEST_VESTING_ACCOUNT_NAME
+            )
+        }
+        
+        if (transferResult.isFailure) {
+            val error = transferResult.exceptionOrNull()
+            logHighlight("❌ Transfer submission failed: ${error?.message}")
+            throw AssertionError("Failed to submit vesting transfer: ${error?.message}")
+        }
+        
+        val txResponse = transferResult.getOrNull()!!
+        logHighlight("Transfer transaction submitted:")
+        logHighlight("  • Transaction hash: ${txResponse.txhash}")
+        logHighlight("  • Result code: ${txResponse.code}")
+        
+        assertThat(txResponse.code).isEqualTo(0)
+        logHighlight("✅ Transfer transaction successful")
+        
+        genesis.node.waitForNextBlock(2)
+        
+        // Verify balances transferred
+        logSection("=== Verify Balance Transfer ===")
+        val finalVestingBalance = genesis.getBalance(vestingAddress)
+        val finalRecipientBalance = genesis.getBalance(recipientAddress)
+        
+        logHighlight("Final balances:")
+        logHighlight("  Vesting account: $finalVestingBalance ngonka")
+        logHighlight("  Recipient: $finalRecipientBalance ngonka")
+        
+        assertThat(finalVestingBalance).isEqualTo(0L)
+        logHighlight("✅ All balance transferred from vesting account")
+        
+        assertThat(finalRecipientBalance).isGreaterThan(initialRecipientBalance)
+        logHighlight("✅ Recipient received transferred balance")
+        
+        val transferredAmount = initialVestingBalance - finalVestingBalance
+        val recipientGain = finalRecipientBalance - initialRecipientBalance
+        logHighlight("  Transferred: $transferredAmount ngonka")
+        logHighlight("  Received: $recipientGain ngonka")
+        
+        // Verify vesting schedule transferred
+        logSection("=== Verify Vesting Schedule Transfer ===")
+        val recipientVestingVerified = verifyVestingAccount(genesis, recipientAddress)
+        assertThat(recipientVestingVerified).isTrue()
+        logHighlight("✅ Vesting schedule transferred to recipient")
+        logHighlight("✅ Recipient now has vesting account with schedule")
+        
+        // Verify source account no longer has vesting
+        val sourceStillVesting = runCatching {
+            val vestingInfo = genesis.node.queryVestingSchedule(vestingAddress)
+            vestingInfo.vestingSchedule != null
+        }.getOrDefault(false)
+        
+        assertThat(sourceStillVesting).isFalse()
+        logHighlight("✅ Source account converted to regular account (no vesting)")
+        
+        logSection("=== VESTING TRANSFER TEST COMPLETED SUCCESSFULLY ===")
+        logHighlight("✅ All vesting transfer scenarios verified:")
+        logHighlight("✅ Balance transfer completed (liquid + vesting coins)")
+        logHighlight("✅ Vesting schedule preserved and transferred to recipient")
+        logHighlight("✅ Source account cleaned up properly")
+        logHighlight("✅ Vesting account ownership transfer provides secure asset migration")
+    }
 }
