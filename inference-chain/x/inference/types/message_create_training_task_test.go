@@ -24,6 +24,19 @@ func TestMsgCreateTrainingTask_ValidateBasic(t *testing.T) {
 			name: "valid address",
 			msg: MsgCreateTrainingTask{
 				Creator: sample.AccAddress(),
+				HardwareResources: []*TrainingHardwareResources{
+					{
+						Type:  "GPU",
+						Count: 4,
+					},
+				},
+				Config: &TrainingConfig{
+					Datasets: &TrainingDatasets{
+						Train: "train/dataset/path",
+						Test:  "test/dataset/path",
+					},
+					NumUocEstimationSteps: 1000,
+				},
 			},
 		},
 	}
