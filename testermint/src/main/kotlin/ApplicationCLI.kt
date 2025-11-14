@@ -318,6 +318,18 @@ data class ApplicationCLI(
         )
     }
 
+    fun submitGenesisTransferOwnership(genesisAddress: String, recipientAddress: String, from: String): TxResponse = wrapLog("submitGenesisTransferOwnership", true) {
+        sendTransactionDirectly(
+            listOf(
+                "genesistransfer",
+                "transfer-ownership",
+                genesisAddress,
+                recipientAddress
+            ),
+            from
+        )
+    }
+
     // Restrictions CLI methods
     fun queryRestrictionsStatus(): TransferRestrictionStatusDto = wrapLog("queryRestrictionsStatus", false) {
         execAndParse(listOf("query", "restrictions", "status"))
@@ -555,6 +567,12 @@ data class ApplicationCLI(
         val finalArgs = listOf("tx") + args + getTransactionArgs(from)
         return execAndParse(finalArgs, stdIn = passwordInjection)
 
+    }
+
+    fun sendTransactionDirectly(args: List<String>, from: String): TxResponse {
+        Logger.info("Sending transaction from: $from")
+        val finalArgs = listOf("tx") + args + getTransactionArgs(from)
+        return execAndParse(finalArgs, stdIn = passwordInjection)
     }
 
     private fun getTransactionArgs(from: String) = listOf(
