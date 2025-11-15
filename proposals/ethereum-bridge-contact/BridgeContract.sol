@@ -86,7 +86,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
         bytes memory result = new bytes(96);
         
         assembly {
-            mstore(add(result, 0x20), mload(key))         // part0
+            mstore(add(result, 0x20), mload(key))            // part0
             mstore(add(result, 0x40), mload(add(key, 0x20))) // part1  
             mstore(add(result, 0x60), mload(add(key, 0x40))) // part2
         }
@@ -194,18 +194,18 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     // =============================================================================
 
     /**
-     * @dev Submit a new group public key for an epoch (admin only during ADMIN_CONTROL)
+     * @dev Set a new group public key for an epoch (admin only during ADMIN_CONTROL)
      * @param epochId The epoch ID (must be sequential)
      * @param groupPublicKey The 96-byte G2 public key for the epoch
      * @param validationSig The validation signature from previous epoch (not stored)
      */
-    function submitGroupKey(
+    function setGroupKey(
         uint64 epochId,
         bytes calldata groupPublicKey,
         bytes calldata validationSig
     ) external onlyOwner onlyAdminControl {
         // Verify sequential submission
-        if (epochId >= epochMeta.latestEpochId + 1) {
+        if (epochId < epochMeta.latestEpochId + 1) {
             revert InvalidEpochSequence();
         }
 
@@ -214,13 +214,6 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
 
         // Verify validation signature against previous epoch (if not genesis)
         GroupKey memory newGroupKeyStruct = _bytesToGroupKey(groupPublicKey);
-        // This section is commented out to allow the administrator to restore the contract in cases where the chain skipped BLS signatures for an epoch
-        // if (epochId > 1) {
-        //    GroupKey memory prevGroupKeyStruct = epochGroupKeys[epochId - 1];
-        //    require(!_isGroupKeyEmpty(prevGroupKeyStruct), "Previous epoch not found");
-        //    
-        //    require(_verifyTransitionSignature(prevGroupKeyStruct, newGroupKeyStruct, validationSig, epochId - 1), "Invalid transition signature");
-        //}
 
         // Store only the group public key
         epochGroupKeys[epochId] = newGroupKeyStruct;
@@ -256,6 +249,52 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     // =============================================================================
     // PUBLIC FUNCTIONS
     // =============================================================================
+
+    /**
+     * @dev Submit a new group public key for the next epoch
+     * @param epochId The epoch ID (must be sequential)
+     * @param groupPublicKey The 96-byte G2 public key for the epoch
+     * @param validationSig The validation signature from previous epoch (not stored)
+     */
+    function submitGroupKey(
+        uint64 epochId,
+        bytes calldata groupPublicKey,
+        bytes calldata validationSig
+    ) {
+        // Verify sequential submission
+        if (epochId != epochMeta.latestEpochId + 1) {
+            revert InvalidEpochSequence();
+        }
+
+        // Verify group public key is 96 bytes (G2 point compressed)
+        require(groupPublicKey.length == 96, "Invalid group key length");
+
+        // Verify validation signature against previous epoch (if not genesis)
+        GroupKey memory newGroupKeyStruct = _bytesToGroupKey(groupPublicKey);
+        This section is commented out to allow the administrator to restore the contract in cases where the chain skipped BLS signatures for an epoch
+        if (epochId > 1) {
+            GroupKey memory prevGroupKeyStruct = epochGroupKeys[epochId - 1];
+            require(!_isGroupKeyEmpty(prevGroupKeyStruct), "Previous epoch not found");
+            
+            require(_verifyTransitionSignature(prevGroupKeyStruct, newGroupKeyStruct, validationSig, epochId - 1), "Invalid transition signature");
+        }
+
+        // Store only the group public key
+        epochGroupKeys[epochId] = newGroupKeyStruct;
+
+        // Update metadata in packed storage (single SSTORE)
+        epochMeta = EpochMetadata({
+            latestEpochId: epochId,
+            submissionTimestamp: uint64(block.timestamp),
+            currentState: epochMeta.currentState,  // Preserve current state
+            reserved: 0
+        });
+
+        // Clean up old epochs (keep last 365 epochs = 365 days)
+        _cleanupOldEpochs(epochId);
+
+        emit GroupKeySubmitted(epochId, groupPublicKey, block.timestamp);
+    }
 
     /**
      * @dev Process a withdrawal command with BLS threshold signature
