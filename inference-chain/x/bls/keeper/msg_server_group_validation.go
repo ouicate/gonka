@@ -2,9 +2,12 @@ package keeper
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 
+	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"github.com/consensys/gnark-crypto/ecc/bls12-381/fp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/bls/types"
 	"golang.org/x/crypto/sha3"
@@ -207,21 +210,24 @@ func (ms msgServer) SubmitGroupKeyValidationSignature(goCtx context.Context, msg
 	return &types.MsgSubmitGroupKeyValidationSignatureResponse{}, nil
 }
 
-// computeValidationMessageHash computes the message hash for group key validation
-// This follows the Ethereum-compatible format: abi.encodePacked(previous_epoch_id, chain_id, new_epoch_id, data[0], data[1], data[2])
+// computeValidationMessageHash computes the message hash for group key validation.
+// Uses Ethereum-compatible abi.encodePacked(previous_epoch_id [8], chain_id [32], new_group_key_uncompressed [256]).
 func (ms msgServer) computeValidationMessageHash(ctx sdk.Context, groupPublicKey []byte, previousEpochId, newEpochId uint64) ([]byte, error) {
-	// Split the 96-byte G2 public key into 3x32-byte chunks
+	// Expect 96-byte compressed G2 key; decompress deterministically.
 	if len(groupPublicKey) != 96 {
 		return nil, fmt.Errorf("invalid group public key length: expected 96 bytes, got %d", len(groupPublicKey))
 	}
+	var g2 bls12381.G2Affine
+	if err := g2.Unmarshal(groupPublicKey); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal compressed G2 key: %w", err)
+	}
 
-	// Get chain ID - convert to bytes32 format for Ethereum compatibility
-	chainIdStr := ctx.ChainID()
-	chainIdBytes := make([]byte, 32)
-	copy(chainIdBytes[32-len(chainIdStr):], []byte(chainIdStr)) // Right-pad with zeros
+	// Use GONKA_CHAIN_ID bytes32 (hash of chain-id string), consistent with bridge signing logic
+	gonkaIdHash := sha256.Sum256([]byte(ctx.ChainID()))
+	chainIdBytes := gonkaIdHash[:]
 
-	// Implement Ethereum-compatible abi.encodePacked
-	// Format: abi.encodePacked(previous_epoch_id, chain_id, new_epoch_id, data[0], data[1], data[2])
+	// Implement Ethereum-compatible abi.encodePacked with uncompressed G2 in 64-byte limbs:
+	// Order: X.c0, X.c1, Y.c0, Y.c1, each 64-byte big-endian (16 zero bytes + 48-byte fp).
 	var encodedData []byte
 
 	// Add previous_epoch_id (uint64 -> 8 bytes big endian)
@@ -232,17 +238,22 @@ func (ms msgServer) computeValidationMessageHash(ctx sdk.Context, groupPublicKey
 	// Add chain_id (32 bytes)
 	encodedData = append(encodedData, chainIdBytes...)
 
-	// Note: Removed new_epoch_id from hash as it doesn't provide additional security
-	// Format: abi.encodePacked(previous_epoch_id, chain_id, data[0], data[1], data[2])
+	// Build 256-byte uncompressed encoding: 4 field elements, each 64 bytes
+	appendFp64 := func(e fp.Element) {
+		// 48-byte big-endian field element
+		be48 := e.Bytes()
+		// Left-pad to 64 bytes
+		var limb [64]byte
+		copy(limb[64-48:], be48[:])
+		encodedData = append(encodedData, limb[:]...)
+	}
 
-	// Add data[0] (first 32 bytes of group public key)
-	encodedData = append(encodedData, groupPublicKey[0:32]...)
-
-	// Add data[1] (second 32 bytes of group public key)
-	encodedData = append(encodedData, groupPublicKey[32:64]...)
-
-	// Add data[2] (last 32 bytes of group public key)
-	encodedData = append(encodedData, groupPublicKey[64:96]...)
+	// Note: gnark-crypto stores E2 as (A0, A1). We need c0 then c1.
+	// g2.X.A0 = c0, g2.X.A1 = c1; same for Y.
+	appendFp64(g2.X.A0)
+	appendFp64(g2.X.A1)
+	appendFp64(g2.Y.A0)
+	appendFp64(g2.Y.A1)
 
 	// Compute keccak256 hash (Ethereum-compatible)
 	hash := sha3.NewLegacyKeccak256()

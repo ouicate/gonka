@@ -1,20 +1,21 @@
 package keeper
 
 import (
-	"encoding/binary"
 	"fmt"
 	"math/big"
 
 	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"github.com/consensys/gnark-crypto/ecc/bls12-381/fp"
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
+	"github.com/consensys/gnark-crypto/ecc/bls12-381/hash_to_curve"
 	"github.com/productscience/inference/x/bls/types"
-	"golang.org/x/crypto/sha3"
 )
 
 // computeParticipantPublicKey computes individual BLS public key for participant's slots
 func (k Keeper) computeParticipantPublicKey(epochBLSData *types.EpochBLSData, slotIndices []uint32) ([]byte, error) {
 	// Initialize aggregated public key as G2 identity
 	var aggregatedPubKey bls12381.G2Affine
+	aggregatedPubKey.SetInfinity()
 
 	// For each slot assigned to this participant
 	for _, slotIndex := range slotIndices {
@@ -49,10 +50,14 @@ func (k Keeper) computeParticipantPublicKey(epochBLSData *types.EpochBLSData, sl
 // evaluateCommitmentPolynomial evaluates polynomial at given slot index
 func (k Keeper) evaluateCommitmentPolynomial(commitments [][]byte, slotIndex uint32) (bls12381.G2Affine, error) {
 	var result bls12381.G2Affine
+	result.SetInfinity()
 
-	// Evaluate polynomial: result = Σ(commitments[i] * slotIndex^i)
-	slotIndexBig := big.NewInt(int64(slotIndex))
-	power := big.NewInt(1) // slotIndex^0 = 1
+	// Evaluate polynomial at x = slotIndex+1 using Fr arithmetic:
+	// result = Σ(commitments[i] * x^i)
+	var x fr.Element
+	x.SetUint64(uint64(slotIndex + 1))
+	var power fr.Element
+	power.SetOne() // x^0 = 1
 
 	for i, commitmentBytes := range commitments {
 		if len(commitmentBytes) != 96 {
@@ -65,15 +70,15 @@ func (k Keeper) evaluateCommitmentPolynomial(commitments [][]byte, slotIndex uin
 			return result, fmt.Errorf("failed to unmarshal commitment %d: %w", i, err)
 		}
 
-		// Multiply commitment by slotIndex^i
+		// Multiply commitment by x^i
 		var term bls12381.G2Affine
-		term.ScalarMultiplication(&commitment, power)
+		term.ScalarMultiplication(&commitment, power.BigInt(new(big.Int)))
 
 		// Add to result
 		result.Add(&result, &term)
 
-		// Update power for next iteration: power *= slotIndex
-		power.Mul(power, slotIndexBig)
+		// Update power for next iteration: power *= x
+		power.Mul(&power, &x)
 	}
 
 	return result, nil
@@ -150,8 +155,68 @@ func (k Keeper) aggregateBLSPartialSignatures(partialSignatures []types.PartialS
 		return nil, fmt.Errorf("no partial signatures to aggregate")
 	}
 
+	// Build the set of unique slot indices that participate in this aggregation.
+	slotSeen := make(map[uint32]struct{})
+	var slots []uint32
+	for _, ps := range partialSignatures {
+		for _, idx := range ps.SlotIndices {
+			if _, ok := slotSeen[idx]; !ok {
+				slotSeen[idx] = struct{}{}
+				slots = append(slots, idx)
+			}
+		}
+	}
+	if len(slots) == 0 {
+		return nil, fmt.Errorf("no slot indices present in partial signatures")
+	}
+
+	// Precompute field elements for each slot index.
+	xElems := make([]fr.Element, len(slots))
+	for i, idx := range slots {
+		// Use x-domain as slotIndex+1 to avoid x=0
+		xElems[i].SetUint64(uint64(idx + 1))
+	}
+
+	// Compute Lagrange coefficients λ_i(0) for each slot index at evaluation point 0.
+	// λ_i(0) = Π_{j≠i} (0 - x_j) / (x_i - x_j) in the BLS12-381 scalar field.
+	type lambdaVal = fr.Element
+	lambdaBySlot := make(map[uint32]lambdaVal, len(slots))
+	for i := range slots {
+		// numerator = Π_{j≠i} (-x_j)
+		var numerator fr.Element
+		numerator.SetOne()
+		for j := range slots {
+			if j == i {
+				continue
+			}
+			var term fr.Element
+			term.Neg(&xElems[j]) // -x_j
+			numerator.Mul(&numerator, &term)
+		}
+
+		// denominator = Π_{j≠i} (x_i - x_j)
+		var denominator fr.Element
+		denominator.SetOne()
+		for j := range slots {
+			if j == i {
+				continue
+			}
+			var diff fr.Element
+			diff.Sub(&xElems[i], &xElems[j]) // x_i - x_j
+			denominator.Mul(&denominator, &diff)
+		}
+
+		// lam = numerator * inverse(denominator)
+		var denInv fr.Element
+		denInv.Inverse(&denominator)
+		var lam fr.Element
+		lam.Mul(&numerator, &denInv)
+		lambdaBySlot[slots[i]] = lam
+	}
+
 	// Initialize aggregated signature as G1 identity (zero point)
 	var aggregatedSignature bls12381.G1Affine
+	aggregatedSignature.SetInfinity()
 
 	for i, partialSig := range partialSignatures {
 		// Parse each partial signature
@@ -165,8 +230,24 @@ func (k Keeper) aggregateBLSPartialSignatures(partialSignatures []types.PartialS
 			return nil, fmt.Errorf("failed to unmarshal signature at index %d: %w", i, err)
 		}
 
-		// Add to aggregated signature: aggregatedSignature += g1Signature
-		aggregatedSignature.Add(&aggregatedSignature, &g1Signature)
+		// Compute the participant's total Lagrange weight as the sum of λ for their slots.
+		var participantLambda fr.Element
+		participantLambda.SetZero()
+		for _, idx := range partialSig.SlotIndices {
+			lam, ok := lambdaBySlot[idx]
+			if !ok {
+				return nil, fmt.Errorf("missing Lagrange coefficient for slot index %d", idx)
+			}
+			participantLambda.Add(&participantLambda, &lam)
+		}
+
+		// Scale the participant's partial signature by their total Lagrange weight.
+		// Note: ScalarMultiplication takes a big.Int representing the scalar in Fr.
+		var scaledSig bls12381.G1Affine
+		scaledSig.ScalarMultiplication(&g1Signature, participantLambda.BigInt(new(big.Int)))
+
+		// Add to aggregated signature: aggregatedSignature += scaledSig
+		aggregatedSignature.Add(&aggregatedSignature, &scaledSig)
 	}
 
 	// Return compressed bytes
@@ -174,55 +255,24 @@ func (k Keeper) aggregateBLSPartialSignatures(partialSignatures []types.PartialS
 	return signatureBytes[:], nil
 }
 
-// hashToG1 converts a hash to a G1 point using proper hash-to-curve
-// Implements a simplified but secure hash-to-curve for BLS12-381 G1
+// hashToG1 maps a 32-byte message hash (interpreted as an Fp element) to a G1 point.
+// This mirrors the EIP-2537 MAP_FP_TO_G1: single-field-element SWU map + isogeny, then cofactor clear.
 func (k Keeper) hashToG1(hash []byte) (bls12381.G1Affine, error) {
-	// Implement simplified hash-to-curve following BLS standards approach
-	// This uses the "hash and try" method with a counter for security
-
-	var result bls12381.G1Affine
-
-	// Try up to 256 attempts to find a valid point
-	for counter := 0; counter < 256; counter++ {
-		// Create hash input with counter for domain separation
-		hashInput := make([]byte, len(hash)+4)
-		copy(hashInput, hash)
-		binary.BigEndian.PutUint32(hashInput[len(hash):], uint32(counter))
-
-		// Hash the input with counter using keccak256
-		hashFunc := sha3.NewLegacyKeccak256()
-		hashFunc.Write(hashInput)
-		attempt := hashFunc.Sum(nil)
-
-		// Try to create a valid G1 point from this hash
-		// Use the hash as x-coordinate and try to find a valid point
-		if k.trySetFromHash(&result, attempt) {
-			return result, nil
-		}
+	var out bls12381.G1Affine
+	if len(hash) != 32 {
+		return out, fmt.Errorf("message hash must be 32 bytes, got %d", len(hash))
 	}
-
-	return result, fmt.Errorf("failed to hash to G1 point after 256 attempts")
+	// Build 48-byte big-endian Fp element from 32-byte hash (left-pad with zeros)
+	var be [48]byte
+	copy(be[48-32:], hash)
+	var u fp.Element
+	u.SetBytes(be[:])
+	// Map to curve using single-field SWU, then apply isogeny to the curve
+	p := bls12381.MapToCurve1(&u)
+	hash_to_curve.G1Isogeny(&p.X, &p.Y)
+	// Clear cofactor to ensure point is in G1 subgroup
+	out.ClearCofactor(&p)
+	return out, nil
 }
 
-// trySetFromHash attempts to create a valid G1 point from a hash
-// This implements a simplified version of hash-to-curve point generation
-func (k Keeper) trySetFromHash(point *bls12381.G1Affine, hash []byte) bool {
-	// This is a simplified implementation of point generation from hash
-	// In production, use proper hash-to-curve implementation from BLS standards
-
-	// Create field element from hash
-	var x fr.Element
-	x.SetBytes(hash)
-
-	// Use the hash as a scalar multiplier with the generator
-	// This ensures we get a valid point on the curve
-	g1GenJac, _, _, _ := bls12381.Generators()
-	var g1Gen bls12381.G1Affine
-	g1Gen.FromJacobian(&g1GenJac)
-
-	// Multiply generator by the scalar derived from hash
-	point.ScalarMultiplication(&g1Gen, x.BigInt(new(big.Int)))
-
-	// Check if the point is valid (always true for scalar multiplication of generator)
-	return !point.IsInfinity()
-}
+// trySetFromHash removed; mapping now uses single-field SWU map aligned with EIP-2537.
