@@ -136,7 +136,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     uint64 public constant TIMEOUT_DURATION = 30 days;
 
     // Chain ID constants for cross-chain replay protection
-    bytes32 public immutable GONKA_CHAIN_ID;    // Source chain identifier (e.g., keccak256("gonka-mainnet-v1"))
+    bytes32 public immutable GONKA_CHAIN_ID;    // Source chain identifier (e.g., keccak256("gonka-mainnet"))
     bytes32 public immutable ETHEREUM_CHAIN_ID; // This chain identifier (e.g., bytes32(uint256(1)))
 
     // EIP-2537 precompiles

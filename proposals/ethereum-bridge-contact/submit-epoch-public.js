@@ -75,7 +75,7 @@ async function submitEpochPublic(contractAddress, epochId, groupPublicKey, valid
     console.log("- Valid:", keyInfo.valid ? "✓" : "✗");
     
     if (!keyInfo.valid) {
-        throw new Error("Invalid BLS public key. Expected 96 bytes.");
+        throw new Error("Invalid BLS public key. Expected 256 bytes.");
     }
     
     const hexPublicKey = base64ToHex(groupPublicKey);
@@ -226,8 +226,8 @@ function parseArgs() {
         console.error("\nArguments:");
         console.error("  contractAddress       - Deployed BridgeContract address");
         console.error("  epochId              - Epoch ID (must be sequential: latestEpoch + 1)");
-        console.error("  groupPublicKey       - Base64-encoded BLS public key (96 bytes)");
-        console.error("  validationSignature  - Base64-encoded BLS signature (48 bytes) from previous epoch");
+        console.error("  groupPublicKey       - Base64-encoded BLS public key (256 bytes, padded)");
+        console.error("  validationSignature  - Base64-encoded BLS signature (128 bytes, padded) from previous epoch");
         console.error("\nRequirements:");
         console.error("  - Contract must be in NORMAL_OPERATION mode");
         console.error("  - Epochs must be submitted sequentially (no gaps)");

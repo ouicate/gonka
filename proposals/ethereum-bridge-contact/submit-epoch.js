@@ -75,7 +75,7 @@ async function submitEpoch(contractAddress, epochId, groupPublicKey, validationS
     console.log("- Valid:", keyInfo.valid ? "✓" : "✗");
     
     if (!keyInfo.valid) {
-        throw new Error("Invalid BLS public key. Expected 96 bytes.");
+        throw new Error("Invalid BLS public key. Expected 256 bytes.");
     }
     
     const hexPublicKey = base64ToHex(groupPublicKey);
@@ -172,8 +172,8 @@ function parseArgs() {
         console.error("\nArguments:");
         console.error("  contractAddress       - Deployed BridgeContract address");
         console.error("  epochId              - Epoch ID (positive integer)");
-        console.error("  groupPublicKey       - Base64-encoded BLS public key (96 bytes)");
-        console.error("  validationSignature  - Base64-encoded BLS signature (48 bytes) or '0x' for genesis");
+        console.error("  groupPublicKey       - Base64-encoded BLS public key (256 bytes, padded)");
+        console.error("  validationSignature  - Base64-encoded BLS signature (128 bytes, padded) or '0x' for genesis");
         console.error("\nExamples:");
         console.error("  # Genesis epoch (epoch 1) - no signature needed");
         console.error('  node submit-epoch.js 0x1234... 1 "uLyVx3JCS..." "0x"');

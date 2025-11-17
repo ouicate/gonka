@@ -3,9 +3,9 @@
 
 /**
  * Convert base64-encoded BLS public key to hex format for contract submission
- * @param {string} base64Key - Base64-encoded BLS public key (96 bytes)
+ * @param {string} base64Key - Base64-encoded BLS public key (256 bytes, padded)
  * @returns {string} Hex-encoded key with 0x prefix
- * @throws {Error} If key length is not 96 bytes
+ * @throws {Error} If key length is not 256 bytes
  */
 function base64ToHex(base64Key) {
     // Remove any whitespace
@@ -14,10 +14,10 @@ function base64ToHex(base64Key) {
     // Decode base64 to Buffer
     const buffer = Buffer.from(cleanKey, 'base64');
     
-    // Verify it's exactly 96 bytes (G2 public key)
-    if (buffer.length !== 96) {
+    // Verify it's exactly 256 bytes (Padded G2 public key for EIP-2537)
+    if (buffer.length !== 256) {
         throw new Error(
-            `Invalid BLS public key length: expected 96 bytes, got ${buffer.length} bytes. ` +
+            `Invalid BLS public key length: expected 256 bytes, got ${buffer.length} bytes. ` +
             `Base64 input: "${cleanKey}"`
         );
     }
@@ -28,7 +28,7 @@ function base64ToHex(base64Key) {
 
 /**
  * Convert hex-encoded BLS public key back to base64 format
- * @param {string} hexKey - Hex-encoded BLS public key (0x-prefixed, 96 bytes)
+ * @param {string} hexKey - Hex-encoded BLS public key (0x-prefixed, 256 bytes)
  * @returns {string} Base64-encoded key
  * @throws {Error} If key format is invalid
  */
@@ -36,10 +36,10 @@ function hexToBase64(hexKey) {
     // Remove 0x prefix if present
     const cleanHex = hexKey.startsWith('0x') ? hexKey.slice(2) : hexKey;
     
-    // Verify hex length (96 bytes = 192 hex characters)
-    if (cleanHex.length !== 192) {
+    // Verify hex length (256 bytes = 512 hex characters)
+    if (cleanHex.length !== 512) {
         throw new Error(
-            `Invalid hex key length: expected 192 characters (96 bytes), got ${cleanHex.length} characters`
+            `Invalid hex key length: expected 512 characters (256 bytes), got ${cleanHex.length} characters`
         );
     }
     
@@ -52,9 +52,9 @@ function hexToBase64(hexKey) {
 
 /**
  * Convert base64-encoded BLS signature to hex format
- * @param {string} base64Sig - Base64-encoded BLS signature (48 bytes, G1 point)
+ * @param {string} base64Sig - Base64-encoded BLS signature (128 bytes, padded G1 point)
  * @returns {string} Hex-encoded signature with 0x prefix
- * @throws {Error} If signature length is not 48 bytes
+ * @throws {Error} If signature length is not 128 bytes
  */
 function base64SignatureToHex(base64Sig) {
     // Remove any whitespace
@@ -63,10 +63,10 @@ function base64SignatureToHex(base64Sig) {
     // Decode base64 to Buffer
     const buffer = Buffer.from(cleanSig, 'base64');
     
-    // Verify it's exactly 48 bytes (G1 signature)
-    if (buffer.length !== 48) {
+    // Verify it's exactly 128 bytes (Padded G1 signature for EIP-2537)
+    if (buffer.length !== 128) {
         throw new Error(
-            `Invalid BLS signature length: expected 48 bytes, got ${buffer.length} bytes. ` +
+            `Invalid BLS signature length: expected 128 bytes, got ${buffer.length} bytes. ` +
             `Base64 input: "${cleanSig}"`
         );
     }
@@ -83,7 +83,7 @@ function base64SignatureToHex(base64Sig) {
 function isValidBLSPublicKey(hexKey) {
     try {
         const cleanHex = hexKey.startsWith('0x') ? hexKey.slice(2) : hexKey;
-        return cleanHex.length === 192 && /^[0-9a-fA-F]+$/.test(cleanHex);
+        return cleanHex.length === 512 && /^[0-9a-fA-F]+$/.test(cleanHex);
     } catch {
         return false;
     }
@@ -96,8 +96,8 @@ function isValidBLSPublicKey(hexKey) {
  */
 function isValidBLSSignature(hexSig) {
     try {
-        const cleanHex = hexSig.startsWith('0x') ? hexSig.slice(2) : hexSig;
-        return cleanHex.length === 96 && /^[0-9a-fA-F]+$/.test(cleanHex);
+        const cleanHex = hexKey.startsWith('0x') ? hexKey.slice(2) : hexKey;
+        return cleanHex.length === 256 && /^[0-9a-fA-F]+$/.test(cleanHex);
     } catch {
         return false;
     }
@@ -105,18 +105,18 @@ function isValidBLSSignature(hexSig) {
 
 /**
  * Create an empty BLS signature (for genesis epoch validation)
- * @returns {string} Empty 48-byte signature in hex format
+ * @returns {string} Empty 128-byte signature in hex format
  */
 function emptySignature() {
-    return '0x' + '00'.repeat(48);
+    return '0x' + '00'.repeat(128);
 }
 
 /**
  * Create an empty BLS public key (for testing)
- * @returns {string} Empty 96-byte public key in hex format
+ * @returns {string} Empty 256-byte public key in hex format
  */
 function emptyPublicKey() {
-    return '0x' + '00'.repeat(96);
+    return '0x' + '00'.repeat(256);
 }
 
 /**
@@ -134,7 +134,7 @@ function inspectBLSKey(input) {
             return {
                 format: 'hex',
                 length: buffer.length,
-                valid: buffer.length === 96,
+                valid: buffer.length === 256,
                 hex: '0x' + cleanHex,
                 base64: buffer.toString('base64')
             };
@@ -143,7 +143,7 @@ function inspectBLSKey(input) {
             return {
                 format: 'base64',
                 length: buffer.length,
-                valid: buffer.length === 96,
+                valid: buffer.length === 256,
                 hex: '0x' + buffer.toString('hex'),
                 base64: input
             };

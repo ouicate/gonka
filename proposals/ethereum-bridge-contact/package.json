@@ -37,7 +37,9 @@
     "hardhat": "^3.0.15"
   },
   "dependencies": {
-    "@noble/curves": "^1.4.0"
+    "@chainsafe/bls": "^8.2.0",
+    "@chainsafe/blst": "^1.1.0",
+    "@noble/curves": "^2.0.1"
   },
   "repository": {
     "type": "git",
