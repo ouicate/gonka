@@ -140,7 +140,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     bytes32 public immutable ETHEREUM_CHAIN_ID; // This chain identifier (e.g., bytes32(uint256(1)))
 
     // EIP-2537 precompiles
-    address constant BLS12_PAIRING = 0x000000000000000000000000000000000000000f;       // BLS12_PAIRING_CHECK
+    address constant BLS12_PAIRING = 0x000000000000000000000000000000000000000F;       // BLS12_PAIRING_CHECK
     address constant BLS12_MAP_FP_TO_G1 = 0x0000000000000000000000000000000000000010;  // BLS12_MAP_FP_TO_G1
     
     // Operation type identifiers for message hash domain separation
@@ -290,7 +290,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
         uint64 epochId,
         bytes calldata groupPublicKey,
         bytes calldata validationSig
-    ) {
+    ) public {
         // Verify sequential submission
         if (epochId != epochMeta.latestEpochId + 1) {
             revert InvalidEpochSequence();
