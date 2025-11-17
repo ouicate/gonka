@@ -336,6 +336,11 @@ data class ApplicationAPI(
         get(url, "v1/bls/signatures/${requestId}")
     }
 
+    fun getBLSEpochWithUncompressed(epochId: Long): Map<String, Any> = wrapLog("GetBLSEpochWithUncompressed", false) {
+        val url = urlFor(SERVER_TYPE_PUBLIC)
+        get(url, "v1/bls/epochs/$epochId")
+    }
+
     inline fun <reified Out : Any> get(url: String, path: String): Out {
         val response = Fuel.get("$url/$path")
             .responseString()

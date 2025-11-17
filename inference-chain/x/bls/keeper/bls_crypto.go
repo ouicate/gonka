@@ -84,42 +84,23 @@ func (k Keeper) evaluateCommitmentPolynomial(commitments [][]byte, slotIndex uin
 	return result, nil
 }
 
-// verifyBLSPartialSignature verifies a BLS partial signature against participant's individual public key
+// verifyBLSPartialSignature verifies BLS partial signatures per-slot.
+// The signature payload may contain N concatenated 48-byte compressed G1 signatures,
+// and SlotIndices must have the same length N (1:1 mapping). Each (slot, sig)
+// is verified against the aggregated slot public key computed from commitments.
 func (k Keeper) verifyBLSPartialSignature(signature []byte, messageHash []byte, epochBLSData *types.EpochBLSData, slotIndices []uint32) bool {
-	// Compute the participant's individual public key from stored commitments
-	participantPublicKey, err := k.computeParticipantPublicKey(epochBLSData, slotIndices)
-	if err != nil {
-		k.Logger().Error("Failed to compute participant public key", "error", err)
+	// Sanity: signature must be multiple of 48 and match slots length
+	if len(signature)%48 != 0 {
+		k.Logger().Error("Invalid signature payload length", "length", len(signature))
+		return false
+	}
+	sigCount := len(signature) / 48
+	if sigCount != len(slotIndices) {
+		k.Logger().Error("Signature count mismatch", "sigCount", sigCount, "slots", len(slotIndices))
 		return false
 	}
 
-	// Parse the G1 signature (48 bytes compressed)
-	if len(signature) != 48 {
-		k.Logger().Error("Invalid signature length", "expected", 48, "actual", len(signature))
-		return false
-	}
-
-	var g1Signature bls12381.G1Affine
-	err = g1Signature.Unmarshal(signature)
-	if err != nil {
-		k.Logger().Error("Failed to unmarshal G1 signature", "error", err)
-		return false
-	}
-
-	// Parse the G2 participant public key (96 bytes compressed)
-	if len(participantPublicKey) != 96 {
-		k.Logger().Error("Invalid participant public key length", "expected", 96, "actual", len(participantPublicKey))
-		return false
-	}
-
-	var g2PublicKey bls12381.G2Affine
-	err = g2PublicKey.Unmarshal(participantPublicKey)
-	if err != nil {
-		k.Logger().Error("Failed to unmarshal G2 participant public key", "error", err)
-		return false
-	}
-
-	// Hash message to G1 point for BLS verification using proper hash-to-curve
+	// Hash message to G1 once
 	messageG1, err := k.hashToG1(messageHash)
 	if err != nil {
 		k.Logger().Error("Failed to hash message to G1", "error", err)
@@ -129,40 +110,91 @@ func (k Keeper) verifyBLSPartialSignature(signature []byte, messageHash []byte, 
 	// Verify using pairing: e(signature, G2_generator) == e(message_hash, participant_public_key)
 	_, _, _, g2Gen := bls12381.Generators()
 
-	// Compute pairing e(signature, G2_generator)
-	var pairing1 bls12381.GT
-	pairing1, err = bls12381.Pair([]bls12381.G1Affine{g1Signature}, []bls12381.G2Affine{g2Gen})
-	if err != nil {
-		k.Logger().Error("Failed to compute pairing 1", "error", err)
-		return false
-	}
+	// Verify each (slot, sig) pair independently
+	for i, slotIndex := range slotIndices {
+		start := i * 48
+		end := start + 48
+		sigBytes := signature[start:end]
 
-	// Compute pairing e(message_hash, participant_public_key)
-	var pairing2 bls12381.GT
-	pairing2, err = bls12381.Pair([]bls12381.G1Affine{messageG1}, []bls12381.G2Affine{g2PublicKey})
-	if err != nil {
-		k.Logger().Error("Failed to compute pairing 2", "error", err)
-		return false
-	}
+		// Parse G1 signature
+		var g1Signature bls12381.G1Affine
+		if err := g1Signature.Unmarshal(sigBytes); err != nil {
+			k.Logger().Error("Failed to unmarshal per-slot G1 signature", "slot", slotIndex, "error", err)
+			return false
+		}
 
-	// Check if pairings are equal
-	return pairing1.Equal(&pairing2)
+		// Compute aggregated slot public key across valid dealers
+		var slotPubKey bls12381.G2Affine
+		slotPubKey.SetInfinity()
+		for dealerIdx, isValid := range epochBLSData.ValidDealers {
+			if !isValid || dealerIdx >= len(epochBLSData.DealerParts) {
+				continue
+			}
+			dealerPart := epochBLSData.DealerParts[dealerIdx]
+			if dealerPart == nil || len(dealerPart.Commitments) == 0 {
+				continue
+			}
+			eval, err := k.evaluateCommitmentPolynomial(dealerPart.Commitments, slotIndex)
+			if err != nil {
+				k.Logger().Error("Failed to evaluate commitment polynomial", "dealerIdx", dealerIdx, "slot", slotIndex, "error", err)
+				return false
+			}
+			slotPubKey.Add(&slotPubKey, &eval)
+		}
+
+		// Pairing checks
+		p1, err := bls12381.Pair([]bls12381.G1Affine{g1Signature}, []bls12381.G2Affine{g2Gen})
+		if err != nil {
+			k.Logger().Error("Failed to compute pairing 1", "slot", slotIndex, "error", err)
+			return false
+		}
+		p2, err := bls12381.Pair([]bls12381.G1Affine{messageG1}, []bls12381.G2Affine{slotPubKey})
+		if err != nil {
+			k.Logger().Error("Failed to compute pairing 2", "slot", slotIndex, "error", err)
+			return false
+		}
+		if !p1.Equal(&p2) {
+			k.Logger().Error("Per-slot signature verification failed", "slot", slotIndex)
+			return false
+		}
+	}
+	return true
 }
 
-// aggregateBLSPartialSignatures aggregates multiple G1 partial signatures into a single signature
+// aggregateBLSPartialSignatures aggregates per-slot signatures into a single signature using Lagrange weights.
 func (k Keeper) aggregateBLSPartialSignatures(partialSignatures []types.PartialSignature) ([]byte, error) {
 	if len(partialSignatures) == 0 {
 		return nil, fmt.Errorf("no partial signatures to aggregate")
 	}
 
-	// Build the set of unique slot indices that participate in this aggregation.
+	// Flatten per-slot signatures
+	type slotSig struct {
+		slot uint32
+		sig  bls12381.G1Affine
+	}
+	var slotSigs []slotSig
 	slotSeen := make(map[uint32]struct{})
 	var slots []uint32
-	for _, ps := range partialSignatures {
-		for _, idx := range ps.SlotIndices {
-			if _, ok := slotSeen[idx]; !ok {
-				slotSeen[idx] = struct{}{}
-				slots = append(slots, idx)
+	for i, ps := range partialSignatures {
+		if len(ps.Signature)%48 != 0 {
+			return nil, fmt.Errorf("invalid signature payload at index %d: length=%d", i, len(ps.Signature))
+		}
+		count := len(ps.Signature) / 48
+		if count != len(ps.SlotIndices) {
+			return nil, fmt.Errorf("signature count mismatch at index %d: sigs=%d slots=%d", i, count, len(ps.SlotIndices))
+		}
+		for j := 0; j < count; j++ {
+			slot := ps.SlotIndices[j]
+			start := j * 48
+			end := start + 48
+			var g1 bls12381.G1Affine
+			if err := g1.Unmarshal(ps.Signature[start:end]); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal signature at batch %d item %d: %w", i, j, err)
+			}
+			slotSigs = append(slotSigs, slotSig{slot: slot, sig: g1})
+			if _, ok := slotSeen[slot]; !ok {
+				slotSeen[slot] = struct{}{}
+				slots = append(slots, slot)
 			}
 		}
 	}
@@ -218,35 +250,13 @@ func (k Keeper) aggregateBLSPartialSignatures(partialSignatures []types.PartialS
 	var aggregatedSignature bls12381.G1Affine
 	aggregatedSignature.SetInfinity()
 
-	for i, partialSig := range partialSignatures {
-		// Parse each partial signature
-		if len(partialSig.Signature) != 48 {
-			return nil, fmt.Errorf("invalid signature length at index %d: expected 48, got %d", i, len(partialSig.Signature))
+	for _, ss := range slotSigs {
+		lam, ok := lambdaBySlot[ss.slot]
+		if !ok {
+			return nil, fmt.Errorf("missing Lagrange coefficient for slot index %d", ss.slot)
 		}
-
-		var g1Signature bls12381.G1Affine
-		err := g1Signature.Unmarshal(partialSig.Signature)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal signature at index %d: %w", i, err)
-		}
-
-		// Compute the participant's total Lagrange weight as the sum of λ for their slots.
-		var participantLambda fr.Element
-		participantLambda.SetZero()
-		for _, idx := range partialSig.SlotIndices {
-			lam, ok := lambdaBySlot[idx]
-			if !ok {
-				return nil, fmt.Errorf("missing Lagrange coefficient for slot index %d", idx)
-			}
-			participantLambda.Add(&participantLambda, &lam)
-		}
-
-		// Scale the participant's partial signature by their total Lagrange weight.
-		// Note: ScalarMultiplication takes a big.Int representing the scalar in Fr.
 		var scaledSig bls12381.G1Affine
-		scaledSig.ScalarMultiplication(&g1Signature, participantLambda.BigInt(new(big.Int)))
-
-		// Add to aggregated signature: aggregatedSignature += scaledSig
+		scaledSig.ScalarMultiplication(&ss.sig, lam.BigInt(new(big.Int)))
 		aggregatedSignature.Add(&aggregatedSignature, &scaledSig)
 	}
 

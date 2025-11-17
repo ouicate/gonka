@@ -140,7 +140,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     bytes32 public immutable ETHEREUM_CHAIN_ID; // This chain identifier (e.g., bytes32(uint256(1)))
 
     // EIP-2537 precompiles
-    address constant BLS12_PAIRING = 0x000000000000000000000000000000000000000f;       // BLS12_PAIRING_CHECK
+    address constant BLS12_PAIRING = 0x000000000000000000000000000000000000000F;       // BLS12_PAIRING_CHECK
     address constant BLS12_MAP_FP_TO_G1 = 0x0000000000000000000000000000000000000010;  // BLS12_MAP_FP_TO_G1
     
     // Operation type identifiers for message hash domain separation
@@ -151,7 +151,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
     bytes constant FP_MODULUS = hex"000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";
     
     // Uncompressed G2 generator (X.c0, X.c1, Y.c0, Y.c1), each 64-byte big-endian (padded)
-    bytes constant G2_GENERATOR = hex"00000000000000000000000000000000024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb80000000000000000000000000000000013e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e000000000000000000000000000000000ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b8280100000000000000000000000000000000606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be";
+    bytes constant G2_GENERATOR = hex"00000000000000000000000000000000024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb80000000000000000000000000000000013e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e000000000000000000000000000000000ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801000000000000000000000000000000000606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be";
 
     // =============================================================================
     // EVENTS
@@ -227,12 +227,10 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
      * @dev Set a new group public key for an epoch (admin only during ADMIN_CONTROL)
      * @param epochId The epoch ID (must be sequential)
      * @param groupPublicKey The 256-byte G2 public key (uncompressed) for the epoch
-     * @param validationSig The validation signature from previous epoch (not stored)
      */
     function setGroupKey(
         uint64 epochId,
-        bytes calldata groupPublicKey,
-        bytes calldata validationSig
+        bytes calldata groupPublicKey
     ) external onlyOwner onlyAdminControl {
         // Verify sequential submission
         if (epochId < epochMeta.latestEpochId + 1) {
@@ -290,7 +288,7 @@ contract BridgeContract is ERC20, Ownable, ReentrancyGuard {
         uint64 epochId,
         bytes calldata groupPublicKey,
         bytes calldata validationSig
-    ) {
+    ) public {
         // Verify sequential submission
         if (epochId != epochMeta.latestEpochId + 1) {
             revert InvalidEpochSequence();
