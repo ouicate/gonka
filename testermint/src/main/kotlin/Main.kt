@@ -412,6 +412,7 @@ val cosmosJson: Gson = GsonBuilder()
     .registerTypeAdapter(java.lang.Double::class.java, DoubleSerializer())
     .registerTypeAdapter(java.lang.Float::class.java, FloatSerializer())
     .registerTypeAdapter(ConfirmationPoCPhase::class.java, ConfirmationPoCPhaseDeserializer())
+    .registerTypeAdapter(Account::class.java, AccountDeserializer())
     .registerMessages("com.productscience.data", FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
     .create()
 

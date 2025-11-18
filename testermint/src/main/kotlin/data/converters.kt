@@ -3,6 +3,7 @@ package com.productscience.data
 import com.google.gson.JsonDeserializationContext
 import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
@@ -128,5 +129,23 @@ class ConfirmationPoCPhaseDeserializer : JsonDeserializer<ConfirmationPoCPhase> 
         val intValue = json.asInt
         return ConfirmationPoCPhase.values().find { it.value == intValue }
             ?: throw IllegalArgumentException("Unknown ConfirmationPoCPhase value: $intValue")
+    }
+}
+
+class AccountDeserializer : JsonDeserializer<Account> {
+    override fun deserialize(
+        json: JsonElement,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): Account {
+        val jsonObject = json.asJsonObject
+        val type = jsonObject.get("type").asString
+        val valueElement = jsonObject.get("value")
+        
+        // Deserialize the value field as AccountValue
+        val accountValue = context?.deserialize<AccountValue>(valueElement, AccountValue::class.java)
+            ?: throw IllegalStateException("Failed to deserialize account value")
+        
+        return Account(type = type, value = accountValue)
     }
 }
