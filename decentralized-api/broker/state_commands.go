@@ -69,7 +69,7 @@ func (c StartPocCommand) Execute(b *Broker) {
 	for _, node := range b.nodes {
 		// Check if node should be operational based on admin state
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
-			logging.Info("Skipping PoC for administratively disabled node", types.PoC,
+			logging.Info("Skipping PoC for administratively disabled node. Defaulting to INFERENCE state", types.PoC,
 				"node_id", node.Node.Id,
 				"admin_enabled", node.State.AdminState.Enabled,
 				"admin_epoch", node.State.AdminState.Epoch,
@@ -100,7 +100,7 @@ func (c StartPocCommand) shouldMutateState(b *Broker, epochState *chainphase.Epo
 
 	for _, node := range b.nodes {
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) &&
-			node.State.IntendedStatus != types.HardwareNodeStatus_STOPPED {
+			node.State.IntendedStatus != types.HardwareNodeStatus_INFERENCE {
 
 			return true
 		}
@@ -185,7 +185,7 @@ func (c InitValidateCommand) Execute(b *Broker) {
 	for _, node := range b.nodes {
 		// Check if node should be operational based on admin state
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
-			logging.Info("Skipping PoC for administratively disabled node", types.PoC,
+			logging.Info("Skipping PoC for administratively disabled node. Defaulting to INFERENCE state", types.PoC,
 				"node_id", node.Node.Id,
 				"admin_enabled", node.State.AdminState.Enabled,
 				"admin_epoch", node.State.AdminState.Epoch,
@@ -215,7 +215,7 @@ func (c InitValidateCommand) shouldMutateState(b *Broker, epochState *chainphase
 
 	for _, node := range b.nodes {
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) &&
-			node.State.IntendedStatus != types.HardwareNodeStatus_STOPPED {
+			node.State.IntendedStatus != types.HardwareNodeStatus_INFERENCE {
 			return true
 		}
 
@@ -280,15 +280,7 @@ func (c InferenceUpAllCommand) Execute(b *Broker) {
 
 	b.mu.Lock()
 	for _, node := range b.nodes {
-		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) {
-			logging.Info("Skipping inference up for administratively disabled node", types.PoC,
-				"node_id", node.Node.Id,
-				"admin_enabled", node.State.AdminState.Enabled,
-				"admin_epoch", node.State.AdminState.Epoch,
-				"current_epoch", epochState,
-				"current_phase", epochState.CurrentPhase)
-			node.State.IntendedStatus = types.HardwareNodeStatus_INFERENCE
-		} else if node.State.IntendedStatus == types.HardwareNodeStatus_TRAINING {
+		if node.State.IntendedStatus == types.HardwareNodeStatus_TRAINING {
 			logging.Info("Skipping inference up for node in training state", types.PoC,
 				"node_id", node.Node.Id,
 				"current_epoch", epochState,
@@ -316,11 +308,6 @@ func (c InferenceUpAllCommand) shouldMutateState(b *Broker, epochState *chainpha
 	defer b.mu.RUnlock()
 
 	for _, node := range b.nodes {
-		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) &&
-			node.State.IntendedStatus != types.HardwareNodeStatus_STOPPED {
-			return true
-		}
-
 		if node.State.IntendedStatus == types.HardwareNodeStatus_TRAINING {
 			continue
 		}
