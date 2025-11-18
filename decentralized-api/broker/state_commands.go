@@ -75,7 +75,7 @@ func (c StartPocCommand) Execute(b *Broker) {
 				"admin_epoch", node.State.AdminState.Epoch,
 				"current_epoch", epochState,
 				"current_phase", epochState.CurrentPhase)
-			node.State.IntendedStatus = types.HardwareNodeStatus_STOPPED
+			node.State.IntendedStatus = types.HardwareNodeStatus_INFERENCE
 		} else if node.State.ShouldContinueInference() {
 			// Node should continue inference service based on POC_SLOT allocation
 			// TODO: change logs to debug
@@ -101,6 +101,7 @@ func (c StartPocCommand) shouldMutateState(b *Broker, epochState *chainphase.Epo
 	for _, node := range b.nodes {
 		if !node.State.ShouldBeOperational(epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase) &&
 			node.State.IntendedStatus != types.HardwareNodeStatus_STOPPED {
+
 			return true
 		}
 
@@ -190,7 +191,7 @@ func (c InitValidateCommand) Execute(b *Broker) {
 				"admin_epoch", node.State.AdminState.Epoch,
 				"current_epoch", epochState,
 				"current_phase", epochState.CurrentPhase)
-			node.State.IntendedStatus = types.HardwareNodeStatus_STOPPED
+			node.State.IntendedStatus = types.HardwareNodeStatus_INFERENCE
 		} else if node.State.ShouldContinueInference() {
 			// Node should continue inference service based on POC_SLOT allocation
 			logging.Info("Keeping node in inference service mode due to POC_SLOT allocation", types.PoC,
@@ -286,7 +287,7 @@ func (c InferenceUpAllCommand) Execute(b *Broker) {
 				"admin_epoch", node.State.AdminState.Epoch,
 				"current_epoch", epochState,
 				"current_phase", epochState.CurrentPhase)
-			node.State.IntendedStatus = types.HardwareNodeStatus_STOPPED
+			node.State.IntendedStatus = types.HardwareNodeStatus_INFERENCE
 		} else if node.State.IntendedStatus == types.HardwareNodeStatus_TRAINING {
 			logging.Info("Skipping inference up for node in training state", types.PoC,
 				"node_id", node.Node.Id,
