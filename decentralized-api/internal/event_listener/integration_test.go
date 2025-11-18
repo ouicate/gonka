@@ -746,10 +746,11 @@ func TestNodeDisableScenario_Integration(t *testing.T) {
 		assert.Equal(t, 1, node2Client.InitValidateCalled, "Enabled node-2 should receive InitGenerate call")
 	})
 
-	node1Expected := NodeClientAssertion{StopCalled: 0, InitGenerateCalled: 0, InitValidateCalled: 0, InferenceUpCalled: 0}
+	node1Expected := NodeClientAssertion{StopCalled: 1, InitGenerateCalled: 0, InitValidateCalled: 0, InferenceUpCalled: 1}
 	assertNodeClient(t, node1Expected, node1Client)
 	setup.assertNode("node-1", func(n broker.NodeResponse) {
-		require.Equal(t, types.HardwareNodeStatus_STOPPED, n.State.CurrentStatus)
+		// Default state is inference
+		require.Equal(t, types.HardwareNodeStatus_INFERENCE, n.State.CurrentStatus)
 	})
 
 	node2Expected := NodeClientAssertion{StopCalled: 1, InitGenerateCalled: 1, InitValidateCalled: 1, InferenceUpCalled: 1}
@@ -797,7 +798,7 @@ func TestNodeEnableScenario_Integration(t *testing.T) {
 	require.Equal(t, 0, node1Client.InitGenerateCalled, "Disabled node-1 should NOT receive InitGenerate call")
 	require.Equal(t, 1, node2Client.InitGenerateCalled, "Enabled node-2 should receive InitGenerate call")
 	setup.assertNode("node-1", func(n broker.NodeResponse) {
-		require.Equal(t, types.HardwareNodeStatus_STOPPED, n.State.CurrentStatus)
+		require.Equal(t, types.HardwareNodeStatus_INFERENCE, n.State.CurrentStatus)
 	})
 	setup.assertNode("node-2", func(n broker.NodeResponse) {
 		require.Equal(t, types.HardwareNodeStatus_POC, n.State.CurrentStatus)
