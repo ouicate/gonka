@@ -118,7 +118,7 @@ func TestGetUpgradeStatus(t *testing.T) {
 func TestPostVersionStatus(t *testing.T) {
 	s, configManager, mockClientFactory := setupTestServer(t)
 
-	nodeConfig := apiconfig.InferenceNodeConfig{Id: "node-1", Host: "localhost", PoCPort: 8081, PoCSegment: "/api/v1"}
+	nodeConfig := apiconfig.InferenceNodeConfig{Id: "node-1", Host: "localhost", PoCPort: 8081, PoCSegment: "/api/v1", InferencePort: 8080, InferenceSegment: "/api/v1"}
 	nodes := configManager.GetNodes()
 	nodes = append(nodes, nodeConfig)
 	err := configManager.SetNodes(nodes)
