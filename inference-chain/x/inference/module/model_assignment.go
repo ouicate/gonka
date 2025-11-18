@@ -80,9 +80,119 @@ func sortMLNodesByNodeId(nodes []*types.MLNodeInfo) {
 	})
 }
 
+type mlNodeDedupDecision struct {
+	kept    *types.MLNodeInfo
+	dropped []*types.MLNodeInfo
+}
+
+// dedupMLNodesById enforces deterministic uniqueness for ML node slices.
+// Hardware node submissions already reject duplicate LocalIds (see msg_server_submit_hardware_diff.go),
+// but once MLNodeInfo snapshots are persisted we double-check here before any scheduling logic runs.
+// When multiple entries share the same NodeId we keep the one with the highest PocWeight, then Throughput,
+// then TimeslotAllocation signature to keep behavior predictable.
+func dedupMLNodesById(nodes []*types.MLNodeInfo) ([]*types.MLNodeInfo, map[string]mlNodeDedupDecision) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
+
+	bestById := make(map[string]*types.MLNodeInfo, len(nodes))
+	stats := make(map[string]mlNodeDedupDecision)
+
+	for _, node := range nodes {
+		if node == nil {
+			continue
+		}
+		if existing, ok := bestById[node.NodeId]; ok {
+			decision := stats[node.NodeId]
+			if compareMLNodePreference(node, existing) > 0 {
+				decision.dropped = append(decision.dropped, existing)
+				bestById[node.NodeId] = node
+				decision.kept = node
+			} else {
+				decision.kept = existing
+				decision.dropped = append(decision.dropped, node)
+			}
+			stats[node.NodeId] = decision
+			continue
+		}
+		bestById[node.NodeId] = node
+	}
+
+	deduped := make([]*types.MLNodeInfo, 0, len(bestById))
+	for _, node := range bestById {
+		deduped = append(deduped, node)
+	}
+
+	slices.SortFunc(deduped, func(a, b *types.MLNodeInfo) int {
+		switch {
+		case a.NodeId < b.NodeId:
+			return -1
+		case a.NodeId > b.NodeId:
+			return 1
+		}
+		return compareMLNodePreference(a, b)
+	})
+
+	if len(deduped) == 0 {
+		return nil, stats
+	}
+
+	return deduped, stats
+}
+
+func compareMLNodePreference(a, b *types.MLNodeInfo) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+	switch {
+	case a.PocWeight > b.PocWeight:
+		return 1
+	case a.PocWeight < b.PocWeight:
+		return -1
+	}
+	switch {
+	case a.Throughput > b.Throughput:
+		return 1
+	case a.Throughput < b.Throughput:
+		return -1
+	}
+	return compareBoolSlices(a.TimeslotAllocation, b.TimeslotAllocation)
+}
+
+func compareBoolSlices(a, b []bool) int {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	for i := 0; i < minLen; i++ {
+		if a[i] == b[i] {
+			continue
+		}
+		if a[i] {
+			return 1
+		}
+		return -1
+	}
+	switch {
+	case len(a) > len(b):
+		return 1
+	case len(a) < len(b):
+		return -1
+	default:
+		return 0
+	}
+}
+
 func (e *EpochMLNodeData) GetAllIndividualNodeWeights() []int64 {
 	weights := make([]int64, 0)
-	for _, modelData := range e.data {
+	for _, modelId := range sortedKeys(e.data) {
+		modelData := e.data[modelId]
 		for _, nodes := range modelData {
 			for _, node := range nodes {
 				weights = append(weights, node.PocWeight)
@@ -94,7 +204,8 @@ func (e *EpochMLNodeData) GetAllIndividualNodeWeights() []int64 {
 
 func (e *EpochMLNodeData) GetAllParticipantWeights() []int64 {
 	participantWeights := make(map[string]int64)
-	for _, modelData := range e.data {
+	for _, modelId := range sortedKeys(e.data) {
+		modelData := e.data[modelId]
 		for participantAddr, nodes := range modelData {
 			for _, node := range nodes {
 				participantWeights[participantAddr] += node.PocWeight
@@ -196,6 +307,21 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 		}
 		ma.LogInfo("Original MLNodes", types.EpochGroup, "flow_context", FlowContext, "step", "pre_legacy_distribution", "participant_index", p.Index, "ml_nodes", originalMLNodes)
 
+		if len(originalMLNodes) > 0 {
+			dedupedNodes, dedupStats := dedupMLNodesById(originalMLNodes)
+			ma.logMLNodeDedupStats(
+				"Duplicate ML nodes detected before participant assignment",
+				dedupStats,
+				"flow_context", FlowContext,
+				"step", "dedup_participant_nodes",
+				"participant_index", p.Index,
+			)
+			originalMLNodes = dedupedNodes
+			if len(p.MlNodes) > 0 && p.MlNodes[0] != nil {
+				p.MlNodes[0].MlNodes = dedupedNodes
+			}
+		}
+
 		for _, mlNode := range originalMLNodes {
 			mlNode.TimeslotAllocation = []bool{true, false} // [PRE_POC_SLOT, POC_SLOT]
 		}
@@ -278,7 +404,18 @@ func (ma *ModelAssigner) AllocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 			previousEpochGroupData, found := ma.keeper.GetEpochGroupData(ctx, upcomingEpoch.Index-1, modelId)
 			if found {
 				for _, vw := range previousEpochGroupData.ValidationWeights {
-					previousEpochData.Set(modelId, vw.MemberAddress, vw.MlNodes)
+					dedupedNodes, dedupStats := dedupMLNodesById(vw.MlNodes)
+					ma.logMLNodeDedupStats(
+						"Duplicate ML nodes detected in previous epoch data",
+						dedupStats,
+						"flow_context", FlowContext,
+						"sub_flow_context", SubFlowContext,
+						"step", "dedup_previous_epoch_nodes",
+						"model_id", modelId,
+						"participant", vw.MemberAddress,
+						"epoch_index", upcomingEpoch.Index-1,
+					)
+					previousEpochData.Set(modelId, vw.MemberAddress, dedupedNodes)
 				}
 				ma.LogInfo("Loaded previous epoch data for model", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "load_prev_epoch_data", "model_id", modelId, "num_validation_weights", len(previousEpochGroupData.ValidationWeights))
 			}
@@ -293,7 +430,21 @@ func (ma *ModelAssigner) AllocateMLNodesForPoC(ctx context.Context, upcomingEpoc
 				ma.LogWarn("Model index out of bounds, skipping", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "model_index_oob", "participant_index", participant.Index, "model_id", modelId, "model_idx", modelIdx)
 				continue
 			}
-			currentEpochData.Set(modelId, participant.Index, participant.MlNodes[modelIdx].MlNodes)
+			if participant.MlNodes[modelIdx] == nil {
+				continue
+			}
+			dedupedNodes, dedupStats := dedupMLNodesById(participant.MlNodes[modelIdx].MlNodes)
+			ma.logMLNodeDedupStats(
+				"Duplicate ML nodes detected in current epoch data",
+				dedupStats,
+				"flow_context", FlowContext,
+				"sub_flow_context", SubFlowContext,
+				"step", "dedup_current_epoch_nodes",
+				"model_id", modelId,
+				"participant", participant.Index,
+			)
+			participant.MlNodes[modelIdx].MlNodes = dedupedNodes
+			currentEpochData.Set(modelId, participant.Index, dedupedNodes)
 		}
 		totalCurrentEpochWeight += participant.Weight
 	}
@@ -732,7 +883,8 @@ func calculatePerParticipantThreshold(epochData *EpochMLNodeData, participantWei
 	counts := make(map[string]int)
 
 	uniqueParticipants := make(map[string]bool)
-	for _, modelData := range epochData.data {
+	for _, modelId := range sortedKeys(epochData.data) {
+		modelData := epochData.data[modelId]
 		for participantAddr := range modelData {
 			uniqueParticipants[participantAddr] = true
 		}
@@ -746,7 +898,8 @@ func calculatePerParticipantThreshold(epochData *EpochMLNodeData, participantWei
 		}
 
 		nodeWeights := make([]int64, 0)
-		for _, modelData := range epochData.data {
+		for _, modelId := range sortedKeys(epochData.data) {
+			modelData := epochData.data[modelId]
 			if nodes, ok := modelData[participantAddr]; ok {
 				for _, node := range nodes {
 					nodeWeights = append(nodeWeights, node.PocWeight)
@@ -920,4 +1073,52 @@ func supportedModelsByNode(hardwareNodes *types.HardwareNodes, governanceModels 
 	}
 
 	return supportedModelsByNode
+}
+
+func (ma *ModelAssigner) logMLNodeDedupStats(message string, stats map[string]mlNodeDedupDecision, keyvals ...interface{}) {
+	if len(stats) == 0 {
+		return
+	}
+
+	for nodeId, decision := range stats {
+		if len(decision.dropped) == 0 {
+			continue
+		}
+
+		droppedWeights := make([]int64, 0, len(decision.dropped))
+		droppedThroughputs := make([]int64, 0, len(decision.dropped))
+		for _, dropped := range decision.dropped {
+			if dropped == nil {
+				continue
+			}
+			droppedWeights = append(droppedWeights, dropped.PocWeight)
+			droppedThroughputs = append(droppedThroughputs, dropped.Throughput)
+		}
+
+		fields := append([]interface{}{}, keyvals...)
+		fields = append(
+			fields,
+			"node_id", nodeId,
+			"kept_weight", mlNodeWeight(decision.kept),
+			"kept_throughput", mlNodeThroughput(decision.kept),
+			"dropped_count", len(decision.dropped),
+			"dropped_weights", droppedWeights,
+			"dropped_throughputs", droppedThroughputs,
+		)
+		ma.LogWarn(message, types.EpochGroup, fields...)
+	}
+}
+
+func mlNodeWeight(node *types.MLNodeInfo) int64 {
+	if node == nil {
+		return 0
+	}
+	return node.PocWeight
+}
+
+func mlNodeThroughput(node *types.MLNodeInfo) int64 {
+	if node == nil {
+		return 0
+	}
+	return node.Throughput
 }

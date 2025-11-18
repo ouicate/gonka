@@ -1837,3 +1837,123 @@ func TestAllocateMLNodesForPoC_MixedUniformAndHeterogeneous(t *testing.T) {
 	// Allocated weight should not exceed total
 	require.LessOrEqual(t, totalAllocatedWeight, totalWeight, "Allocated weight should not exceed total")
 }
+
+func TestDedupMLNodesById(t *testing.T) {
+	nodes := []*types.MLNodeInfo{
+		{NodeId: "node-b", PocWeight: 10, Throughput: 100},
+		{NodeId: "node-a", PocWeight: 5, Throughput: 50},
+		{NodeId: "node-b", PocWeight: 20, Throughput: 10},
+	}
+
+	deduped, stats := dedupMLNodesById(nodes)
+
+	require.Len(t, deduped, 2)
+	require.Equal(t, "node-a", deduped[0].NodeId)
+	require.Equal(t, "node-b", deduped[1].NodeId)
+	require.Equal(t, int64(20), deduped[1].PocWeight)
+
+	require.Contains(t, stats, "node-b")
+	require.Len(t, stats["node-b"].dropped, 1)
+	require.Equal(t, int64(10), stats["node-b"].dropped[0].PocWeight)
+}
+
+func TestSetModelsForParticipants_DedupesDuplicateNodes(t *testing.T) {
+	ctx := context.Background()
+	modelID := "model-dedup"
+	participantAddress := "participant-1"
+
+	mockKeeper := &mockKeeperForModelAssigner{
+		governanceModels: []types.Model{
+			{ProposedBy: "genesis", Id: modelID},
+		},
+		hardwareNodes: map[string]*types.HardwareNodes{
+			participantAddress: {
+				Participant: participantAddress,
+				HardwareNodes: []*types.HardwareNode{
+					{LocalId: "dup-node", Models: []string{modelID}},
+				},
+			},
+		},
+	}
+
+	participants := []*types.ActiveParticipant{
+		{
+			Index:  participantAddress,
+			Models: []string{modelID},
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "dup-node", PocWeight: 10, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "dup-node", PocWeight: 25, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+	}
+
+	modelAssigner := NewModelAssigner(mockKeeper, mockLogger{})
+	modelAssigner.setModelsForParticipants(ctx, participants, types.Epoch{Index: 1})
+
+	require.Len(t, participants[0].MlNodes, 1)
+	require.Len(t, participants[0].MlNodes[0].MlNodes, 1)
+	require.Equal(t, int64(25), participants[0].MlNodes[0].MlNodes[0].PocWeight)
+	require.Equal(t, "dup-node", participants[0].MlNodes[0].MlNodes[0].NodeId)
+}
+
+func TestAllocateMLNodesForPoC_DedupesBeforeAllocation(t *testing.T) {
+	ctx := context.Background()
+	modelID := "model-dedup"
+
+	params := types.DefaultParams()
+	params.EpochParams.PocSlotAllocation = &types.Decimal{Value: 5, Exponent: -1}
+
+	mockKeeper := &mockKeeperForModelAssigner{
+		governanceModels: []types.Model{
+			{ProposedBy: "genesis", Id: modelID},
+		},
+		params: &params,
+		epochGroupData: map[string]map[uint64]types.EpochGroupData{
+			modelID: {
+				0: {
+					ValidationWeights: []*types.ValidationWeight{
+						{
+							MemberAddress: "participant-1",
+							MlNodes: []*types.MLNodeInfo{
+								{NodeId: "dup-node", PocWeight: 40},
+								{NodeId: "dup-node", PocWeight: 10},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	participants := []*types.ActiveParticipant{
+		{
+			Index:  "participant-1",
+			Models: []string{modelID},
+			Weight: 70,
+			MlNodes: []*types.ModelMLNodes{
+				{
+					MlNodes: []*types.MLNodeInfo{
+						{NodeId: "dup-node", PocWeight: 50, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "dup-node", PocWeight: 30, TimeslotAllocation: []bool{true, false}},
+						{NodeId: "unique-node", PocWeight: 20, TimeslotAllocation: []bool{true, false}},
+					},
+				},
+			},
+		},
+	}
+
+	modelAssigner := NewModelAssigner(mockKeeper, mockLogger{})
+	modelAssigner.AllocateMLNodesForPoC(ctx, types.Epoch{Index: 1}, participants)
+
+	require.Len(t, participants[0].MlNodes, 1)
+	require.Len(t, participants[0].MlNodes[0].MlNodes, 2)
+	require.Equal(t, []string{"dup-node", "unique-node"}, []string{
+		participants[0].MlNodes[0].MlNodes[0].NodeId,
+		participants[0].MlNodes[0].MlNodes[1].NodeId,
+	})
+	require.Equal(t, int64(50), participants[0].MlNodes[0].MlNodes[0].PocWeight)
+}
