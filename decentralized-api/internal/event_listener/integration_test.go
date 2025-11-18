@@ -649,6 +649,86 @@ func TestRegularPocScenario(t *testing.T) {
 	})
 }
 
+func TestNodeUpdateSwitchesPocAddresses(t *testing.T) {
+	reconciliationConfig := testreconcilialtionConfig(4)
+	epochParams := defaultEpochParams
+	setup := createIntegrationTestSetup(&reconciliationConfig, &epochParams)
+
+	const (
+		nodeID      = "node-1"
+		initialPort = 8091
+	)
+
+	setup.addTestNode(nodeID, initialPort)
+	waitForNodeStatus(t, setup, nodeID, types.HardwareNodeStatus_STOPPED, 2*time.Second)
+
+	nodeClient := setup.getNodeClient(nodeID, initialPort)
+
+	var height int64 = 1
+	for height <= int64(reconciliationConfig.Inference.BlockInterval) {
+		require.NoError(t, setup.simulateBlock(height))
+		height++
+	}
+	waitForAsync(200 * time.Millisecond)
+	waitForNodeStatus(t, setup, nodeID, types.HardwareNodeStatus_INFERENCE, 2*time.Second)
+
+	assertNodeClient(t, NodeClientAssertion{StopCalled: 1, InitGenerateCalled: 0, InitValidateCalled: 0, InferenceUpCalled: 1}, nodeClient)
+
+	nodes, err := setup.NodeBroker.GetNodes()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(nodes))
+	originalNode := nodes[0].Node
+
+	oldPocURL := fmt.Sprintf("http://%s:%d%s", originalNode.Host, originalNode.PoCPort, originalNode.PoCSegment)
+	oldClient := setup.MockClientFactory.GetClientForNode(oldPocURL)
+	require.NotNil(t, oldClient, "expected ML client for original address")
+
+	updatedHost := "node1-updated-host"
+	updatedInferencePort := 18081
+	updatedPocPort := 18082
+	updatedConfig := apiconfig.InferenceNodeConfig{
+		Id:               nodeID,
+		Host:             updatedHost,
+		InferenceSegment: originalNode.InferenceSegment,
+		InferencePort:    updatedInferencePort,
+		PoCSegment:       originalNode.PoCSegment,
+		PoCPort:          updatedPocPort,
+		MaxConcurrent:    originalNode.MaxConcurrent,
+		Models:           make(map[string]apiconfig.ModelConfig),
+		Hardware:         originalNode.Hardware,
+	}
+	for modelID, args := range originalNode.Models {
+		updatedConfig.Models[modelID] = apiconfig.ModelConfig{Args: args.Args}
+	}
+
+	updateCmd := broker.NewUpdateNodeCommand(updatedConfig)
+	require.NoError(t, setup.NodeBroker.QueueMessage(updateCmd))
+	updateResp := <-updateCmd.Response
+	require.NotNil(t, updateResp)
+	require.Nil(t, updateResp.Error)
+
+	for height <= int64(setup.EpochParams.EpochLength) {
+		if height == int64(setup.EpochParams.EpochLength) {
+			setup.transitionChainStateToNextEpoch(height)
+		}
+		require.NoError(t, setup.simulateBlock(height))
+		height++
+	}
+
+	waitForAsync(500 * time.Millisecond)
+
+	newPocURL := fmt.Sprintf("http://%s:%d%s", updatedHost, updatedPocPort, originalNode.PoCSegment)
+	newClient := setup.MockClientFactory.GetClientForNode(newPocURL)
+	require.NotNil(t, newClient, "expected ML client to be recreated for updated address")
+
+	newClient.WithTryLock(t, func() {
+		assert.Greater(t, newClient.InitGenerateCalled, 0, "PoC should use updated address")
+	})
+	oldClient.WithTryLock(t, func() {
+		assert.Equal(t, 0, oldClient.InitGenerateCalled, "PoC should not use stale address")
+	})
+}
+
 type NodeClientAssertion struct {
 	StopCalled         int
 	InitGenerateCalled int
