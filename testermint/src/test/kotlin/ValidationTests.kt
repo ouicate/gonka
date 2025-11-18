@@ -145,7 +145,10 @@ class ValidationTests : TestermintTest() {
         }
         val helper = InferenceTestHelper(cluster, genesis)
         val lateValidator = cluster.joinPairs.first()
-        lateValidator.mock?.setInferenceErrorResponse(500)
+        val mlNodeVersionResponse = genesis.node.getMlNodeVersion()
+        val mlNodeVersion = mlNodeVersionResponse.mlnodeVersion.currentVersion
+        val segment = "/${mlNodeVersion}"
+        lateValidator.mock?.setInferenceErrorResponse(500, segment = segment)
         logSection("Make sure we're in safe inference zone")
         if (!genesis.getEpochData().safeForInference) {
             genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)

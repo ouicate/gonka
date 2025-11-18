@@ -148,13 +148,12 @@ func TestDowntimeParamsOutOfRangeReturnAlgorithmError(t *testing.T) {
 }
 
 func TestProbabilityOfConsecutiveFailures_PanicOnBadRate(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("Expected panic on invalid expectedFailureRate")
-		}
-	}()
+	// Test that invalid rates (< 0 or > 1) return zero instead of panicking
+	result := probabilityOfConsecutiveFailures(types.DecimalFromFloat(1.5).ToDecimal(), 1)
+	require.True(t, result.IsZero(), "Expected zero for invalid rate > 1")
 
-	_ = probabilityOfConsecutiveFailures(types.DecimalFromFloat(1.5).ToDecimal(), 1)
+	result = probabilityOfConsecutiveFailures(types.DecimalFromFloat(-0.5).ToDecimal(), 1)
+	require.True(t, result.IsZero(), "Expected zero for invalid rate < 0")
 }
 
 func TestGetStats(t *testing.T) {

@@ -14,7 +14,7 @@ const (
 	Ramping ParticipantStatusReason = "ramping"
 	// StatisticalInvalidations indicates the participant has statistically significant invalidations
 	StatisticalInvalidations ParticipantStatusReason = "statistical_invalidations"
-	// NoReason indicates no specific reason for the status
+	// NoReason indicates no reason for the status
 	NoReason ParticipantStatusReason = ""
 	// AlgorithmError Should NEVER happen unless we have bad algorithms or parameters
 	AlgorithmError ParticipantStatusReason = "algorithm_error"
@@ -163,7 +163,8 @@ func getStats(newValue *types.Participant) types.CurrentEpochStats {
 // probabilityOfConsecutiveFailures returns P(F^N|G) = x^N
 func probabilityOfConsecutiveFailures(expectedFailureRate decimal.Decimal, consecutiveFailures int64) decimal.Decimal {
 	if expectedFailureRate.LessThan(decimal.Zero) || expectedFailureRate.GreaterThan(decimal.NewFromInt(1)) {
-		panic("expectedFailureRate must be between 0 and 1")
+		// This won't happen
+		return decimal.Zero
 	}
 	if consecutiveFailures < 0 {
 		return decimal.Zero
