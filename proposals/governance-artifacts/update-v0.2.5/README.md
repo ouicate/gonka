@@ -6,7 +6,7 @@ This document outlines the proposed changes for on-chain software upgrade v0.2.5
 
 This PR updates the code for the `api` and `node` services and introduces the new service `bridge` for the native bridge with Ethereum. The PR modifies the container versions in `deploy/join/docker-compose.yml`.
 
-The binary versions will be updated via an on-chain upgrade proposal. For more information on the upgrade process, refer to [`/docs/upgrades.md`](../../../docs/upgrades.md).
+The binary versions will be updated via an on-chain upgrade proposal. For more information on the upgrade process, refer to [`/docs/upgrades.md`](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/docs/upgrades.md).
 
 Existing hosts are **not** required to upgrade their `api` and `node` containers. The updated container versions are intended for new hosts who join after the on-chain upgrade is complete.
 
@@ -37,9 +37,9 @@ Additionally, the version `v3.0.11-blackwell` is introduced for Blackwell GPUs (
 ## Further Steps
 
 The PR introduces 3 contracts:
-- [liquidity pool](../../../inference-chain/contracts/liquidity-pool/)
-- [wrapped token](../../../inference-chain/contracts/wrapped-token/)
-- [Ethereum contract](../../ethereum-bridge-contact/BridgeContract.sol)
+- [liquidity pool](https://github.com/gonka-ai/gonka/tree/upgrade-v0.2.5/inference-chain/contracts/liquidity-pool/)
+- [wrapped token](https://github.com/gonka-ai/gonka/tree/upgrade-v0.2.5/inference-chain/contracts/wrapped-token/)
+- [Ethereum contract](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/ethereum-bridge-contact/BridgeContract.sol)
 
 All contracts might be proposed for voter approval via separate proposals.
 
@@ -54,11 +54,11 @@ We encourage all reviewers to request access to our testnet environment to valid
 
 ## Migration 
 
-The on-chain migration logic and default values for new parameters are defined in [`upgrades.go`](../../../inference-chain/app/upgrades/v0_2_5/upgrades.go).
+The on-chain migration logic and default values for new parameters are defined in [`upgrades.go`](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/inference-chain/app/upgrades/v0_2_5/upgrades.go).
 
 Specific data migrations are implemented in:
-- [`migrations_confirmation_weight.go`](../../../inference-chain/x/inference/keeper/migrations_confirmation_weight.go): Initializes confirmation weights for the current epoch.
-- [`migrations_bridge.go`](../../../inference-chain/x/inference/keeper/migrations_bridge.go): Removes legacy bridge state and artifacts.
+- [`migrations_confirmation_weight.go`](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/inference-chain/x/inference/keeper/migrations_confirmation_weight.go): Initializes confirmation weights for the current epoch.
+- [`migrations_bridge.go`](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/inference-chain/x/inference/keeper/migrations_bridge.go): Removes legacy bridge state and artifacts.
 
 **Note on Inactive Participant Exclusion:**
 The parameters for the continuous exclusion of inactive participants (SPRT) are initialized with values that effectively disable the mechanism (requiring ~32k consecutive failures). This ensures the feature remains inactive until explicitly enabled via governance.
@@ -67,12 +67,11 @@ The parameters for the continuous exclusion of inactive participants (SPRT) are 
 The Confirmation PoC parameters are initialized to require 1 Confirmation PoC per Epoch.
 
 ## Changes
-
 ---
 ### Native Bridge 
 Commit: [f7470c1eab3ebdda30dda90b0d81131b7b472a64](https://github.com/gonka-ai/gonka/pull/404/commits/168f7a8652260528c56acb25d918e7be5a19beca).
 
-This commit introduces a native bridge for the Ethereum blockchain and contracts for its integration. Details can be found [here](bridge.md).
+This commit introduces a native bridge for the Ethereum blockchain and contracts for its integration. Details can be found [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/governance-artifacts/update-v0.2.5/bridge.md).
 
 ---
 
@@ -90,7 +89,7 @@ Commit: [101062297948f9a9574266adaf6439500502d6ba](https://github.com/gonka-ai/g
 This commit fixes the procedure for removing invalid and unavailable hosts from the EpochGroup.   
 It also introduces a mechanism for continuously excluding inactive participants using SPRT.
 
-Details: [here](../../invalid-participant-exclusion/README.md)
+Details: [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/invalid-participant-exclusion/README.md)
 
 ---
 
@@ -100,7 +99,7 @@ Commit: [e9dbf137b0fbb050c724877b4b607da88ab1dc64](https://github.com/gonka-ai/g
 
 This commit introduces Random Confirmation PoC - a new layer to verify inference-serving nodes maintain computational capacity during the whole epoch.
 
-Details: [here](../../random-poc/README.md)
+Details: [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/random-poc/README.md)
 
 ---
 
@@ -112,7 +111,7 @@ The chain automatically assigns a portion of MLNodes to serve inference during t
 To raise security, this commit proposes allocation of `POC_SLOT=true` by model weight percentages instead of per-participant halves, using a random subset of participants who served this model in the previous epoch.
 
 
-Details: [here](../../poc-schedule-v2/README.md)
+Details: [here](https://github.com/gonka-ai/gonka/blob/upgrade-v0.2.5/proposals/poc-schedule-v2/README.md)
 
 ---
 
