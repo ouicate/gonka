@@ -63,13 +63,13 @@ install:
 	@go install $(BUILD_FLAGS) -mod=readonly
 
 build: download-linux-deps
-    @echo "--> ensure dependencies have not been modified"
-    @go mod verify
-    @echo "--> building decentralized-api"
-    @echo "BUILD_FLAGS = $(BUILD_FLAGS)"
-    @CGO_ENABLED=1 CC=gcc \
-        CGO_LDFLAGS="-L$(PWD)/build/deps -lm" \
-        go build $(BUILD_FLAGS) -o ./build/dapi
+	@echo "--> ensure dependencies have not been modified"
+	@go mod verify
+	@echo "--> building decentralized-api"
+	@echo "BUILD_FLAGS = $(BUILD_FLAGS)"
+	@CGO_ENABLED=1 CC=gcc \
+		CGO_LDFLAGS="-L$(PWD)/build/deps -lm" \
+		go build $(BUILD_FLAGS) -o ./build/dapi
 
 build-docker:
 	rm -rf build/
@@ -122,10 +122,10 @@ build-for-upgrade-arm:
 	@echo "ARM builds disabled"
 
 download-linux-deps:
-    @echo "--> Downloading static wasmvm library for Linux (x86_64)..."
-    @mkdir -p build/deps
-    @curl -L -o build/deps/libwasmvm_muslc.a $(WASMVM_STATIC_LINUX_X64_URL)
-    @echo "API dependencies downloaded to ./build/deps/"
+	@echo "--> Downloading static wasmvm library for Linux (x86_64)..."
+	@mkdir -p build/deps
+	@curl -L -o build/deps/libwasmvm_muslc.a $(WASMVM_STATIC_LINUX_X64_URL)
+	@echo "API dependencies downloaded to ./build/deps/"
 
 #################################################
 # CROSS-COMPILATION SECTION
