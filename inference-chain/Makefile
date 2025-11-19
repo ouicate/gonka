@@ -58,7 +58,7 @@ build:
 download-linux-deps:
 	@echo "--> Downloading static wasmvm library for Linux (x86_64)..."
 	@mkdir -p build/deps
-	@curl -L -o build/deps/libwasmvm_muslc.a $(WASMVM_STATIC_LINUX_X64_URL)
+	@curl -L -o build/deps/libwasmvm_muslc.x86_64.a $(WASMVM_STATIC_LINUX_X64_URL)
 	@echo "Dependencies downloaded to ./build/deps/"
 
 define DOCKER_BUILD
