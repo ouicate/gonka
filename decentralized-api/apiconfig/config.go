@@ -96,7 +96,7 @@ func ValidateInferenceNodeBasic(node InferenceNodeConfig) []string {
 	// Validate host/baseURL configuration
 	// ensures that a node configuration uses either the legacy host/port registration or the new baseURL registration, but not both.
 	// When baseURL is provided, it must be a valid HTTP(S) URL. AuthToken is always optional (no validation needed)
-	hasHostPorts := strings.TrimSpace(node.Host) != "" && node.InferencePort > 0 && node.PoCPort > 0
+	hasHostPorts := strings.TrimSpace(node.Host) != "" || node.InferencePort > 0 || node.PoCPort > 0
 	hasBaseURL := strings.TrimSpace(node.BaseURL) != ""
 
 	if hasHostPorts && hasBaseURL {
