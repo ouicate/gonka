@@ -503,6 +503,14 @@ func CalculateParticipantBitcoinRewards(
 	CheckAndPunishForDowntimeForParticipants(participants, participantWeights, logger)
 	logger.Info("Bitcoin Rewards: weights after downtime check", "participants", participantWeights)
 
+	// Recalculate total weight after downtime punishment
+	// This ensures fair distribution based on actual eligible weights
+	totalPoCWeight = uint64(0)
+	for _, weight := range participantWeights {
+		totalPoCWeight += weight
+	}
+	logger.Info("Bitcoin Rewards: total weight after downtime punishment", "totalPoCWeight", totalPoCWeight)
+
 	// 5. Create settle results for each participant
 	settleResults := make([]*SettleResult, 0, len(participants))
 	var totalDistributed uint64 = 0
