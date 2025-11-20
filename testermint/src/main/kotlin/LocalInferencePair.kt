@@ -245,6 +245,16 @@ data class LocalInferencePair(
         api.addInferenceParticipant(self)
     }
 
+    fun setPocWeight(weight: Long, node: InferenceNode? = null) {
+        if (node == null) {
+            this.api.getNodes().forEach {
+                this.mock?.setPocResponse(weight, it.node.pocHost)
+            }
+        } else {
+            this.mock?.setPocResponse(weight, node.pocHost)
+        }
+    }
+
     /**
      * Sets PoC response on all mock servers for this participant.
      * This is useful for participants with multiple MLNodes (mock servers).
@@ -359,8 +369,14 @@ data class LocalInferencePair(
         return node.getStatus().syncInfo.latestBlockHeight
     }
 
-    fun changePoc(newPoc: Long, setNewValidatorsOffset: Int = 2) {
-        this.mock?.setPocResponse(newPoc)
+    fun changePoc(newPoc: Long, hostName: String? = null, setNewValidatorsOffset: Int = 2) {
+        if (hostName == null) {
+            this.api.getNodes().forEach {
+                this.mock?.setPocResponse(newPoc, it.node.host)
+            }
+        } else {
+            this.mock?.setPocResponse(newPoc, hostName)
+        }
         this.waitForStage(EpochStage.START_OF_POC)
         // CometBFT validators have a 1 block delay
         this.waitForStage(EpochStage.SET_NEW_VALIDATORS, setNewValidatorsOffset)

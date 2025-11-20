@@ -47,13 +47,10 @@ class ConfirmationPoCTests : TestermintTest() {
         }
         
         logSection("Setting PoC mocks for confirmation (same weight=10)")
-        genesis.mock?.setPocResponse(10)
-        genesis.mock?.setPocValidationResponse(10)
-        join1.mock?.setPocResponse(10)
-        join1.mock?.setPocValidationResponse(10)
-        join2.mock?.setPocResponse(10)
-        join2.mock?.setPocValidationResponse(10)
-        
+        genesis.setPocWeight(10)
+        join1.setPocWeight(10)
+        join2.setPocWeight(10)
+
         logSection("Waiting for confirmation PoC trigger during inference phase")
         val confirmationEvent = waitForConfirmationPoCTrigger(genesis)
         assertThat(confirmationEvent).isNotNull
@@ -157,12 +154,9 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("  Genesis: weight=10 (passes)")
         Logger.info("  Join1: weight=8 (fails but above alpha=7, no slashing)")
         Logger.info("  Join2: weight=10 (passes)")
-        genesis.mock?.setPocResponse(10)
-        genesis.mock?.setPocValidationResponse(10)
-        join1.mock?.setPocResponse(8)  // Lower weight, but above alpha threshold (0.70 * 10 = 7)
-        join1.mock?.setPocValidationResponse(8)
-        join2.mock?.setPocResponse(10)
-        join2.mock?.setPocValidationResponse(10)
+        genesis.setPocWeight(10)
+        join1.setPocWeight(8)
+        join2.setPocWeight(10)
 
         logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
@@ -175,13 +169,10 @@ class ConfirmationPoCTests : TestermintTest() {
         logSection("Waiting for confirmation PoC completion")
         waitForConfirmationPoCCompletion(genesis)
         Logger.info("Confirmation PoC completed (event cleared)")
-        genesis.mock?.setPocResponse(10)
-        genesis.mock?.setPocValidationResponse(10)
-        join1.mock?.setPocResponse(10)  // Lower weight, but above alpha threshold (0.70 * 10 = 7)
-        join1.mock?.setPocValidationResponse(10)
-        join2.mock?.setPocResponse(10)
-        join2.mock?.setPocValidationResponse(10)
-        
+        genesis.setPocWeight(10)
+        join1.setPocWeight(10)
+        join2.setPocWeight(10)
+
         logSection("Verifying no slashing occurred for Join1 (above alpha threshold)")
         val join1Address = join1.node.getColdAddress()
         val validatorsAfterPoC = genesis.node.getValidators()
@@ -294,12 +285,9 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("  Genesis: weight=10 (passes)")
         Logger.info("  Join1: weight=3 (fails, ratio=0.3 < alpha=0.5)")
         Logger.info("  Join2: weight=10 (passes)")
-        genesis.mock?.setPocResponse(10)
-        genesis.mock?.setPocValidationResponse(10)
-        join1.mock?.setPocResponse(3)  // Very low weight - fails alpha threshold (0.5 * 10 = 5)
-        join1.mock?.setPocValidationResponse(3)
-        join2.mock?.setPocResponse(10)
-        join2.mock?.setPocValidationResponse(10)
+        genesis.setPocWeight(10)
+        join1.setPocWeight(3)
+        join2.setPocWeight(10)
 
         logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
@@ -314,13 +302,10 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("Confirmation PoC completed (event cleared)")
         
         // Reset mocks to full weight after confirmation
-        genesis.mock?.setPocResponse(10)
-        genesis.mock?.setPocValidationResponse(10)
-        join1.mock?.setPocResponse(10)
-        join1.mock?.setPocValidationResponse(10)
-        join2.mock?.setPocResponse(10)
-        join2.mock?.setPocValidationResponse(10)
-        
+        genesis.setPocWeight(10)
+        join1.setPocWeight(10)
+        join2.setPocWeight(10)
+
         logSection("Verifying Join1 is jailed (removed from bonded validators)")
         val join1Address = join1.node.getColdAddress()
         val validatorsAfterPoC = genesis.node.getValidators()

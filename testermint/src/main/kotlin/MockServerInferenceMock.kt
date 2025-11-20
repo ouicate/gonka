@@ -152,11 +152,12 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
      * @param weight The number of nonces to generate
      * @param scenarioName The name of the scenario
      */
-    override fun setPocResponse(weight: Long, scenarioName: String) {
+    override fun setPocResponse(weight: Long, hostName: String, scenarioName: String) {
         val requestBody = """
             {
                 "weight": $weight,
-                "scenarioName": ${cosmosJson.toJson(scenarioName)}
+                "scenarioName": ${cosmosJson.toJson(scenarioName)},
+                "hostName": ${cosmosJson.toJson(hostName)}
             }
         """.trimIndent()
 
@@ -164,8 +165,11 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
             val (_, response, _) = Fuel.post("$baseUrl/api/v1/responses/poc")
                 .jsonBody(requestBody)
                 .responseString()
-
-            Logger.debug("Set POC response: $response")
+            if (response.statusCode != 200) {
+                Logger.error("Failed to set POC response: ${response.statusCode} ${response.responseMessage}")
+            } else {
+                Logger.debug("Set POC response: $response")
+            }
         } catch (e: Exception) {
             Logger.error("Failed to set POC response: ${e.message}")
         }

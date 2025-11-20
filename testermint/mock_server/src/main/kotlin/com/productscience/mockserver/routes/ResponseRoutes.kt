@@ -10,6 +10,8 @@ import com.productscience.mockserver.service.ResponseService
 import com.productscience.mockserver.model.OpenAIResponse
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.productscience.mockserver.service.HostName
+import com.productscience.mockserver.service.ScenarioName
 import org.slf4j.LoggerFactory
 
 /**
@@ -48,6 +50,7 @@ data class SetInferenceErrorResponseRequest(
  */
 data class SetPocResponseRequest(
     val weight: Long,
+    val hostName: String = "localhost",
     val scenarioName: String = "ModelState"
 )
 
@@ -130,8 +133,8 @@ fun Route.responseRoutes(responseService: ResponseService) {
     post("/api/v1/responses/poc") {
         try {
             val request = call.receive<SetPocResponseRequest>()
-            logger.info("Received SetPocResponseRequest. weight: ${request.weight}, scenario: ${request.scenarioName}")
-            responseService.setPocResponse(request.weight, request.scenarioName)
+            logger.info("Received SetPocResponseRequest. weight: ${request.weight}, scenario: ${request.scenarioName}, host: ${request.hostName}")
+            responseService.setPocResponse(request.weight, HostName(request.hostName),  ScenarioName(request.scenarioName))
 
             call.respond(
                 HttpStatusCode.OK,

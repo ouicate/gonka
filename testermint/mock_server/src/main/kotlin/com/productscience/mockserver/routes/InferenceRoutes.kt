@@ -7,7 +7,10 @@ import io.ktor.server.request.*
 import io.ktor.http.*
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.productscience.mockserver.getHost
 import com.productscience.mockserver.model.ModelState
+import com.productscience.mockserver.model.getModelState
+import com.productscience.mockserver.model.setModelState
 import com.productscience.mockserver.service.ResponseService
 import com.productscience.mockserver.service.SSEService
 import kotlinx.coroutines.delay
@@ -22,14 +25,15 @@ fun Route.inferenceRoutes(responseService: ResponseService, sseService: SSEServi
         val logger = LoggerFactory.getLogger("InferenceRoutes")
         logger.info("Received inference/up request")
 
+        val host = call.getHost()
         // This endpoint requires the state to be STOPPED
-        if (ModelState.getCurrentState() != ModelState.STOPPED) {
+        if (getModelState(host) != ModelState.STOPPED) {
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid state for inference up"))
             return@post
         }
 
         // Update the state to INFERENCE
-        ModelState.updateState(ModelState.INFERENCE)
+        setModelState(host, ModelState.INFERENCE)
 
         // Respond with 200 OK
         call.respond(HttpStatusCode.OK)
@@ -42,14 +46,15 @@ fun Route.inferenceRoutes(responseService: ResponseService, sseService: SSEServi
         val logger = LoggerFactory.getLogger("InferenceRoutes")
         logger.info("Received inference/up request" + if (version != null) " for version: $version" else "")
 
+        val host = call.getHost()
         // This endpoint requires the state to be STOPPED
-        if (ModelState.getCurrentState() != ModelState.STOPPED) {
+        if (getModelState(host) != ModelState.STOPPED) {
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid state for inference up"))
             return@post
         }
 
         // Update the state to INFERENCE
-        ModelState.updateState(ModelState.INFERENCE)
+        setModelState(host, ModelState.INFERENCE)
 
         // Respond with 200 OK
         call.respond(HttpStatusCode.OK)

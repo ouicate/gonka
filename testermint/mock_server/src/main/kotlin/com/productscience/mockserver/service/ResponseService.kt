@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.productscience.mockserver.model.OpenAIResponse
 import com.productscience.mockserver.model.ErrorResponse
+import com.productscience.mockserver.model.latestNonce
 import io.ktor.http.*
+import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -28,6 +31,10 @@ sealed class ResponseConfig {
     ) : ResponseConfig()
 }
 
+@JvmInline
+value class ScenarioName(val name:String)
+@JvmInline
+value class HostName(val name:String)
 /**
  * Service for managing and modifying responses for various endpoints.
  */
@@ -35,12 +42,13 @@ class ResponseService {
     private val objectMapper = ObjectMapper()
         .registerKotlinModule()
         .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+    private val logger = LoggerFactory.getLogger(ResponseService::class.java)
 
     // Store for inference responses by endpoint path and model
     private val inferenceResponses = ConcurrentHashMap<String, ResponseConfig>()
 
     // Store for POC responses
-    private val pocResponses = ConcurrentHashMap<String, Long>()
+    private val pocResponses = ConcurrentHashMap<Pair<HostName,ScenarioName>, Long>()
 
     // Store for the last inference request
     private val lastInferenceRequest = AtomicReference<String?>(null)
@@ -169,8 +177,9 @@ class ResponseService {
      * @param weight The number of nonces to generate
      * @param scenarioName The name of the scenario
      */
-    fun setPocResponse(weight: Long, scenarioName: String = "ModelState") {
-        pocResponses[scenarioName] = weight
+    fun setPocResponse(weight: Long, host: HostName, scenarioName: ScenarioName = ScenarioName("ModelState")) {
+        logger.info("Setting POC response weight for host: $host, scenario: $scenarioName, weight: $weight")
+        pocResponses[host to scenarioName] = weight
     }
 
     /**
@@ -179,8 +188,10 @@ class ResponseService {
      * @param scenarioName The name of the scenario
      * @return The weight, or null if not found
      */
-    fun getPocResponseWeight(scenarioName: String = "ModelState"): Long? {
-        return pocResponses[scenarioName]
+    fun getPocResponseWeight(hostName: HostName, scenarioName: ScenarioName = ScenarioName("ModelState")): Long? {
+        val weight = pocResponses[hostName to scenarioName]
+        logger.info("Found POC response weight for host: $hostName, scenario: $scenarioName, weight: $weight")
+        return weight
     }
 
     /**
@@ -201,9 +212,9 @@ class ResponseService {
     ): String {
         // Generate 'weight' number of nonces
         // nodeNumber makes sure nonces are unique in a multi-node setup
-        val start = (nodeNumber - 1) * weight + 1
-        val end = nodeNumber * weight
-        val nonces = (start..end).toList()
+        val start = latestNonce.getAndAdd(weight)
+        val end = start + weight
+        val nonces = (start until end).toList()
         // Generate distribution values evenly spaced from 0.0 to 1.0
         val dist = (1..weight).map { it.toDouble() / weight }
 

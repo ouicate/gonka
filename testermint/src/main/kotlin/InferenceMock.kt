@@ -40,7 +40,7 @@ interface IInferenceMock {
         model: String? = null
     ): StubMapping?
 
-    fun setPocResponse(weight: Long, scenarioName: String = "ModelState")
+    fun setPocResponse(weight: Long, hostName: String, scenarioName: String = "ModelState")
     fun setPocValidationResponse(weight: Long, scenarioName: String = "ModelState")
     fun getLastInferenceRequest(): InferenceRequestPayload?
     fun hasRequestsToVersionedEndpoint(segment: String): Boolean
@@ -149,7 +149,7 @@ class InferenceMock(port: Int, val name: String) : IInferenceMock {
         }
     }
 
-    override fun setPocResponse(weight: Long, scenarioName: String) {
+    override fun setPocResponse(weight: Long, hostName: String, scenarioName: String) {
         // Generate 'weight' number of nonces
         val nonces = (1..weight).toList()
         // Generate distribution values evenly spaced from 0.0 to 1.0
