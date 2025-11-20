@@ -68,7 +68,7 @@ services:
       - DAPI_API__ADMIN_SERVER_PORT=9200
     ports:
       - "9100:9100"
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     restart: always
   
   bridge:
