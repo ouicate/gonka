@@ -1,4 +1,4 @@
-# Invalid Participant Exclusion – Feature Specification
+# [IMPLEMENTED]: Invalid Participant Exclusion – Feature Specification
 
 ## **Overview**
 

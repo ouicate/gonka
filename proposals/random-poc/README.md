@@ -1,4 +1,4 @@
-# Proposal: Random Confirmation PoC
+# [IMPLEMENTED]: Random Confirmation PoC
 
 ## Problem
 

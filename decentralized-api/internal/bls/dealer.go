@@ -215,8 +215,8 @@ func (bm *BlsManager) generateDealerPart(epochID uint64, totalSlots, tDegree uin
 		for slotOffset := uint32(0); slotOffset < numSlots; slotOffset++ {
 			slotIndex := participant.SlotStartIndex + slotOffset
 
-			// Compute scalar share share_ki = Poly_k(slotIndex)
-			share := evaluatePolynomial(polynomial, slotIndex)
+			// Compute scalar share share_ki = Poly_k(slotIndex+1) to match chain's x-domain
+			share := evaluatePolynomial(polynomial, slotIndex+1)
 			shareBytes := share.Marshal()
 
 			// Encrypt the same share for all allowed public keys
