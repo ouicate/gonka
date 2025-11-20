@@ -28,12 +28,7 @@ func CreateUpgradeHandler(
 			fromVM["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
 		}
 
-		err := setBLSSlotParams(ctx, blsKeeper)
-		if err != nil {
-			return nil, err
-		}
-
-		err = setNewInvalidationParams(ctx, k, fromVM)
+		err := setNewInvalidationParams(ctx, k, fromVM)
 		if err != nil {
 			return nil, err
 		}
@@ -78,11 +73,4 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ConfirmationPocParams.UpgradeProtectionWindow = 500
 	params.EpochParams.PocSlotAllocation = types.DecimalFromFloat(0.1)
 	return k.SetParams(ctx, params)
-}
-
-func setBLSSlotParams(ctx context.Context, blsKeeper blskeeper.Keeper) error {
-	params := blsKeeper.GetParams(ctx)
-	params.ITotalSlots = 2000
-	params.TSlotsDegreeOffset = 1000 // Maintain floor(i/2) relationship
-	return blsKeeper.SetParams(ctx, params)
 }
