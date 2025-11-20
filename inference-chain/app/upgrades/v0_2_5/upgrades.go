@@ -6,6 +6,7 @@ import (
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	blskeeper "github.com/productscience/inference/x/bls/keeper"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
 )
@@ -17,6 +18,7 @@ func CreateUpgradeHandler(
 	mm *module.Manager,
 	configurator module.Configurator,
 	k keeper.Keeper,
+	blsKeeper blskeeper.Keeper,
 ) upgradetypes.UpgradeHandler {
 	return func(ctx context.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
 		k.Logger().Info("starting upgrade to " + UpgradeName)
@@ -26,7 +28,12 @@ func CreateUpgradeHandler(
 			fromVM["capability"] = mm.Modules["capability"].(module.HasConsensusVersion).ConsensusVersion()
 		}
 
-		err := setNewInvalidationParams(ctx, k, fromVM)
+		err := setBLSSlotParams(ctx, blsKeeper)
+		if err != nil {
+			return nil, err
+		}
+
+		err = setNewInvalidationParams(ctx, k, fromVM)
 		if err != nil {
 			return nil, err
 		}
@@ -71,4 +78,11 @@ func setNewInvalidationParams(ctx context.Context, k keeper.Keeper, vm module.Ve
 	params.ConfirmationPocParams.UpgradeProtectionWindow = 500
 	params.EpochParams.PocSlotAllocation = types.DecimalFromFloat(0.1)
 	return k.SetParams(ctx, params)
+}
+
+func setBLSSlotParams(ctx context.Context, blsKeeper blskeeper.Keeper) error {
+	params := blsKeeper.GetParams(ctx)
+	params.ITotalSlots = 2000
+	params.TSlotsDegreeOffset = 1000 // Maintain floor(i/2) relationship
+	return blsKeeper.SetParams(ctx, params)
 }
