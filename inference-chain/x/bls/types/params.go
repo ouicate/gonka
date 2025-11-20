@@ -42,11 +42,11 @@ func NewParams(
 // DefaultParams returns a default set of parameters for PoC
 func DefaultParams() Params {
 	return NewParams(
-		100, // i_total_slots: 100 for PoC (smaller than production 1000)
-		50,  // t_slots_degree_offset: floor(100/2) = 50
-		5,   // dealing_phase_duration_blocks: 5 blocks for PoC
-		3,   // verification_phase_duration_blocks: 3 blocks for PoC
-		10,  // signing_deadline_blocks: 10 blocks for PoC (enough time for controllers to respond)
+		2000, // i_total_slots: 100 for PoC (smaller than production 1000)
+		1000, // t_slots_degree_offset: floor(100/2) = 50
+		5,    // dealing_phase_duration_blocks: 5 blocks for PoC
+		3,    // verification_phase_duration_blocks: 3 blocks for PoC
+		10,   // signing_deadline_blocks: 10 blocks for PoC (enough time for controllers to respond)
 	)
 }
 
