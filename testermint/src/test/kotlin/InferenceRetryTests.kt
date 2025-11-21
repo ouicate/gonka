@@ -17,7 +17,7 @@ import com.productscience.runParallelInferencesWithResults
 class InferenceRetryTests : TestermintTest() {
     @Test
     fun `configure two nodes where one returns 500 on inference`() {
-        val (_, genesis) = initCluster(reboot = true, resetMlNodes = false)
+        val (_, genesis) = initCluster(reboot = true)
         genesis.addNodes(1)
         genesis.waitForNextEpoch()
 

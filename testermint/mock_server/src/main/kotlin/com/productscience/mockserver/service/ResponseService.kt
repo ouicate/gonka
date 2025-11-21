@@ -91,8 +91,8 @@ class ResponseService {
         val endpoint = "$segment1/v1/chat/completions"
         val key = Triple(Endpoint(endpoint), model, host)
         inferenceResponses[key] = ResponseConfig.Success(response, delay, streamDelay)
-        println("DEBUG: Stored response for host='${host?.name}', endpoint='$endpoint', model='$model'")
-        println("DEBUG: Response preview: ${response.take(50)}...")
+        logger.debug("Stored response for host='${host?.name}', endpoint='$endpoint', model='$model'")
+        logger.debug("Response preview: ${response.take(50)}...")
         return endpoint
     }
 
@@ -120,7 +120,7 @@ class ResponseService {
         val segment1 = if (cleanedSegment != null) "/$cleanedSegment" else ""
         val endpoint = "$segment1/v1/chat/completions"
         val errorResponse = ErrorResponse(statusCode, errorMessage, errorType)
-        println("DEBUG: Storing error response for host='${host?.name}', endpoint='$endpoint' with statusCode=$statusCode")
+        logger.debug("Stored error response for host='${host?.name}', endpoint='$endpoint'")
         // Store as generic (no model) error for this endpoint+host
         val key = Triple(Endpoint(endpoint), null, host)
         inferenceResponses[key] = ResponseConfig.Error(errorResponse, delay, streamDelay)
@@ -154,7 +154,7 @@ class ResponseService {
      * @return ResponseConfig object, or null if not found
      */
     fun getInferenceResponseConfig(endpoint: String, model: String? = null, host: HostName?): ResponseConfig? {
-        println("DEBUG: Getting inference response for host='${host?.name}', endpoint='$endpoint', model='$model'")
+        logger.debug("Getting inference response for host='${host?.name}', endpoint='$endpoint', model='$model'")
         val endpointKey = Endpoint(endpoint)
         return inferenceResponses[Triple(endpointKey, model?.let { ModelName(it) }, host)] ?:
           inferenceResponses[Triple(endpointKey, null, host)] ?:

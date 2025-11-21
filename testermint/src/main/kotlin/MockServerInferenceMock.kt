@@ -11,11 +11,12 @@ import java.time.Duration
 
 data class SetInferenceResponseRequest(
     val response: String,
-    val delay: Duration,
+    val delay: Int,
     @JsonProperty("stream_delay")
-    val streamDelay: Duration,
+    val streamDelay: Int,
     val segment: String,
     val model: String? = null,
+    @JsonProperty("host_name")
     val hostName: String? = null
 )
 
@@ -73,20 +74,15 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
         model: String?,
         hostName: String?
     ): StubMapping? {
-        val request = SetInferenceResponseRequest(response, delay, streamDelay, segment, model, hostName)
+        val request = SetInferenceResponseRequest(response, delay.toMillis().toInt(), streamDelay.toMillis().toInt(), segment, model, hostName)
 
-        try {
-            val (_, response, _) = Fuel.post("$baseUrl/api/v1/responses/inference")
-                .jsonBody(cosmosJson.toJson(request))
-                .responseString()
-            if (response.statusCode != 200) {
-                Logger.error("Failed to set inference response: ${response.statusCode} ${response.responseMessage}")
-                return null
-            } else {
-                Logger.debug("Set inference response: $response")
-            }
-        } catch (e: Exception) {
-            Logger.error("Failed to set inference response: ${e.message}")
+        val reqData = Fuel.post("$baseUrl/api/v1/responses/inference")
+            .jsonBody(cosmosJson.toJson(request))
+            .responseString()
+        if (reqData.second.statusCode != 200) {
+            logResponse(reqData, throwError = true)
+        } else {
+            Logger.debug("Set inference response: $response")
         }
 
         return null // StubMapping is not used in this implementation
@@ -162,10 +158,11 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
             val delay: Long,
             val stream_delay: Long,
             val segment: String,
+            val host_name: String? = null,
         )
 
         val request =
-            ErrorResponse(statusCode, errorMessage, errorType, delay.toMillis(), streamDelay.toMillis(), segment)
+            ErrorResponse(statusCode, errorMessage, errorType, delay.toMillis(), streamDelay.toMillis(), segment, hostName)
 
         try {
             val (_, response, _) = Fuel.post("$baseUrl/api/v1/responses/inference/error")

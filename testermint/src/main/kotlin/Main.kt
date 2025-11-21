@@ -347,7 +347,7 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
 
 private fun resetMlNodesToDefault(pair: LocalInferencePair) {
     val pairName = pair.name.trim('/')
-    val defaultNode = validNode.copy(host = "ml-0001.$pairName.test")
+    val defaultNode = validNode.copy(host = "ml-0000.$pairName.test")
 
     // We're not really supposed to change nodes in the middle of an epoch
     // This optimization might help avoid unnecessary changes

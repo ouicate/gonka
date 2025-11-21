@@ -58,7 +58,7 @@ class WebhookService(private val responseService: ResponseService) {
                     setBody(body)
                 }
             } catch (e: Exception) {
-                println("Error sending webhook: ${e.message}")
+                logger.error("Error sending webhook: ${e.message}", e)
             }
         }
     }
