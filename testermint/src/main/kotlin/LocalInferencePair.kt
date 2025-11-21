@@ -255,6 +255,7 @@ data class LocalInferencePair(
         }
     }
 
+
     /**
      * Sets PoC response on all mock servers for this participant.
      * This is useful for participants with multiple MLNodes (mock servers).
@@ -531,6 +532,17 @@ data class LocalInferencePair(
         }
     }
 
+    fun addNodes(nodesToAdd: Int): List<InferenceNode> {
+        val nodes = (1..nodesToAdd).map { i ->
+            validNode.copy(
+                id = "multinode$i",
+                host = hostName(i, this)
+            )
+        }
+
+        return this.api.addNodes(nodes)
+    }
+
 
     fun submitTransaction(json: String, waitForProcessed: Boolean = true): TxResponse {
         val start = Instant.now()
@@ -770,3 +782,5 @@ data class ApplicationConfig(
 fun Instant.toEpochNanos(): Long {
     return this.epochSecond * 1_000_000_000 + this.nano.toLong()
 }
+
+private fun hostName(i: Int, participant: LocalInferencePair) = "ml-${String.format("%04d", i)}.${participant.name.trimStart('/')}.test"

@@ -13,6 +13,7 @@ import com.productscience.mockserver.model.getModelState
 import com.productscience.mockserver.model.setModelState
 import com.productscience.mockserver.service.ResponseService
 import com.productscience.mockserver.service.SSEService
+import com.productscience.mockserver.service.HostName
 import kotlinx.coroutines.delay
 import org.slf4j.LoggerFactory
 
@@ -110,8 +111,9 @@ private suspend fun handleChatCompletions(call: ApplicationCall, responseService
     // Get the endpoint path
     val path = call.request.path()
 
-    // Get the response configuration from the ResponseService
-    val responseConfig = responseService.getInferenceResponseConfig(path, model)
+    // Get the response configuration from the ResponseService (per-host)
+    val hostName = HostName(call.getHost())
+    val responseConfig = responseService.getInferenceResponseConfig(path, model, hostName)
     logger.info("Retrieved response config for path $path: ${responseConfig != null}")
 
     // Default stream delay if not provided in the response

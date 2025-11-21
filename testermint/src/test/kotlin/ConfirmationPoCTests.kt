@@ -368,34 +368,30 @@ class ConfirmationPoCTests : TestermintTest() {
     fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation`() {
         logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
         
-        // Configure genesis with 3 MLNodes BEFORE cluster initialization
-        // Reuse existing docker-compose files for additional mock servers
-        // NOTE: Must use genesis, not join nodes! Join node init only starts specific services (api, mock-server, proxy)
-        // and doesn't start mock-server-2, mock-server-3. Genesis init starts ALL services.
-        val config = inferenceConfig.copy(
-            additionalDockerFilesByKeyName = mapOf(
-                GENESIS_KEY_NAME to listOf("docker-compose-local-mock-node-2.yml", "docker-compose-local-mock-node-3.yml")
-            ),
-            nodeConfigFileByKeyName = mapOf(
-                GENESIS_KEY_NAME to "node_payload_mock-server_genesis_3_nodes.json"
-            )
-        )
-        
         // Initialize cluster with custom spec for confirmation PoC testing
         val confirmationSpec = createConfirmationPoCSpec(expectedConfirmationsPerEpoch = 100, pocSlotAllocation = 0.05)
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
-            config = config,
             reboot = true,
             resetMlNodes = false  // Don't reset - we want to keep our 3-node configuration
         )
-        
-        logSection("✅ Cluster Initialized Successfully with genesis having 3 MLNodes!")
-        
+        logSection("Setting up mock weights to avoid power capping")
         val join1 = cluster.joinPairs[0]
         val join2 = cluster.joinPairs[1]
+        // Set genesis nodes to weight=10 per node (total 30), join nodes to weight=50 to avoid power capping Genesis
+        // Genesis: 30/130 = 23% < 30% (no capping)
+        // Note: Each node generates its own nonces, so setting to 10 means each of genesis's 3 nodes generates 10, totaling 30
+        genesis.addNodes(2)
+        genesis.setPocWeight(10)
+        join1.setPocWeight(50)
+        join2.setPocWeight(50)
+
+        genesis.waitForNextEpoch()
+
+        logSection("✅ Cluster Initialized Successfully with genesis having 3 MLNodes!")
         
+
         logSection("Verifying genesis has 3 mock server containers")
         // The additional mock servers should have been started by initCluster with reboot=true
         var genesisNodes = genesis.api.getNodes()
@@ -403,35 +399,19 @@ class ConfirmationPoCTests : TestermintTest() {
         genesisNodes.forEach { node ->
             Logger.info("  Node: ${node.node.id} at ${node.node.host}:${node.node.pocPort}")
         }
-        
-        logSection("Setting up mock weights to avoid power capping")
-        // Set genesis nodes to weight=10 per node (total 30), join nodes to weight=50 to avoid power capping Genesis
-        // Genesis: 30/130 = 23% < 30% (no capping)
-        // Note: Each node generates its own nonces, so setting to 10 means each of genesis's 3 nodes generates 10, totaling 30
-        genesis.setPocResponseOnAllMocks(10)
-        genesis.setPocValidationResponseOnAllMocks(10)
-        join1.setPocResponseOnAllMocks(50)
-        join1.setPocValidationResponseOnAllMocks(50)
-        join2.setPocResponseOnAllMocks(50)
-        join2.setPocValidationResponseOnAllMocks(50)
-        
-        logSection("Waiting for first PoC cycle to establish weight=50 for join nodes")
-        genesis.waitForStage(EpochStage.START_OF_POC)
-        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
-        
+
         logSection("Waiting for second PoC cycle to establish confirmation_weight=50 for join nodes")
         // The confirmation_weight is initialized from the previous epoch's weight during epoch formation
         // We need a second cycle so join nodes' confirmation_weight gets set to 50
-        genesis.waitForStage(EpochStage.START_OF_POC)
-        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
-        
+        genesis.waitForNextEpoch()
+
         logSection("Querying POC_SLOT allocation for Genesis's 3 nodes")
         genesisNodes = genesis.api.getNodes()
         assertThat(genesisNodes).hasSize(3)
         
         val pocSlotAllocation = genesisNodes.mapNotNull { nodeResponse ->
             val epochMlNodes = nodeResponse.state.epochMlNodes
-            if (epochMlNodes != null && epochMlNodes.isNotEmpty()) {
+            if (!epochMlNodes.isNullOrEmpty()) {
                 val (_, mlNodeInfo) = epochMlNodes.entries.first()
                 val timeslotAllocation = mlNodeInfo.timeslotAllocation
                 val pocSlot = timeslotAllocation.getOrNull(1) ?: false  // Index 1 is POC_SLOT
@@ -477,13 +457,10 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("    - Total confirmed weight: ${numPocSlotFalse * confirmedWeightPerNode}")
         Logger.info("  Join1: weight=50 per node (full confirmation)")
         Logger.info("  Join2: weight=50 per node (full confirmation)")
-        genesis.setPocResponseOnAllMocks(confirmedWeightPerNode)
-        genesis.setPocValidationResponseOnAllMocks(confirmedWeightPerNode)
-        join1.setPocResponseOnAllMocks(50)
-        join1.setPocValidationResponseOnAllMocks(50)
-        join2.setPocResponseOnAllMocks(50)
-        join2.setPocValidationResponseOnAllMocks(50)
-        
+        genesis.setPocWeight(confirmedWeightPerNode)
+        join1.setPocWeight(50)
+        join2.setPocWeight(50)
+
         logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
         Logger.info("Confirmation PoC generation phase active")
@@ -497,13 +474,10 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("Confirmation PoC completed (event cleared)")
         
         // Reset mocks to full weight after confirmation
-        genesis.setPocResponseOnAllMocks(10)
-        genesis.setPocValidationResponseOnAllMocks(10)
-        join1.setPocResponseOnAllMocks(50)
-        join1.setPocValidationResponseOnAllMocks(50)
-        join2.setPocResponseOnAllMocks(50)
-        join2.setPocValidationResponseOnAllMocks(50)
-        
+        genesis.setPocWeight(10)
+        join1.setPocWeight(50)
+        join2.setPocWeight(50)
+
         logSection("Waiting for NEXT epoch where confirmation weights will be applied")
         genesis.waitForStage(EpochStage.START_OF_POC)
         Logger.info("New epoch started, confirmation weights will be used in settlement")
@@ -566,19 +540,6 @@ class ConfirmationPoCTests : TestermintTest() {
     fun `confirmation PoC with multiple MLNodes - capped rewards with POC_SLOT allocation 2`() {
         logSection("=== TEST: Confirmation PoC with Multiple MLNodes - POC_SLOT Allocation ===")
 
-        // Configure genesis with 3 MLNodes BEFORE cluster initialization
-        // Reuse existing docker-compose files for additional mock servers
-        // NOTE: Must use genesis, not join nodes! Join node init only starts specific services (api, mock-server, proxy)
-        // and doesn't start mock-server-2, mock-server-3. Genesis init starts ALL services.
-        val config = inferenceConfig.copy(
-            additionalDockerFilesByKeyName = mapOf(
-                GENESIS_KEY_NAME to listOf("docker-compose-local-mock-node-2.yml", "docker-compose-local-mock-node-3.yml")
-            ),
-            nodeConfigFileByKeyName = mapOf(
-                GENESIS_KEY_NAME to "node_payload_mock-server_genesis_3_nodes.json"
-            )
-        )
-
         // Initialize cluster with custom spec for confirmation PoC testing
         val confirmationSpec = createConfirmationPoCSpec(
             expectedConfirmationsPerEpoch = 100,
@@ -587,15 +548,16 @@ class ConfirmationPoCTests : TestermintTest() {
         val (cluster, genesis) = initCluster(
             joinCount = 2,
             mergeSpec = confirmationSpec,
-            config = config,
             reboot = true,
             resetMlNodes = false  // Don't reset - we want to keep our 3-node configuration
         )
-
-        logSection("✅ Cluster Initialized Successfully with genesis having 3 MLNodes!")
-
+        logSection("Adding two nodes for genesis and setting power for all nodes")
         val join1 = cluster.joinPairs[0]
         val join2 = cluster.joinPairs[1]
+        genesis.setPocWeight(101)
+        join1.setPocWeight(200)
+        join2.setPocWeight(200)
+        genesis.waitForNextEpoch()
 
         logSection("Verifying genesis has 3 mock server containers")
         // The additional mock servers should have been started by initCluster with reboot=true
@@ -604,19 +566,6 @@ class ConfirmationPoCTests : TestermintTest() {
         genesisNodes.forEach { node ->
             Logger.info("  Node: ${node.node.id} at ${node.node.host}:${node.node.pocPort}")
         }
-
-        logSection("Setting up mock weights to avoid power capping")
-
-        genesis.setPocResponseOnAllMocks(101)
-        genesis.setPocValidationResponseOnAllMocks(101)
-        join1.setPocResponseOnAllMocks(200)
-        join1.setPocValidationResponseOnAllMocks(200)
-        join2.setPocResponseOnAllMocks(250)
-        join2.setPocValidationResponseOnAllMocks(250)
-
-        logSection("Waiting for first PoC cycle to establish for join nodes")
-        genesis.waitForStage(EpochStage.START_OF_POC)
-        genesis.waitForStage(EpochStage.CLAIM_REWARDS, offset = 2)
 
         logSection("Waiting for second PoC cycle to establish confirmation_weight=50 for join nodes")
         // The confirmation_weight is initialized from the previous epoch's weight during epoch formation
@@ -675,8 +624,7 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("    - Total confirmed weight: ${numPocSlotFalse * confirmedWeightPerNode}")
         Logger.info("  Join1: weight=200 per node (full confirmation)")
         Logger.info("  Join2: weight=250 per node (full confirmation)")
-        genesis.setPocResponseOnAllMocks(confirmedWeightPerNode)
-        genesis.setPocValidationResponseOnAllMocks(confirmedWeightPerNode)
+        genesis.setPocWeight(confirmedWeightPerNode)
 
         logSection("Waiting for confirmation PoC generation phase")
         waitForConfirmationPoCPhase(genesis, ConfirmationPoCPhase.CONFIRMATION_POC_GENERATION)
@@ -691,8 +639,7 @@ class ConfirmationPoCTests : TestermintTest() {
         Logger.info("Confirmation PoC completed (event cleared)")
 
         // Reset mocks to full weight after confirmation
-        genesis.setPocResponseOnAllMocks(101)
-        genesis.setPocValidationResponseOnAllMocks(101)
+        genesis.setPocWeight(101)
 
         logSection("Waiting for NEXT epoch where confirmation weights will be applied")
         genesis.waitForStage(EpochStage.START_OF_POC)

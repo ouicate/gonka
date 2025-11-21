@@ -25,7 +25,7 @@ class MultiNodeTests : TestermintTest() {
         val node1Name = "multinode1"
         val node2Name = "multinode2"
         val nodesToAdd = 100
-        val (node1, node2, node3) = addNodes(genesis, nodesToAdd)
+        val (node1, node2, node3) = genesis.addNodes(nodesToAdd)
         assertThat(node1).isNotNull
         assertThat(node2).isNotNull
         assertThat(node3).isNotNull
@@ -40,7 +40,7 @@ class MultiNodeTests : TestermintTest() {
             weight
         }
         cluster.joinPairs.forEach { pair ->
-            addNodes(pair, Random.nextInt(50, 100))
+            pair.addNodes(Random.nextInt(50, 100))
             val joinNodes = pair.api.getNodes()
             joinNodes.map {
                 pair.setPocWeight(Random.nextInt(1, 20).toLong(), it.node)
@@ -55,19 +55,3 @@ class MultiNodeTests : TestermintTest() {
         assertThat(genesisStatus?.weight).isEqualTo(randomWeights.sum().toLong())
     }
 }
-
-fun addNodes(pair: LocalInferencePair, nodesToAdd: Int): List<InferenceNode> {
-    val nodes = (1..nodesToAdd).map { i ->
-        validNode.copy(
-            id = "multinode$i",
-            host = hostName(i, pair)
-        )
-    }
-
-    val addedNodes = pair.api.addNodes(nodes)
-    assertThat(addedNodes).hasSize(nodesToAdd)
-
-    return addedNodes
-}
-
-private fun hostName(i: Int, participant: LocalInferencePair) = "ml-${String.format("%04d", i)}.${participant.name.trimStart('/')}.test"

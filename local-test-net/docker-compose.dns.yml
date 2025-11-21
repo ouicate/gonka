@@ -19,4 +19,3 @@ services:
 
 networks:
   chain-public:
-    external: true

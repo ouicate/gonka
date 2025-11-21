@@ -17,6 +17,8 @@ data class InferenceNode(
 ) {
     val pocHost: String
         get() = "$host:$pocPort"
+    val inferenceHost: String
+        get() = "$host:$inferencePort"
 }
 
 data class Hardware(
