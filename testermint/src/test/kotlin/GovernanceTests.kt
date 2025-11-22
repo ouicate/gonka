@@ -62,7 +62,8 @@ class GovernanceTests : TestermintTest() {
 
         val (cluster, genesis) = initCluster(config = noCappingConfig, reboot = true)
         // genesis node is now powerful enough to pass on its own
-        genesis.changePoc(100)
+        genesis.setPocWeight(100)
+        genesis.waitForNextEpoch()
         genesis.markNeedsReboot()
         val params = genesis.getParams()
         val modifiedParams = params.copy(

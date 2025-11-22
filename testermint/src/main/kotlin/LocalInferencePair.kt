@@ -343,19 +343,6 @@ data class LocalInferencePair(
         return node.getStatus().syncInfo.latestBlockHeight
     }
 
-    fun changePoc(newPoc: Long, hostName: String? = null, setNewValidatorsOffset: Int = 2) {
-        if (hostName == null) {
-            this.api.getNodes().forEach {
-                this.mock?.setPocResponse(newPoc, it.node.host)
-            }
-        } else {
-            this.mock?.setPocResponse(newPoc, hostName)
-        }
-        this.waitForStage(EpochStage.START_OF_POC)
-        // CometBFT validators have a 1 block delay
-        this.waitForStage(EpochStage.SET_NEW_VALIDATORS, setNewValidatorsOffset)
-    }
-
     data class WaitForStageResult(
         val stageBlock: Long,
         val stageBlockWithOffset: Long,
