@@ -9,7 +9,7 @@ data class AccountWrapper(
 data class Account(
     @SerializedName("@type")
     val type: String,
-    val value: AccountValue  // Can be AccountValue or VestingAccountValue
+    val value: AccountValue
 )
 
 data class AccountValue(
