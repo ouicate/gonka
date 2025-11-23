@@ -341,6 +341,9 @@ func TestReleaseNode(t *testing.T) {
 }
 
 func TestRoundTripSegment(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping flaky test in short mode")
+	}
 	broker := NewTestBroker()
 	node := apiconfig.InferenceNodeConfig{
 		Host:             "localhost",

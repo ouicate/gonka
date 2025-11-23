@@ -45,8 +45,8 @@ _build-macos:
 _build-linux: download-linux-deps
 	@echo "Building with static wasmvm linking for Linux..."
 	@CGO_ENABLED=1 CC=gcc \
-		CGO_LDFLAGS="-L$(PWD)/build/deps -lm" \
-		go build -ldflags "$(ldflags) -extldflags '-static'" -tags "muslc" -o ./build/inferenced ./cmd/inferenced/main.go
+		CGO_LDFLAGS="-L$(PWD)/build/deps -lwasmvm_muslc -lm" \
+		go build -ldflags "$(ldflags)" -tags "muslc" -o ./build/inferenced ./cmd/inferenced/main.go
 
 build:
 	@if [ "$(shell uname)" = "Darwin" ]; then \
@@ -58,7 +58,10 @@ build:
 download-linux-deps:
 	@echo "--> Downloading static wasmvm library for Linux (x86_64)..."
 	@mkdir -p build/deps
-	@curl -L -o build/deps/libwasmvm_muslc.x86_64.a $(WASMVM_STATIC_LINUX_X64_URL)
+	@if [ ! -f build/deps/libwasmvm_muslc.x86_64.a ]; then \
+		curl -L -o build/deps/libwasmvm_muslc.x86_64.a $(WASMVM_STATIC_LINUX_X64_URL); \
+	fi
+	@ln -sf libwasmvm_muslc.x86_64.a build/deps/libwasmvm_muslc.a
 	@echo "Dependencies downloaded to ./build/deps/"
 
 define DOCKER_BUILD
