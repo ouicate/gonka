@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
-use cw_storage_plus::Item;
+use cw_storage_plus::{Item, Map};
 
 #[cw_serde]
 pub struct Config {
@@ -12,6 +12,8 @@ pub struct Config {
     pub daily_limit_bp: Uint128,
     /// Whether contract is paused
     pub is_paused: bool,
+    /// Whether allowlist is enforced for buyers
+    pub allowlist_enabled: bool,
     /// Total supply of native tokens allocated to this contract
     pub total_supply: Uint128,
     /// Total tokens sold across all tiers (used for pricing tier calculation)
@@ -46,6 +48,10 @@ pub const DAILY_STATS: Item<DailyStats> = Item::new("daily_stats");
 
 /// Pricing configuration for tiered pricing
 pub const PRICING_CONFIG: Item<PricingConfig> = Item::new("pricing_config");
+
+/// Allowlist of buyer addresses permitted to purchase when allowlist is enabled
+/// Keyed by address string; value is a unit bool (true) for presence
+pub const ALLOWLIST: Map<&str, bool> = Map::new("allowlist");
 
 /// Calculate current tier based on tokens sold
 pub fn calculate_current_tier(tokens_sold: Uint128, tokens_per_tier: Uint128) -> u32 {

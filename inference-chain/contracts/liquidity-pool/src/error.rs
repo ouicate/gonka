@@ -35,4 +35,7 @@ pub enum ContractError {
 
     #[error("No tokens to purchase")]
     NoTokensToPurchase {},
+
+    #[error("Buyer is not allowlisted: {address}")]
+    NotAllowlisted { address: String },
 } 

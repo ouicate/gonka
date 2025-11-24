@@ -16,6 +16,10 @@ pub struct InstantiateMsg {
     pub tier_multiplier: Option<Uint128>,
     /// Initial total supply of native tokens (defaults to 0 if not provided)
     pub total_supply: Option<Uint128>,
+    /// Optional: enable allowlist gating for buyers at instantiation (default false)
+    pub allowlist_enabled: Option<bool>,
+    /// Optional: initial allowlist of buyer addresses
+    pub allowlist: Option<Vec<String>>,
 }
 
 #[cw_serde]
@@ -45,6 +49,12 @@ pub enum ExecuteMsg {
     },
     /// Admin: Remove a payment token
     RemovePaymentToken { denom: String },
+    /// Admin: Enable/disable allowlist enforcement
+    SetAllowlistEnabled { enabled: bool },
+    /// Admin: Add a buyer address to the allowlist
+    AddToAllowlist { address: String },
+    /// Admin: Remove a buyer address from the allowlist
+    RemoveFromAllowlist { address: String },
 }
 
 #[cw_serde]
@@ -86,6 +96,12 @@ pub enum QueryMsg {
     /// Test gRPC call to fetch approved tokens for trade; returns raw protobuf bytes
     #[returns(ApprovedTokensForTradeJson)]
     TestApprovedTokens {},
+    /// Check if an address is allowlisted and whether allowlist is enabled
+    #[returns(AllowlistEntryResponse)]
+    IsAllowlisted { address: String },
+    /// List allowlisted addresses (paginated)
+    #[returns(AllowlistListResponse)]
+    Allowlist { start_after: Option<String>, limit: Option<u32> },
 }
 
 #[cw_serde]
@@ -94,6 +110,7 @@ pub struct ConfigResponse {
     pub native_denom: String,
     pub daily_limit_bp: Uint128,
     pub is_paused: bool,
+    pub allowlist_enabled: bool,
     pub total_tokens_sold: Uint128,
 }
 
@@ -161,4 +178,15 @@ pub struct ApprovedTokensForTradeJson {
 pub struct ApprovedTokenJson {
     pub chain_id: String,
     pub contract_address: String,
+}
+
+#[cw_serde]
+pub struct AllowlistEntryResponse {
+    pub allowlist_enabled: bool,
+    pub is_allowed: bool,
+}
+
+#[cw_serde]
+pub struct AllowlistListResponse {
+    pub addresses: Vec<String>,
 }

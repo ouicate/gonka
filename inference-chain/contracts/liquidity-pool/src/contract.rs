@@ -1,9 +1,10 @@
 use cosmwasm_std::{
     entry_point, from_json, to_json_binary, to_json_vec, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
-    StdError, StdResult, Uint128, QueryRequest, StakingQuery, GrpcQuery, ContractResult, SystemResult, WasmMsg,
+    StdError, StdResult, Uint128, QueryRequest, StakingQuery, GrpcQuery, ContractResult, SystemResult, WasmMsg, Order,
 };
 use prost::Message; // For proto encoding/decoding
 use cw2::{get_contract_version, set_contract_version};
+use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
 use crate::msg::{
@@ -15,7 +16,7 @@ use crate::msg::{
 use crate::state::{
     calculate_current_price, calculate_current_tier, calculate_tokens_for_usd, calculate_multi_tier_purchase,
     Config, DailyStats, PricingConfig,
-    CONFIG, DAILY_STATS, PRICING_CONFIG,
+    CONFIG, DAILY_STATS, PRICING_CONFIG, ALLOWLIST,
 };
 
 // Proto message types for gRPC query
@@ -191,6 +192,7 @@ pub fn instantiate(
         native_denom: native_denom.clone(),
         daily_limit_bp: daily_limit_bp,
         is_paused: false,
+        allowlist_enabled: msg.allowlist_enabled.unwrap_or(false),
         total_supply: total_supply,
         total_tokens_sold: Uint128::zero(),
     };
@@ -214,6 +216,14 @@ pub fn instantiate(
         tokens_sold_today: Uint128::zero(),
     };
     DAILY_STATS.save(deps.storage, &daily_stats)?;
+
+    // Initialize allowlist if provided
+    if let Some(addrs) = msg.allowlist {
+        for addr in addrs {
+            let validated = deps.api.addr_validate(&addr)?.to_string();
+            ALLOWLIST.save(deps.storage, validated.as_str(), &true)?;
+        }
+    }
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -249,7 +259,61 @@ pub fn execute(
             add_payment_token(deps, info, denom, usd_rate)
         }
         ExecuteMsg::RemovePaymentToken { denom } => remove_payment_token(deps, info, denom),
+        ExecuteMsg::SetAllowlistEnabled { enabled } => set_allowlist_enabled(deps, info, enabled),
+        ExecuteMsg::AddToAllowlist { address } => add_to_allowlist(deps, info, address),
+        ExecuteMsg::RemoveFromAllowlist { address } => remove_from_allowlist(deps, info, address),
     }
+}
+
+fn set_allowlist_enabled(
+    deps: DepsMut,
+    info: MessageInfo,
+    enabled: bool,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+    if config.admin.is_empty() || info.sender.as_str() != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    config.allowlist_enabled = enabled;
+    CONFIG.save(deps.storage, &config)?;
+    Ok(Response::new()
+        .add_attribute("method", "set_allowlist_enabled")
+        .add_attribute("enabled", enabled.to_string())
+        .add_attribute("admin", info.sender))
+}
+
+fn add_to_allowlist(
+    deps: DepsMut,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin.is_empty() || info.sender.as_str() != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let addr = deps.api.addr_validate(&address)?.to_string();
+    ALLOWLIST.save(deps.storage, addr.as_str(), &true)?;
+    Ok(Response::new()
+        .add_attribute("method", "add_to_allowlist")
+        .add_attribute("address", address)
+        .add_attribute("admin", info.sender))
+}
+
+fn remove_from_allowlist(
+    deps: DepsMut,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin.is_empty() || info.sender.as_str() != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let addr = deps.api.addr_validate(&address)?.to_string();
+    ALLOWLIST.remove(deps.storage, addr.as_str());
+    Ok(Response::new()
+        .add_attribute("method", "remove_from_allowlist")
+        .add_attribute("address", address)
+        .add_attribute("admin", info.sender))
 }
 
 // Handle receiving CW20 tokens (wrapped bridge tokens only)
@@ -296,6 +360,15 @@ fn receive_cw20(
     // The actual sender of the tokens (the user)
     let buyer = cw20_msg.sender;
     let token_amount = cw20_msg.amount;
+
+    // Enforce allowlist if enabled
+    if config.allowlist_enabled {
+        let buyer_addr = deps.api.addr_validate(&buyer)?.to_string();
+        let is_allowed = ALLOWLIST.may_load(deps.storage, buyer_addr.as_str())?.unwrap_or(false);
+        if !is_allowed {
+            return Err(ContractError::NotAllowlisted { address: buyer_addr });
+        }
+    }
 
     let current_day = env.block.time.seconds() / 86400;
     let mut daily_stats = DAILY_STATS.load(deps.storage)?;
@@ -700,6 +773,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::TestApprovedTokens {} => {
             to_json_binary(&query_test_approved_tokens(deps)?)
         }
+        QueryMsg::IsAllowlisted { address } => {
+            to_json_binary(&query_is_allowlisted(deps, address)?)
+        }
+        QueryMsg::Allowlist { start_after, limit } => {
+            to_json_binary(&query_allowlist(deps, start_after, limit)?)
+        }
     }
 }
 
@@ -743,6 +822,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         native_denom: config.native_denom,
         daily_limit_bp: config.daily_limit_bp,
         is_paused: config.is_paused,
+        allowlist_enabled: config.allowlist_enabled,
         total_tokens_sold: config.total_tokens_sold,
     })
 }
@@ -908,6 +988,41 @@ fn query_calculate_tokens(deps: Deps, usd_amount: Uint128) -> StdResult<TokenCal
     })
 }
 
+fn query_is_allowlisted(deps: Deps, address: String) -> StdResult<AllowlistEntryResponse> {
+    let config = CONFIG.load(deps.storage)?;
+    let addr = deps.api.addr_validate(&address)?.to_string();
+    let is_allowed = ALLOWLIST
+        .may_load(deps.storage, addr.as_str())?
+        .unwrap_or(false);
+    Ok(AllowlistEntryResponse {
+        allowlist_enabled: config.allowlist_enabled,
+        is_allowed,
+    })
+}
+
+fn query_allowlist(
+    deps: Deps,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<AllowlistListResponse> {
+    let lim: usize = limit.unwrap_or(50).min(200) as usize;
+    let start = start_after
+        .map(|s| deps.api.addr_validate(&s).map(|v| v.to_string()))
+        .transpose()?;
+    let start_bound = start.as_deref().map(Bound::exclusive);
+
+    let addrs = ALLOWLIST
+        .range(deps.storage, start_bound, None, Order::Ascending)
+        .filter_map(|item| match item {
+            Ok((addr, present)) => if present { Some(addr.to_string()) } else { None },
+            Err(_) => None,
+        })
+        .take(lim)
+        .collect::<Vec<_>>();
+
+    Ok(AllowlistListResponse { addresses: addrs })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -927,6 +1042,8 @@ mod tests {
             tokens_per_tier: Some(Uint128::from(3_000_000_000_000_000u128)), // 3 million tokens (9 decimals)
             tier_multiplier: Some(Uint128::from(1300u128)), // 1.3x
             total_supply: Some(Uint128::from(120_000_000_000_000_000u128)), // 120M tokens
+            allowlist_enabled: None,
+            allowlist: None,
         };
 
         let info = MessageInfo {
@@ -951,6 +1068,8 @@ mod tests {
             tokens_per_tier: Some(Uint128::from(3_000_000_000_000_000u128)), // 3 million tokens (9 decimals)
             tier_multiplier: Some(Uint128::from(1300u128)), // 1.3x
             total_supply: Some(Uint128::from(120_000_000_000_000_000u128)), // 120M tokens
+            allowlist_enabled: None,
+            allowlist: None,
         };
 
         let info = MessageInfo {
@@ -999,6 +1118,8 @@ mod tests {
             tokens_per_tier: Some(Uint128::from(3_000_000_000_000_000u128)), // 3 million tokens per tier (9 decimals)
             tier_multiplier: Some(Uint128::from(1300u128)), // 1.3x
             total_supply: Some(Uint128::from(120_000_000_000_000_000u128)), // 120M tokens
+            allowlist_enabled: None,
+            allowlist: None,
         };
 
         let info = MessageInfo {
