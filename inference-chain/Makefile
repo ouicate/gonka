@@ -79,7 +79,7 @@ define DOCKER_BUILD
 	@cp -r .[^.]* .docker-context/inference-chain/ 2>/dev/null || true
 	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
 	@DOCKER_BUILDKIT=1 \
-	docker build \
+	docker buildx build $(BUILDX_FLAGS) \
 		--load \
 		--platform $(PLATFORM) \
 		--build-arg LDFLAGS='$(ldflags)' \
@@ -106,7 +106,7 @@ define DOCKER_BUILD_UPGRADE
 	@cp -r .[^.]* .docker-context/inference-chain/ 2>/dev/null || true
 	@mkdir -p .docker-context/cosmovisor && cp -r ../cosmovisor/* .docker-context/cosmovisor/
 	@DOCKER_BUILDKIT=1 \
-	docker build \
+	docker buildx build $(BUILDX_FLAGS) \
 		--platform $(PLATFORM) \
 		--build-arg LDFLAGS='$(ldflags)' \
 		--build-arg GOOS=$(GOOS) \
