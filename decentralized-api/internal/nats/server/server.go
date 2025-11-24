@@ -17,6 +17,9 @@ const (
 	storageDir  = "/root/.dapi/.nats"
 	DefaultPort = 4222
 	DefaultHost = "0.0.0.0"
+
+	maxMessages = 10000
+	maxAge      = 1 * 24 * time.Hour
 )
 
 type NatsServer interface {
@@ -87,6 +90,8 @@ func (s *server) createJetStreamTopics(topicNames []string) error {
 		_, err = js.AddStream(&nats.StreamConfig{
 			Name:     topic,
 			Subjects: []string{topic},
+			MaxMsgs:  maxMessages,
+			MaxAge:   maxAge,
 			Storage:  nats.FileStorage,
 		})
 
