@@ -1,4 +1,4 @@
-# Ethereum Bridge Smart Contract Specification
+# [IMPLEMENTED]: Ethereum Bridge Smart Contract Specification
 
 ## Overview
 

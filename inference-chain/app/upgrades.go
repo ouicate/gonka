@@ -50,7 +50,7 @@ func (app *App) setupUpgradeHandlers() {
 	app.UpgradeKeeper.SetUpgradeHandler(v0_2_2.UpgradeName, v0_2_2.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
 	app.UpgradeKeeper.SetUpgradeHandler(v0_2_3.UpgradeName, v0_2_3.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
 	app.UpgradeKeeper.SetUpgradeHandler(v0_2_4.UpgradeName, v0_2_4.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
-	app.UpgradeKeeper.SetUpgradeHandler(v0_2_5.UpgradeName, v0_2_5.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper))
+	app.UpgradeKeeper.SetUpgradeHandler(v0_2_5.UpgradeName, v0_2_5.CreateUpgradeHandler(app.ModuleManager, app.Configurator(), app.InferenceKeeper, app.BlsKeeper))
 }
 
 func (app *App) registerMigrations() {
@@ -66,12 +66,12 @@ func (app *App) registerMigrations() {
 		return nil
 	})
 
+	// v0.2.5 upgrade migrations
 	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 7, func(ctx sdk.Context) error {
-		return nil
-	})
-
-	app.Configurator().RegisterMigration(inferencetypes.ModuleName, 8, func(ctx sdk.Context) error {
-		return app.InferenceKeeper.MigrateLegacyBridgeState(ctx)
+		if err := app.InferenceKeeper.MigrateLegacyBridgeState(ctx); err != nil {
+			return err
+		}
+		return app.InferenceKeeper.MigrateConfirmationWeights(ctx)
 	})
 
 	app.Configurator().RegisterMigration(districutiontypes.ModuleName, 3, func(ctx sdk.Context) error {

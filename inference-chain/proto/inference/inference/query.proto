@@ -30,6 +30,7 @@ import "inference/inference/stats_developer.proto";
 import "inference/inference/epoch.proto";
 import "inference/inference/mlnode_version.proto";
 import "inference/inference/excluded_participant.proto";
+import "inference/inference/confirmation_poc_event.proto";
 import "inference/inference/liquidity_pool.proto";
 
 option go_package = "github.com/productscience/inference/x/inference/types";
@@ -108,6 +109,12 @@ service Query {
   // Queries a list of PocBatchesForStage items.
   rpc PocBatchesForStage (QueryPocBatchesForStageRequest) returns (QueryPocBatchesForStageResponse) {
     option (google.api.http).get = "/productscience/inference/inference/poc_batches_for_stage/{block_height}";
+
+  }
+
+  // Queries a list of PocValidationsForStage items.
+  rpc PocValidationsForStage (QueryPocValidationsForStageRequest) returns (QueryPocValidationsForStageResponse) {
+    option (google.api.http).get = "/productscience/inference/inference/poc_validations_for_stage/{block_height}";
 
   }
 
@@ -400,6 +407,12 @@ service Query {
     option (google.api.http).get = "/productscience/inference/inference/excluded_participants/{epoch_index}";
 
   }
+
+  // Queries the currently active confirmation PoC event.
+  rpc ActiveConfirmationPoCEvent (QueryActiveConfirmationPoCEventRequest) returns (QueryActiveConfirmationPoCEventResponse) {
+    option (google.api.http).get = "/productscience/inference/inference/active_confirmation_poc_event";
+
+  }
 }
 // QueryParamsRequest is request type for the Query/Params RPC method.
 message QueryParamsRequest {}
@@ -531,6 +544,21 @@ message PoCBatchesWithParticipants {
   repeated PoCBatch poc_batch   = 4 [(gogoproto.nullable) = false];
 }
 
+message QueryPocValidationsForStageRequest {
+  int64 block_height = 1;
+}
+
+message QueryPocValidationsForStageResponse {
+  repeated PoCValidationsWithParticipants poc_validation = 1 [(gogoproto.nullable) = false];
+}
+
+message PoCValidationsWithParticipants {
+           string        participant    = 1;
+           string        pub_key        = 2;
+           string        hex_pub_key    = 3;
+  repeated PoCValidation poc_validation = 4 [(gogoproto.nullable) = false];
+}
+
 message QueryGetCurrentEpochRequest {}
 
 // DEPRECATED: ambiguous query, re-check what it expect as epoch: id, poc_start_block_height, or epoch_group_id
@@ -565,10 +593,13 @@ message QueryPreviousEpochGroupDataResponse {
   EpochGroupData epoch_group_data = 1 [(gogoproto.nullable) = false];
 }
 
-message QueryModelsAllRequest {}
+message QueryModelsAllRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
 
 message QueryModelsAllResponse {
   repeated Model model = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetInferenceTimeoutRequest {
@@ -903,9 +934,11 @@ message QueryLiquidityPoolResponse {
 message QueryEpochInfoRequest {}
 
 message QueryEpochInfoResponse {
-  int64  block_height = 1;
-  Params params       = 2 [(gogoproto.nullable) = false];
-  Epoch  latest_epoch = 3 [(gogoproto.nullable) = false];
+  int64                 block_height                  = 1;
+  Params                params                        = 2 [(gogoproto.nullable) = false];
+  Epoch                 latest_epoch                  = 3 [(gogoproto.nullable) = false];
+  bool                  is_confirmation_poc_active    = 4;
+  ConfirmationPoCEvent  active_confirmation_poc_event = 5;
 }
 
 message QueryCountPoCbatchesAtHeightRequest {
@@ -1009,4 +1042,13 @@ message QueryExcludedParticipantsRequest {
 // QueryExcludedParticipantsResponse returns a list of excluded participants for the epoch.
 message QueryExcludedParticipantsResponse {
   repeated ExcludedParticipant items = 1;
+}
+
+// QueryActiveConfirmationPoCEventRequest is request type for the Query/ActiveConfirmationPoCEvent RPC method.
+message QueryActiveConfirmationPoCEventRequest {}
+
+// QueryActiveConfirmationPoCEventResponse is response type for the Query/ActiveConfirmationPoCEvent RPC method.
+message QueryActiveConfirmationPoCEventResponse {
+  bool                 is_active = 1;
+  ConfirmationPoCEvent event     = 2;
 }

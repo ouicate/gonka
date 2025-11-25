@@ -274,7 +274,7 @@ After a successful version upgrade, perform these governance and operational ste
     echo "LP_ADDR=$LP_ADDR"
 
     echo "Submitting funding proposal..."
-    FUND_AMOUNT="120000000000000000" # adjust to your token base units
+    FUND_AMOUNT="1" # adjust to your token base units
     cat > proposal_fund_lp.json <<EOF
     {
       "messages": [{
