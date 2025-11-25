@@ -25,8 +25,9 @@ type Config struct {
 }
 
 type NatsServerConfig struct {
-	Host string `koanf:"host" json:"host"`
-	Port int    `koanf:"port" json:"port"`
+	Host                  string `koanf:"host" json:"host"`
+	Port                  int    `koanf:"port" json:"port"`
+	MaxMassagesAgeSeconds int64  `koanf:"max_massages_age_seconds"`
 }
 
 type UpgradePlan struct {
