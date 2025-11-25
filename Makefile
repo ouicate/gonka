@@ -17,7 +17,7 @@ mock-server-build-docker:
 	@echo "Building mock-server JAR file..."
 	@cd testermint/mock_server && ./gradlew clean && ./gradlew shadowJar
 	@echo "Building mock-server docker image..."
-	@DOCKER_BUILDKIT=1 docker buildx build $(BUILDX_FLAGS) --load -t inference-mock-server -f testermint/Dockerfile testermint
+	@DOCKER_BUILDKIT=1 docker build --load -t inference-mock-server -f testermint/Dockerfile testermint
 
 proxy-build-docker:
 	@make -C proxy build-docker SET_LATEST=1
