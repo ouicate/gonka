@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from concurrent.futures import Future
 from multiprocessing import Event, Queue, Value
-from typing import List, Iterator
+from typing import List, Iterator, Optional
 
 from pow.data import ProofBatch
 from pow.compute.compute import Compute
@@ -35,6 +35,7 @@ class Worker(multiprocessing.Process):
         devices: List[str],
         generator: Iterator[int],
         node_id: int,
+        max_batches_per_worker: Optional[int] = None,
     ):
         super().__init__()
         self.phase = phase
@@ -55,6 +56,7 @@ class Worker(multiprocessing.Process):
         self.compute: Compute = None
         self.interrupt_flag = False
         self.exception = None
+        self.max_batches_per_worker = max_batches_per_worker
         self.last_report_time = 0  # Track last time debug was printed
 
     def run(self):
@@ -146,12 +148,15 @@ class Worker(multiprocessing.Process):
     def _prepare_next_batch(
         self,
         q: Queue,
-        max_wait_time: float = 1.
+        max_wait_time: float = 1.,
     ):
         start_time = time.time()
 
         batches_to_process = []
         while (time.time() - start_time) < max_wait_time:
+            if self.max_batches_per_worker is not None and len(batches_to_process) >= self.max_batches_per_worker:
+                break
+
             try:
                 batch = q.get_nowait()
                 batches_to_process.append(batch)

@@ -29,6 +29,7 @@ class PowInitRequest(BaseModel):
     batch_size: int
     r_target: float
     fraud_threshold: float
+    max_batches_per_worker: Optional[int] = None
     params: Params = Params()
 
 
@@ -72,6 +73,7 @@ class PowManager(IManager):
             batch_size=init_request.batch_size,
             r_target=init_request.r_target,
             devices=None,
+            max_batches_per_worker=init_request.max_batches_per_worker,
         )
         self.pow_sender = Sender(
             url=init_request.url,

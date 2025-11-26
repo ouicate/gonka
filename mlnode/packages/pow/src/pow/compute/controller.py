@@ -39,6 +39,7 @@ class Controller:
         validated_batch_queue: Queue,
         to_validate_batch_queue: Queue,
         node_id: int,
+        max_batches_per_worker: Optional[int] = None,
     ):
         ctx = mp.get_context("spawn")
 
@@ -75,6 +76,7 @@ class Controller:
                 self.devices,
                 iterator,
                 self.node_id,
+                max_batches_per_worker,
             ),
             daemon=False,
         )
@@ -96,6 +98,7 @@ class Controller:
         devices: List[str],
         iterator: Iterator[int],
         node_id: int,
+        max_batches_per_worker: Optional[int] = None,
     ):
         worker = Worker(
             idx,
@@ -113,6 +116,7 @@ class Controller:
             devices,
             iterator,
             node_id,
+            max_batches_per_worker,
         )
         worker.run()
 
@@ -196,6 +200,7 @@ class ParallelController(ITrackableTask):
         batch_size: int,
         r_target: float,
         devices: Optional[List[str]] = None,
+        max_batches_per_worker: Optional[int] = None,
     ):
         ctx = mp.get_context("spawn")
 
@@ -213,7 +218,7 @@ class ParallelController(ITrackableTask):
         self.node_id = node_id
         self.node_count = node_count
         self.batch_size = batch_size
-
+        self.max_batches_per_worker = max_batches_per_worker
         # Create GPU groups for controllers
         if devices is None:
             gpu_groups = create_gpu_groups(params=params)
@@ -247,6 +252,7 @@ class ParallelController(ITrackableTask):
                 validated_batch_queue=self.validated_batch_queue,
                 to_validate_batch_queue=self.to_validate_batch_queue,
                 node_id=self.node_id,
+                max_batches_per_worker=self.max_batches_per_worker,
             )
             for idx, gpu_group in enumerate(gpu_groups)
         ]
