@@ -156,18 +156,13 @@ class Worker(multiprocessing.Process):
         while (time.time() - start_time) < max_wait_time:
             if self.max_batches_per_worker is not None and len(batches_to_process) >= self.max_batches_per_worker:
                 break
-
             try:
                 batch = q.get_nowait()
-                batches_to_process.append(batch)
+                batches_to_process.extend(batch.split(self.batch_size))
             except queue.Empty:
                 break
 
-        batches = []
-        for batch in batches_to_process:
-            batches.extend(batch.split(self.batch_size))
-
-        return batches
+        return batches_to_process
 
     def _validate(self):
         logger.info(f"[{self.id}] Starting validate phase")

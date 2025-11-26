@@ -210,8 +210,11 @@ class ValidatedBatch(ProofBatch):
         self.n_invalid = 0
         self.probability_honest = 1.0
         for received_dist, computed_dist in zip(self.received_dist, self.dist):
-            assert received_dist < self.r_target, \
-                "Received distance is greater than r_target"
+            if received_dist > self.r_target: 
+                self.n_invalid += 1
+                self.probability_honest = 0.0
+                self.fraud_detected = True
+                return
             if computed_dist > self.r_target:
                 self.n_invalid += 1
 
