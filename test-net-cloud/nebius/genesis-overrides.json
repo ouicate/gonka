@@ -60,6 +60,11 @@
         ]
       }
     },
+    "restrictions": {
+      "params": {
+        "restriction_end_block": "12"
+      }
+    },
     "inference": {
       "mlnode_version": {
         "current_version": "v3.0.8"
