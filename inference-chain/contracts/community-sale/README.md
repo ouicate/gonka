@@ -10,7 +10,8 @@ Fixed-price exchange of W(USDT) for GNK. Accepts payments only from a designated
 
 - `admin` - receives W(USDT), can withdraw unsold GNK (typically governance module)
 - `buyer` - only address allowed to purchase
-- `accepted_cw20` - W(USDT) contract address (CW20 wrapped token)
+- `accepted_chain_id` - external chain ID (e.g., "ethereum")
+- `accepted_eth_contract` - token contract on external chain (e.g., "0xdac17f958d2ee523a2206206994597c13d831ec7" for USDT)
 - `price_usd` - fixed price per 1 GNK in micro-USD (6 decimals, e.g., 25000 = $0.025/GNK)
 
 ## Deployment
@@ -39,7 +40,7 @@ Save the `code_id` from the response.
 
 ```bash
 ./inferenced tx wasm instantiate <CODE_ID> \
-    '{"admin":"gonka10d07y265gmmuvt4z0w9aw880jnsr700j2h5m33","buyer":"gonka1...buyer","accepted_cw20":"gonka1...usdt","price_usd":"25000"}' \
+    '{"admin":"gonka10d07y265gmmuvt4z0w9aw880jnsr700j2h5m33","buyer":"gonka1...buyer","accepted_chain_id":"ethereum","accepted_eth_contract":"0xdac17f958d2ee523a2206206994597c13d831ec7","price_usd":"25000"}' \
     --label "community-sale-v1" \
     --admin gonka10d07y265gmmuvt4z0w9aw880jnsr700j2h5m33 \
     --from your-key \
@@ -50,7 +51,8 @@ Save the `code_id` from the response.
 Parameters:
 - `admin` - governance module address (`gonka10d07y265gmmuvt4z0w9aw880jnsr700j2h5m33`) receives W(USDT)
 - `buyer` - designated buyer address (only this address can purchase)
-- `accepted_cw20` - W(USDT) CW20 contract address
+- `accepted_chain_id` - external chain ID ("ethereum")
+- `accepted_eth_contract` - USDT contract on Ethereum (`0xdac17f958d2ee523a2206206994597c13d831ec7`)
 - `price_usd` - price per 1 GNK in micro-USD (25000 = $0.025/GNK)
 - `--admin` flag - WASM migration admin (set to governance for upgrades via proposals)
 
@@ -74,11 +76,12 @@ Governance proposal to transfer GNK from community pool:
 
 ## Workflow
 
-1. Deploy contract with buyer address, W(USDT) address, price, governance as admin
+1. Deploy contract with buyer address, Ethereum USDT address, price, governance as admin
 2. Governance proposal transfers GNK from community pool to contract
 3. Buyer sends W(USDT) via CW20 Send, receives GNK proportionally
-4. W(USDT) forwarded to admin (governance module)
-5. If buyer doesn't complete purchase, governance withdraws remaining GNK via proposal
+4. Contract validates token via chain (ApprovedTokensForTrade) and queries BridgeInfo
+5. W(USDT) forwarded to admin (governance module)
+6. If buyer doesn't complete purchase, governance withdraws remaining GNK via proposal
 
 ## Purchase Flow
 
@@ -101,7 +104,6 @@ The `msg` is base64-encoded `{}` (empty JSON object).
 - `Pause {}` - pause the contract
 - `Resume {}` - resume the contract
 - `UpdateBuyer { buyer }` - change designated buyer
-- `UpdateAcceptedCw20 { accepted_cw20 }` - change accepted CW20
 - `UpdatePrice { price_usd }` - change price
 - `WithdrawNativeTokens { amount, recipient }` - withdraw unsold GNK
 - `EmergencyWithdraw { recipient }` - withdraw all GNK
@@ -109,5 +111,5 @@ The `msg` is base64-encoded `{}` (empty JSON object).
 ## Security
 
 - Only validated bridge tokens accepted (chain's ApprovedTokensForTrade)
-- Only accepted CW20 contract can trigger purchase
+- Contract queries CW20's BridgeInfo to verify underlying Ethereum contract
 - Only designated buyer can purchase

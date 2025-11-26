@@ -27,6 +27,11 @@ pub enum ContractError {
     #[error("Buyer not allowed: {buyer}")]
     BuyerNotAllowed { buyer: String },
 
-    #[error("Wrong CW20 contract: expected {expected}, got {got}")]
-    WrongCw20Contract { expected: String, got: String },
+    #[error("Wrong token: expected {expected_chain}:{expected_contract}, got {got_chain}:{got_contract}")]
+    WrongToken {
+        expected_chain: String,
+        expected_contract: String,
+        got_chain: String,
+        got_contract: String,
+    },
 }

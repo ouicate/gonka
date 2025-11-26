@@ -7,8 +7,10 @@ pub struct InstantiateMsg {
     pub admin: String,
     /// Designated buyer address (only address allowed to purchase)
     pub buyer: String,
-    /// Accepted CW20 contract address (W(USDT) bridge token)
-    pub accepted_cw20: String,
+    /// Accepted chain ID (e.g., "ethereum")
+    pub accepted_chain_id: String,
+    /// Accepted contract address on external chain (e.g., "0xdac17f958d2ee523a2206206994597c13d831ec7" for USDT)
+    pub accepted_eth_contract: String,
     /// Fixed price per 1 GNK in micro-USD (6 decimals, e.g., 25000 = $0.025/GNK)
     pub price_usd: Uint128,
 }
@@ -23,8 +25,6 @@ pub enum ExecuteMsg {
     Resume {},
     /// Admin: Update buyer address
     UpdateBuyer { buyer: String },
-    /// Admin: Update accepted CW20 contract address
-    UpdateAcceptedCw20 { accepted_cw20: String },
     /// Admin: Update fixed price
     UpdatePrice { price_usd: Uint128 },
     /// Admin: Withdraw native tokens from contract
@@ -70,7 +70,8 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub admin: String,
     pub buyer: String,
-    pub accepted_cw20: String,
+    pub accepted_chain_id: String,
+    pub accepted_eth_contract: String,
     pub price_usd: Uint128,
     pub native_denom: String,
     pub is_paused: bool,
