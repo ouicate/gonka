@@ -44,7 +44,10 @@ func (k *Keeper) GetSettleParameters(ctx context.Context) (*SettleParameters, er
 // by collecting MLNode data from all model-specific EpochGroup subgroups for the given epoch.
 func (k *Keeper) AggregateMLNodesFromModelSubgroups(ctx context.Context, epochIndex uint64, validationWeights []*types.ValidationWeight) map[string][]*types.MLNodeInfo {
 	participantMLNodes := make(map[string][]*types.MLNodeInfo)
-	allEpochGroups := k.GetAllEpochGroupData(ctx)
+	allEpochGroups, found := k.GetEpochGroupDataForEpoch(ctx, epochIndex)
+	if !found {
+		return participantMLNodes
+	}
 
 	for _, vw := range validationWeights {
 		aggregated := make([]*types.MLNodeInfo, 0)

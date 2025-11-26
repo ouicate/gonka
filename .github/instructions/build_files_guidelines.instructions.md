@@ -1,4 +1,4 @@
-# build_files_guidelines.md
+# build_files_guidelines.instructions.md
 applyTo:
  - .github/workflows/*.yml
  - **/Makefile

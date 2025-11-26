@@ -47,3 +47,18 @@ func (k Keeper) GetAllEpochGroupData(ctx context.Context) (list []types.EpochGro
 	}
 	return epochGroupDataList
 }
+
+func (k Keeper) GetEpochGroupDataForEpoch(
+	ctx context.Context,
+	epochIndex uint64,
+) (val []types.EpochGroupData, found bool) {
+	iter, err := k.EpochGroupDataMap.Iterate(ctx, collections.NewPrefixedPairRange[uint64, string](epochIndex))
+	if err != nil {
+		return val, false
+	}
+	epochGroupDataList, err := iter.Values()
+	if err != nil {
+		return val, false
+	}
+	return epochGroupDataList, true
+}

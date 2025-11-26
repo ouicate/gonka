@@ -105,16 +105,37 @@ func TestActualSettle(t *testing.T) {
 		EpochIndex: 10,
 		ValidationWeights: []*types.ValidationWeight{
 			{
-				MemberAddress: participant1.Address,
-				Weight:        1000,
-				Reputation:    100,
+				MemberAddress:      participant1.Address,
+				Weight:             1000,
+				Reputation:         100,
+				ConfirmationWeight: 1000,
 			},
 			{
-				MemberAddress: participant2.Address,
-				Weight:        1000,
-				Reputation:    100,
+				MemberAddress:      participant2.Address,
+				Weight:             1000,
+				Reputation:         100,
+				ConfirmationWeight: 1000,
 			},
 		},
+	})
+	keeper.SetEpochGroupData(ctx, types.EpochGroupData{
+		EpochIndex: 10,
+		ValidationWeights: []*types.ValidationWeight{
+			{
+				MemberAddress:      participant1.Address,
+				Weight:             1000,
+				Reputation:         100,
+				ConfirmationWeight: 1000,
+			},
+			{
+				MemberAddress:      participant2.Address,
+				Weight:             1000,
+				Reputation:         100,
+				ConfirmationWeight: 1000,
+			},
+		},
+
+		ModelId: "model1",
 	})
 	// Set active participants for the epoch
 	keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
@@ -211,9 +232,10 @@ func TestActualSettleWithManyParticipants(t *testing.T) {
 	weights := make([]*types.ValidationWeight, many)
 	for i := 0; i < many; i++ {
 		weights[i] = &types.ValidationWeight{
-			MemberAddress: participants[i].Address,
-			Weight:        1000,
-			Reputation:    100,
+			MemberAddress:      participants[i].Address,
+			Weight:             1000,
+			Reputation:         100,
+			ConfirmationWeight: 1000,
 		}
 	}
 
@@ -265,8 +287,7 @@ func TestActualSettleWithManyParticipants(t *testing.T) {
 		settleAmount, found := keeper.GetSettleAmount(ctx, address)
 		require.True(t, found, "Settle amount for participant %d should be found", i)
 		require.Equal(t, uint64(1000), settleAmount.WorkCoins, "Participant %d work coins", i)
-		// I do not know exactly why 67 gets the remainder, but it is deterministic at least
-		if i == 67 {
+		if i == 0 {
 			require.Equal(t, dividedRewards+dividedRewardsRemainder, settleAmount.RewardCoins, "Participant %d reward coins remainder", i)
 		} else {
 			require.Equal(t, dividedRewards, settleAmount.RewardCoins, "Participant %d reward coins", i)
