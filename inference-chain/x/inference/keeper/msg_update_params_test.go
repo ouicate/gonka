@@ -33,12 +33,13 @@ func TestMsgUpdateParams(t *testing.T) {
 			expErrMsg: "expected gov account as only signer for proposal message",
 		},
 		{
-			name: "send enabled param",
+			name: "invalid params - empty params",
 			input: &types.MsgUpdateParams{
 				Authority: k.GetAuthority(),
 				Params:    types.Params{},
 			},
-			expErr: false,
+			expErr:    true,
+			expErrMsg: "cannot be nil",
 		},
 		{
 			name: "all good",

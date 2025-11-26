@@ -10,6 +10,7 @@ enum ParticipantStatus {
   INACTIVE = 2;
   INVALID = 3;
   RAMPING = 4 [deprecated = true];
+  UNCONFIRMED = 5;
 }
 
 message Participant {
@@ -39,5 +40,6 @@ message CurrentEpochStats {
   uint64 invalidated_inferences = 7;
   Decimal invalidLLR = 8;
   Decimal inactiveLLR = 9;
+  Decimal confirmationPoCRatio = 10;
 }
 

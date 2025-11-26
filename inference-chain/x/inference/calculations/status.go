@@ -14,14 +14,16 @@ const (
 	Ramping ParticipantStatusReason = "ramping"
 	// StatisticalInvalidations indicates the participant has statistically significant invalidations
 	StatisticalInvalidations ParticipantStatusReason = "statistical_invalidations"
-	// NoSpecificReason indicates no specific reason for the status
-	NoSpecificReason ParticipantStatusReason = ""
+	// NoReason indicates no reason for the status
+	NoReason ParticipantStatusReason = ""
 	// AlgorithmError Should NEVER happen unless we have bad algorithms or parameters
 	AlgorithmError ParticipantStatusReason = "algorithm_error"
 	// AlreadySet when we are already invalid or inactive
 	AlreadySet ParticipantStatusReason = "already_set"
 	// Downtime when missed inferences exceeds the threshold
 	Downtime ParticipantStatusReason = "downtime"
+	// Failed Confirmation PoC
+	FailedConfirmationPoC ParticipantStatusReason = "failed_confirmation_poc"
 )
 
 const (
@@ -30,11 +32,16 @@ const (
 )
 
 // Note that newValue is passed in BY VALUE, so changes to newValue directly will not pass back
-func ComputeStatus(validationParameters *types.ValidationParams, newValue types.Participant, oldStats types.CurrentEpochStats) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
+func ComputeStatus(
+	validationParameters *types.ValidationParams,
+	confirmationPocParams *types.ConfirmationPoCParams,
+	newValue types.Participant,
+	oldStats types.CurrentEpochStats,
+) (status types.ParticipantStatus, reason ParticipantStatusReason, stats types.CurrentEpochStats) {
 	// Genesis only (for tests)
 	newStats := getStats(&newValue)
-	if validationParameters == nil || validationParameters.FalsePositiveRate == nil {
-		return types.ParticipantStatus_ACTIVE, NoSpecificReason, newStats
+	if validationParameters == nil || validationParameters.FalsePositiveRate == nil || validationParameters.QuickFailureThreshold == nil {
+		return types.ParticipantStatus_ACTIVE, NoReason, newStats
 	}
 
 	// Once INVALID or INACTIVE, this can only be reset deliberately (at epoch start)
@@ -63,10 +70,20 @@ func ComputeStatus(validationParameters *types.ValidationParams, newValue types.
 		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
 	}
 
-	return types.ParticipantStatus_ACTIVE, NoSpecificReason, newStats
+	failedConfirmationPoCDecision := getConfirmationPoCStatus(&newStats, confirmationPocParams)
+	if failedConfirmationPoCDecision == Fail {
+		return types.ParticipantStatus_INACTIVE, FailedConfirmationPoC, newStats
+	} else if failedConfirmationPoCDecision == Error {
+		return types.ParticipantStatus_ACTIVE, AlgorithmError, newStats
+	}
+
+	return types.ParticipantStatus_ACTIVE, NoReason, newStats
 }
 
 func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	if parameters.DowntimeGoodPercentage == nil || parameters.DowntimeBadPercentage == nil || parameters.DowntimeHThreshold == nil {
+		return Error
+	}
 	newInferences := int64(newStats.InferenceCount) - int64(oldStats.InferenceCount)
 	newMissedInferences := int64(newStats.MissedRequests) - int64(oldStats.MissedRequests)
 	inactiveSprt, err := NewSPRT(
@@ -85,6 +102,9 @@ func getInactiveStatus(newStats *types.CurrentEpochStats, oldStats types.Current
 }
 
 func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.CurrentEpochStats, parameters *types.ValidationParams) Decision {
+	if parameters.BadParticipantInvalidationRate == nil || parameters.InvalidationHThreshold == nil {
+		return Error
+	}
 	newValidations := int64(newStats.ValidatedInferences) - int64(oldStats.ValidatedInferences)
 	newInvalidations := int64(newStats.InvalidatedInferences) - int64(oldStats.InvalidatedInferences)
 	//newInferences := newValue.CurrentEpochStats.InferenceCount - oldValue.CurrentEpochStats.InferenceCount
@@ -103,6 +123,19 @@ func getInvalidationStatus(newStats *types.CurrentEpochStats, oldStats types.Cur
 	invalidationSprt.UpdateCounts(newInvalidations, newValidations)
 	newStats.InvalidLLR = types.DecimalFromDecimal(invalidationSprt.LLR)
 	return invalidationSprt.Decision()
+}
+
+func getConfirmationPoCStatus(newStats *types.CurrentEpochStats, parameters *types.ConfirmationPoCParams) Decision {
+	if parameters == nil || parameters.AlphaThreshold == nil || parameters.AlphaThreshold.ToDecimal().Equal(decimal.Zero) {
+		return Pass
+	}
+	if newStats.ConfirmationPoCRatio == nil {
+		return Pass
+	}
+	if newStats.ConfirmationPoCRatio.ToDecimal().LessThan(parameters.AlphaThreshold.ToDecimal()) {
+		return Fail
+	}
+	return Pass
 }
 
 func getStats(newValue *types.Participant) types.CurrentEpochStats {

@@ -33,6 +33,7 @@ const (
 	Query_EpochGroupValidations_FullMethodName                     = "/inference.inference.Query/EpochGroupValidations"
 	Query_EpochGroupValidationsAll_FullMethodName                  = "/inference.inference.Query/EpochGroupValidationsAll"
 	Query_PocBatchesForStage_FullMethodName                        = "/inference.inference.Query/PocBatchesForStage"
+	Query_PocValidationsForStage_FullMethodName                    = "/inference.inference.Query/PocValidationsForStage"
 	Query_GetCurrentEpoch_FullMethodName                           = "/inference.inference.Query/GetCurrentEpoch"
 	Query_TokenomicsData_FullMethodName                            = "/inference.inference.Query/TokenomicsData"
 	Query_GetUnitOfComputePriceProposal_FullMethodName             = "/inference.inference.Query/GetUnitOfComputePriceProposal"
@@ -86,6 +87,7 @@ const (
 	Query_MLNodeVersion_FullMethodName                             = "/inference.inference.Query/MLNodeVersion"
 	Query_TrainingAllowList_FullMethodName                         = "/inference.inference.Query/TrainingAllowList"
 	Query_ExcludedParticipants_FullMethodName                      = "/inference.inference.Query/ExcludedParticipants"
+	Query_ActiveConfirmationPoCEvent_FullMethodName                = "/inference.inference.Query/ActiveConfirmationPoCEvent"
 )
 
 // QueryClient is the client API for Query service.
@@ -115,6 +117,8 @@ type QueryClient interface {
 	EpochGroupValidationsAll(ctx context.Context, in *QueryAllEpochGroupValidationsRequest, opts ...grpc.CallOption) (*QueryAllEpochGroupValidationsResponse, error)
 	// Queries a list of PocBatchesForStage items.
 	PocBatchesForStage(ctx context.Context, in *QueryPocBatchesForStageRequest, opts ...grpc.CallOption) (*QueryPocBatchesForStageResponse, error)
+	// Queries a list of PocValidationsForStage items.
+	PocValidationsForStage(ctx context.Context, in *QueryPocValidationsForStageRequest, opts ...grpc.CallOption) (*QueryPocValidationsForStageResponse, error)
 	// Queries a list of GetCurrentEpoch items.
 	GetCurrentEpoch(ctx context.Context, in *QueryGetCurrentEpochRequest, opts ...grpc.CallOption) (*QueryGetCurrentEpochResponse, error)
 	// Queries a TokenomicsData by index.
@@ -207,6 +211,8 @@ type QueryClient interface {
 	TrainingAllowList(ctx context.Context, in *QueryTrainingAllowListRequest, opts ...grpc.CallOption) (*QueryTrainingAllowListResponse, error)
 	// Queries the list of excluded participants for an epoch (0 = current epoch).
 	ExcludedParticipants(ctx context.Context, in *QueryExcludedParticipantsRequest, opts ...grpc.CallOption) (*QueryExcludedParticipantsResponse, error)
+	// Queries the currently active confirmation PoC event.
+	ActiveConfirmationPoCEvent(ctx context.Context, in *QueryActiveConfirmationPoCEventRequest, opts ...grpc.CallOption) (*QueryActiveConfirmationPoCEventResponse, error)
 }
 
 type queryClient struct {
@@ -337,6 +343,15 @@ func (c *queryClient) EpochGroupValidationsAll(ctx context.Context, in *QueryAll
 func (c *queryClient) PocBatchesForStage(ctx context.Context, in *QueryPocBatchesForStageRequest, opts ...grpc.CallOption) (*QueryPocBatchesForStageResponse, error) {
 	out := new(QueryPocBatchesForStageResponse)
 	err := c.cc.Invoke(ctx, Query_PocBatchesForStage_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) PocValidationsForStage(ctx context.Context, in *QueryPocValidationsForStageRequest, opts ...grpc.CallOption) (*QueryPocValidationsForStageResponse, error) {
+	out := new(QueryPocValidationsForStageResponse)
+	err := c.cc.Invoke(ctx, Query_PocValidationsForStage_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -820,6 +835,15 @@ func (c *queryClient) ExcludedParticipants(ctx context.Context, in *QueryExclude
 	return out, nil
 }
 
+func (c *queryClient) ActiveConfirmationPoCEvent(ctx context.Context, in *QueryActiveConfirmationPoCEventRequest, opts ...grpc.CallOption) (*QueryActiveConfirmationPoCEventResponse, error) {
+	out := new(QueryActiveConfirmationPoCEventResponse)
+	err := c.cc.Invoke(ctx, Query_ActiveConfirmationPoCEvent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueryServer is the server API for Query service.
 // All implementations must embed UnimplementedQueryServer
 // for forward compatibility
@@ -847,6 +871,8 @@ type QueryServer interface {
 	EpochGroupValidationsAll(context.Context, *QueryAllEpochGroupValidationsRequest) (*QueryAllEpochGroupValidationsResponse, error)
 	// Queries a list of PocBatchesForStage items.
 	PocBatchesForStage(context.Context, *QueryPocBatchesForStageRequest) (*QueryPocBatchesForStageResponse, error)
+	// Queries a list of PocValidationsForStage items.
+	PocValidationsForStage(context.Context, *QueryPocValidationsForStageRequest) (*QueryPocValidationsForStageResponse, error)
 	// Queries a list of GetCurrentEpoch items.
 	GetCurrentEpoch(context.Context, *QueryGetCurrentEpochRequest) (*QueryGetCurrentEpochResponse, error)
 	// Queries a TokenomicsData by index.
@@ -939,6 +965,8 @@ type QueryServer interface {
 	TrainingAllowList(context.Context, *QueryTrainingAllowListRequest) (*QueryTrainingAllowListResponse, error)
 	// Queries the list of excluded participants for an epoch (0 = current epoch).
 	ExcludedParticipants(context.Context, *QueryExcludedParticipantsRequest) (*QueryExcludedParticipantsResponse, error)
+	// Queries the currently active confirmation PoC event.
+	ActiveConfirmationPoCEvent(context.Context, *QueryActiveConfirmationPoCEventRequest) (*QueryActiveConfirmationPoCEventResponse, error)
 	mustEmbedUnimplementedQueryServer()
 }
 
@@ -987,6 +1015,9 @@ func (UnimplementedQueryServer) EpochGroupValidationsAll(context.Context, *Query
 }
 func (UnimplementedQueryServer) PocBatchesForStage(context.Context, *QueryPocBatchesForStageRequest) (*QueryPocBatchesForStageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PocBatchesForStage not implemented")
+}
+func (UnimplementedQueryServer) PocValidationsForStage(context.Context, *QueryPocValidationsForStageRequest) (*QueryPocValidationsForStageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PocValidationsForStage not implemented")
 }
 func (UnimplementedQueryServer) GetCurrentEpoch(context.Context, *QueryGetCurrentEpochRequest) (*QueryGetCurrentEpochResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCurrentEpoch not implemented")
@@ -1146,6 +1177,9 @@ func (UnimplementedQueryServer) TrainingAllowList(context.Context, *QueryTrainin
 }
 func (UnimplementedQueryServer) ExcludedParticipants(context.Context, *QueryExcludedParticipantsRequest) (*QueryExcludedParticipantsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExcludedParticipants not implemented")
+}
+func (UnimplementedQueryServer) ActiveConfirmationPoCEvent(context.Context, *QueryActiveConfirmationPoCEventRequest) (*QueryActiveConfirmationPoCEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActiveConfirmationPoCEvent not implemented")
 }
 func (UnimplementedQueryServer) mustEmbedUnimplementedQueryServer() {}
 
@@ -1408,6 +1442,24 @@ func _Query_PocBatchesForStage_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(QueryServer).PocBatchesForStage(ctx, req.(*QueryPocBatchesForStageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_PocValidationsForStage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryPocValidationsForStageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).PocValidationsForStage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Query_PocValidationsForStage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).PocValidationsForStage(ctx, req.(*QueryPocValidationsForStageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2366,6 +2418,24 @@ func _Query_ExcludedParticipants_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Query_ActiveConfirmationPoCEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryActiveConfirmationPoCEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).ActiveConfirmationPoCEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Query_ActiveConfirmationPoCEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).ActiveConfirmationPoCEvent(ctx, req.(*QueryActiveConfirmationPoCEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Query_ServiceDesc is the grpc.ServiceDesc for Query service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2428,6 +2498,10 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PocBatchesForStage",
 			Handler:    _Query_PocBatchesForStage_Handler,
+		},
+		{
+			MethodName: "PocValidationsForStage",
+			Handler:    _Query_PocValidationsForStage_Handler,
 		},
 		{
 			MethodName: "GetCurrentEpoch",
@@ -2640,6 +2714,10 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExcludedParticipants",
 			Handler:    _Query_ExcludedParticipants_Handler,
+		},
+		{
+			MethodName: "ActiveConfirmationPoCEvent",
+			Handler:    _Query_ActiveConfirmationPoCEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

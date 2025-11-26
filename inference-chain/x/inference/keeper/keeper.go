@@ -14,15 +14,16 @@ import (
 
 type (
 	Keeper struct {
-		cdc          codec.BinaryCodec
-		storeService store.KVStoreService
-		logger       log.Logger
-		BankKeeper   types.BookkeepingBankKeeper
-		BankView     types.BankKeeper
-		validatorSet types.ValidatorSet
-		group        types.GroupMessageKeeper
-		Staking      types.StakingKeeper
-		BlsKeeper    types.BlsKeeper
+		cdc           codec.BinaryCodec
+		storeService  store.KVStoreService
+		logger        log.Logger
+		BankKeeper    types.BookkeepingBankKeeper
+		BankView      types.BankKeeper
+		validatorSet  types.ValidatorSet
+		group         types.GroupMessageKeeper
+		Staking       types.StakingKeeper
+		BlsKeeper     types.BlsKeeper
+		UpgradeKeeper types.UpgradeKeeper
 		// the address capable of executing a MsgUpdateParams message. Typically, this
 		// should be the x/gov module account.
 		authority     string
@@ -49,18 +50,22 @@ type (
 		UnitOfComputePriceProposals   collections.Map[string, types.UnitOfComputePriceProposal]
 		EpochGroupDataMap             collections.Map[collections.Pair[uint64, string], types.EpochGroupData]
 		// Epoch collections
-		Epochs                    collections.Map[uint64, types.Epoch]
-		EffectiveEpochIndex       collections.Item[uint64]
-		EpochGroupValidationsMap  collections.Map[collections.Pair[uint64, string], types.EpochGroupValidations]
-		SettleAmounts             collections.Map[sdk.AccAddress, types.SettleAmount]
-		PartialUpgrades           collections.Map[uint64, types.PartialUpgrade]
-		EpochPerformanceSummaries collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
-		TrainingExecAllowListSet  collections.KeySet[sdk.AccAddress]
-		TrainingStartAllowListSet collections.KeySet[sdk.AccAddress]
-		PruningState              collections.Item[types.PruningState]
-		InferencesToPrune         collections.Map[collections.Pair[int64, string], collections.NoValue]
-		ActiveInvalidations       collections.KeySet[collections.Pair[sdk.AccAddress, string]]
+		Epochs                         collections.Map[uint64, types.Epoch]
+		EffectiveEpochIndex            collections.Item[uint64]
+		EpochGroupValidationsMap       collections.Map[collections.Pair[uint64, string], types.EpochGroupValidations]
+		SettleAmounts                  collections.Map[sdk.AccAddress, types.SettleAmount]
+		PartialUpgrades                collections.Map[uint64, types.PartialUpgrade]
+		EpochPerformanceSummaries      collections.Map[collections.Pair[sdk.AccAddress, uint64], types.EpochPerformanceSummary]
+		TrainingExecAllowListSet       collections.KeySet[sdk.AccAddress]
+		TrainingStartAllowListSet      collections.KeySet[sdk.AccAddress]
+		PruningState                   collections.Item[types.PruningState]
+		InferencesToPrune              collections.Map[collections.Pair[int64, string], collections.NoValue]
+		ActiveInvalidations            collections.KeySet[collections.Pair[sdk.AccAddress, string]]
 		ExcludedParticipantsMap   collections.Map[collections.Pair[uint64, sdk.AccAddress], types.ExcludedParticipant]
+		// Confirmation PoC collections
+		ConfirmationPoCEvents          collections.Map[collections.Pair[uint64, uint64], types.ConfirmationPoCEvent]
+		ActiveConfirmationPoCEventItem collections.Item[types.ConfirmationPoCEvent]
+		LastUpgradeHeight              collections.Item[int64]
 		// Bridge & Wrapped Token collections
 		BridgeContractAddresses        collections.Map[collections.Pair[string, string], types.BridgeContractAddress]
 		BridgeTransactionsMap          collections.Map[collections.Triple[string, string, string], types.BridgeTransaction]
@@ -89,6 +94,7 @@ func NewKeeper(
 	streamvestingKeeper types.StreamVestingKeeper,
 	authzKeeper types.AuthzKeeper,
 	getWasmKeeper func() wasmkeeper.Keeper,
+	upgradeKeeper types.UpgradeKeeper,
 ) Keeper {
 	if _, err := sdk.AccAddressFromBech32(authority); err != nil {
 		panic(fmt.Sprintf("invalid authority address: %s", authority))
@@ -112,6 +118,7 @@ func NewKeeper(
 		collateralKeeper:    collateralKeeper,
 		streamvestingKeeper: streamvestingKeeper,
 		getWasmKeeper:       getWasmKeeper,
+		UpgradeKeeper:       upgradeKeeper,
 		// collection init
 		Participants: collections.NewMap(
 			sb,
@@ -280,6 +287,25 @@ func NewKeeper(
 			"excluded_participants",
 			collections.PairKeyCodec(collections.Uint64Key, sdk.AccAddressKey),
 			codec.CollValue[types.ExcludedParticipant](cdc),
+		),
+		ConfirmationPoCEvents: collections.NewMap(
+			sb,
+			types.ConfirmationPoCEventsPrefix,
+			"confirmation_poc_events",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key),
+			codec.CollValue[types.ConfirmationPoCEvent](cdc),
+		),
+		ActiveConfirmationPoCEventItem: collections.NewItem(
+			sb,
+			types.ActiveConfirmationPoCEventPrefix,
+			"active_confirmation_poc_event",
+			codec.CollValue[types.ConfirmationPoCEvent](cdc),
+		),
+		LastUpgradeHeight: collections.NewItem(
+			sb,
+			types.LastUpgradeHeightPrefix,
+			"last_upgrade_height",
+			collections.Int64Value,
 		),
 		BridgeContractAddresses: collections.NewMap(
 			sb,

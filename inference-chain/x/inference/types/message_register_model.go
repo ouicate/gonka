@@ -26,5 +26,9 @@ func (msg *MsgRegisterModel) ValidateBasic() error {
 	if err != nil {
 		return errorsmod.Wrapf(sdkerrors.ErrInvalidAddress, "invalid proposedBy address (%s)", err)
 	}
+	idLength := len(msg.Id)
+	if idLength < 1 || idLength > 500 {
+		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "model id must be between 1 and 500 characters")
+	}
 	return nil
 }

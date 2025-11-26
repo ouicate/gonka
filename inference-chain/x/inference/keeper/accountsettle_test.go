@@ -31,6 +31,42 @@ func calcExpectedRewards(epochIndex int64, params types.Params) uint64 {
 	return inference.CalculateFixedEpochReward(uint64(epochIndex-1), params.BitcoinRewardParams.InitialEpochReward, params.BitcoinRewardParams.DecayRate)
 }
 
+func TestReduceSubsidy(t *testing.T) {
+	logger := createTestLogger(t)
+	logger.Info("Starting TestReduceSubsidy")
+
+	oParams := types.TokenomicsParams{
+		SubsidyReductionAmount:   types.DecimalFromFloat(0.20),
+		SubsidyReductionInterval: types.DecimalFromFloat(0.05),
+		CurrentSubsidyPercentage: types.DecimalFromFloat(0.90),
+	}
+	logger.Info("Initial tokenomics params", "subsidyPercentage", oParams.CurrentSubsidyPercentage.ToFloat32())
+
+	params := oParams.ReduceSubsidyPercentage()
+	logger.Info("After first reduction", "subsidyPercentage", params.CurrentSubsidyPercentage.ToFloat32())
+	require.Equal(t, float32(0.72), params.CurrentSubsidyPercentage.ToFloat32())
+	params2 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.576), params2.CurrentSubsidyPercentage.ToFloat32())
+	params3 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.4608), params3.CurrentSubsidyPercentage.ToFloat32())
+	params4 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.3686), params4.CurrentSubsidyPercentage.ToFloat32())
+	params5 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.2949), params5.CurrentSubsidyPercentage.ToFloat32())
+	params6 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.2359), params6.CurrentSubsidyPercentage.ToFloat32())
+	params7 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.1887), params7.CurrentSubsidyPercentage.ToFloat32())
+	params8 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.1510), params8.CurrentSubsidyPercentage.ToFloat32())
+	params9 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.1208), params9.CurrentSubsidyPercentage.ToFloat32())
+	params10 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.0966), params10.CurrentSubsidyPercentage.ToFloat32())
+	params11 := oParams.ReduceSubsidyPercentage()
+	require.Equal(t, float32(0.0773), params11.CurrentSubsidyPercentage.ToFloat32())
+}
+
 func TestActualSettle(t *testing.T) {
 	logger := createTestLogger(t)
 	logger.Info("Starting TestActualSettle - testing full settlement integration")
@@ -80,6 +116,22 @@ func TestActualSettle(t *testing.T) {
 			},
 		},
 	})
+	// Set active participants for the epoch
+	keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
+		EpochId: 10,
+		Participants: []*types.ActiveParticipant{
+			{Index: participant1.Address},
+			{Index: participant2.Address},
+		},
+	})
+	// Set active participants for the epoch
+	keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
+		EpochId: 10,
+		Participants: []*types.ActiveParticipant{
+			{Index: participant1.Address},
+			{Index: participant2.Address},
+		},
+	})
 	logger.Info("Set participants and epoch data", "epochIndex", 10)
 
 	expectedRewardCoin := calcExpectedRewards(10, params)
@@ -91,7 +143,7 @@ func TestActualSettle(t *testing.T) {
 	require.NoError(t, err2, "Should be able to create coins from reward amount")
 	logger.Info("Created coins for minting", "coins", coins)
 
-	mocks.BankKeeper.EXPECT().MintCoins(ctx, types.ModuleName, coins, gomock.Any()).Return(nil)
+	mocks.BankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, coins, gomock.Any()).Return(nil)
 	mocks.BankKeeper.EXPECT().LogSubAccountTransaction(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	err = keeper.SettleAccounts(ctx, 10, 0)
@@ -169,6 +221,17 @@ func TestActualSettleWithManyParticipants(t *testing.T) {
 		EpochIndex:        10,
 		ValidationWeights: weights,
 	})
+	// Set active participants for the epoch
+	activeParticipantInfos := make([]*types.ActiveParticipant, 150)
+	for i := 0; i < 150; i++ {
+		activeParticipantInfos[i] = &types.ActiveParticipant{
+			Index: participants[i].Address,
+		}
+	}
+	keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
+		EpochId:      10,
+		Participants: activeParticipantInfos,
+	})
 	logger.Info("Set epoch data", "epochIndex", 10)
 
 	params, err := keeper.GetParams(ctx)
@@ -181,7 +244,7 @@ func TestActualSettleWithManyParticipants(t *testing.T) {
 
 	coins, err2 := types.GetCoins(int64(expectedRewardCoin))
 	require.NoError(t, err2, "Should be able to create coins from reward amount")
-	mocks.BankKeeper.EXPECT().MintCoins(ctx, types.ModuleName, coins, gomock.Any()).Return(nil)
+	mocks.BankKeeper.EXPECT().MintCoins(gomock.Any(), types.ModuleName, coins, gomock.Any()).Return(nil)
 	mocks.BankKeeper.EXPECT().LogSubAccountTransaction(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// This should work with pagination and process all 150 participants

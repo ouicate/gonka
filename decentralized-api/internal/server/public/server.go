@@ -21,6 +21,7 @@ type Server struct {
 	trainingExecutor *training.Executor
 	blockQueue       *BridgeQueue
 	bandwidthLimiter *internal.BandwidthLimiter
+	identityCache    *identityCache
 }
 
 // TODO: think about rate limits
@@ -44,6 +45,7 @@ func NewServer(
 		recorder:         recorder,
 		trainingExecutor: trainingExecutor,
 		blockQueue:       blockQueue,
+		identityCache:    newIdentityCache(),
 	}
 
 	s.bandwidthLimiter = internal.NewBandwidthLimiterFromConfig(configManager, recorder, phaseTracker)
@@ -52,6 +54,7 @@ func NewServer(
 	g := e.Group("/v1/")
 
 	g.GET("status", s.getStatus)
+	g.GET("identity", s.getIdentity)
 
 	g.POST("chat/completions", s.postChat)
 	g.GET("chat/completions/:id", s.getChatById)
@@ -88,6 +91,7 @@ func NewServer(
 	// BLS Query Endpoints
 	blsGroup := g.Group("bls/")
 	blsGroup.GET("epoch/:id", s.getBLSEpochByID)
+	blsGroup.GET("epochs/:id", s.getBLSEpochByID)
 	blsGroup.GET("signatures/:request_id", s.getBLSSignatureByRequestID)
 
 	// Restrictions public API (query-only)
