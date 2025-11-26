@@ -295,6 +295,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 			if err != nil {
 				am.LogError("Failed to set last upgrade height", types.Upgrades, "error", err)
 			}
+
+			// Track last upgrade height
+			err = am.keeper.SetLastUpgradeHeight(ctx, blockHeight)
+			if err != nil {
+				am.LogError("Failed to set last upgrade height", types.Upgrades, "error", err)
+			}
 		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
 			am.keeper.RemovePartialUpgrade(ctx, pu.Height)

@@ -275,7 +275,7 @@ type KeeperForModelAssigner interface {
 	GetHardwareNodes(ctx context.Context, participantId string) (*types.HardwareNodes, bool)
 	GetActiveParticipants(ctx context.Context, epochId uint64) (val types.ActiveParticipants, found bool)
 	GetEpochGroupData(ctx context.Context, epochIndex uint64, modelId string) (val types.EpochGroupData, found bool)
-	GetParams(ctx context.Context) (types.Params, error)
+	GetParams(ctx context.Context) types.Params
 }
 
 func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participants []*types.ActiveParticipant, upcomingEpoch types.Epoch) {
@@ -382,12 +382,7 @@ func (ma *ModelAssigner) setModelsForParticipants(ctx context.Context, participa
 func (ma *ModelAssigner) AllocateMLNodesForPoC(ctx context.Context, upcomingEpoch types.Epoch, participants []*types.ActiveParticipant) {
 	ma.LogInfo("Starting ML node allocation for PoC slots", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "start", "num_participants", len(participants))
 
-	params, err := ma.keeper.GetParams(ctx)
-	if err != nil {
-		ma.LogWarn("Unable to get params, skipping PoC slot allocation", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "get_params_error", "error", err.Error())
-		return
-	}
-	allocationFraction := params.EpochParams.PocSlotAllocation
+	allocationFraction := ma.keeper.GetParams(ctx).EpochParams.PocSlotAllocation
 	if allocationFraction == nil || allocationFraction.ToDecimal().IsZero() {
 		ma.LogInfo("PocSlotAllocation is nil or 0, using default 0.5", types.EpochGroup, "flow_context", FlowContext, "sub_flow_context", SubFlowContext, "step", "default_allocation")
 		allocationFraction = &types.Decimal{Value: 5, Exponent: -1}
