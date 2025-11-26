@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     entry_point, from_json, to_json_binary, to_json_vec, BankMsg, Binary, Coin, Deps, DepsMut,
     Env, MessageInfo, Response, StdError, StdResult, Uint128, QueryRequest, GrpcQuery,
-    ContractResult, SystemResult, WasmMsg,
+    ContractResult, SystemResult, WasmMsg, WasmQuery,
 };
 use prost::Message;
 use cw2::{get_contract_version, set_contract_version};
@@ -116,6 +116,34 @@ fn create_cw20_transfer_msg(
     })
 }
 
+/// Query message for wrapped token's BridgeInfo
+#[derive(serde::Serialize)]
+struct BridgeInfoQuery {}
+
+/// Response from wrapped token's BridgeInfo query
+#[derive(serde::Deserialize)]
+struct BridgeInfoResponse {
+    pub chain_id: String,
+    pub contract_address: String,
+}
+
+/// Query CW20 wrapped token for its underlying bridge info (chain_id, eth_contract)
+fn query_bridge_info(deps: Deps, cw20_addr: &str) -> Result<(String, String), ContractError> {
+    #[derive(serde::Serialize)]
+    struct QueryMsg {
+        bridge_info: BridgeInfoQuery,
+    }
+    
+    let query_msg = QueryMsg { bridge_info: BridgeInfoQuery {} };
+    let response: BridgeInfoResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: cw20_addr.to_string(),
+        msg: to_json_binary(&query_msg)
+            .map_err(|e| ContractError::Std(StdError::msg(format!("serialize: {}", e))))?,
+    })).map_err(|e| ContractError::Std(StdError::msg(format!("query bridge_info: {}", e))))?;
+    
+    Ok((response.chain_id, response.contract_address.to_lowercase()))
+}
+
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
@@ -128,10 +156,13 @@ pub fn instantiate(
 
     let admin = deps.api.addr_validate(&msg.admin)?.to_string();
     let buyer = deps.api.addr_validate(&msg.buyer)?.to_string();
-    let accepted_cw20 = deps.api.addr_validate(&msg.accepted_cw20)?.to_string();
 
     if msg.price_usd.is_zero() {
         return Err(ContractError::ZeroAmount {});
+    }
+
+    if msg.accepted_chain_id.is_empty() || msg.accepted_eth_contract.is_empty() {
+        return Err(ContractError::Std(StdError::msg("accepted_chain_id and accepted_eth_contract required")));
     }
 
     let native_denom = get_native_denom(deps.as_ref())?;
@@ -139,7 +170,8 @@ pub fn instantiate(
     let config = Config {
         admin: admin.clone(),
         buyer: buyer.clone(),
-        accepted_cw20: accepted_cw20.clone(),
+        accepted_chain_id: msg.accepted_chain_id.clone(),
+        accepted_eth_contract: msg.accepted_eth_contract.to_lowercase(),
         price_usd: msg.price_usd,
         native_denom: native_denom.clone(),
         is_paused: false,
@@ -151,7 +183,8 @@ pub fn instantiate(
         .add_attribute("method", "instantiate")
         .add_attribute("admin", admin)
         .add_attribute("buyer", buyer)
-        .add_attribute("accepted_cw20", accepted_cw20)
+        .add_attribute("accepted_chain_id", msg.accepted_chain_id)
+        .add_attribute("accepted_eth_contract", msg.accepted_eth_contract)
         .add_attribute("price_usd", msg.price_usd)
         .add_attribute("native_denom", native_denom))
 }
@@ -168,7 +201,6 @@ pub fn execute(
         ExecuteMsg::Pause {} => pause_contract(deps, info),
         ExecuteMsg::Resume {} => resume_contract(deps, info),
         ExecuteMsg::UpdateBuyer { buyer } => update_buyer(deps, info, buyer),
-        ExecuteMsg::UpdateAcceptedCw20 { accepted_cw20 } => update_accepted_cw20(deps, info, accepted_cw20),
         ExecuteMsg::UpdatePrice { price_usd } => update_price(deps, info, price_usd),
         ExecuteMsg::WithdrawNativeTokens { amount, recipient } => withdraw_native_tokens(deps, info, amount, recipient),
         ExecuteMsg::EmergencyWithdraw { recipient } => emergency_withdraw(deps, env, info, recipient),
@@ -189,25 +221,28 @@ fn receive_cw20(
 
     let cw20_contract = info.sender.to_string();
 
-    // Check 1: Only accept from designated CW20 contract
-    if cw20_contract != config.accepted_cw20 {
-        return Err(ContractError::WrongCw20Contract {
-            expected: config.accepted_cw20.clone(),
-            got: cw20_contract,
-        });
-    }
-
-    // Check 2: Only designated buyer can purchase
+    // Check 1: Only designated buyer can purchase
     if cw20_msg.sender != config.buyer {
         return Err(ContractError::BuyerNotAllowed {
             buyer: cw20_msg.sender.clone(),
         });
     }
 
-    // Check 3: Double-check via chain validation
+    // Check 2: Validate it's a legit bridge token via chain
     if !validate_wrapped_token_for_trade(deps.as_ref(), &cw20_contract)? {
         return Err(ContractError::TokenNotAccepted {
             token: format!("CW20 {} not approved for trading", cw20_contract),
+        });
+    }
+
+    // Check 3: Query underlying Ethereum address and compare to expected
+    let (chain_id, eth_contract) = query_bridge_info(deps.as_ref(), &cw20_contract)?;
+    if chain_id != config.accepted_chain_id || eth_contract != config.accepted_eth_contract {
+        return Err(ContractError::WrongToken {
+            expected_chain: config.accepted_chain_id.clone(),
+            expected_contract: config.accepted_eth_contract.clone(),
+            got_chain: chain_id,
+            got_contract: eth_contract,
         });
     }
 
@@ -309,19 +344,6 @@ fn update_buyer(deps: DepsMut, info: MessageInfo, buyer: String) -> Result<Respo
     Ok(Response::new()
         .add_attribute("method", "update_buyer")
         .add_attribute("buyer", validated_buyer))
-}
-
-fn update_accepted_cw20(deps: DepsMut, info: MessageInfo, accepted_cw20: String) -> Result<Response, ContractError> {
-    let mut config = CONFIG.load(deps.storage)?;
-    if info.sender.as_str() != config.admin {
-        return Err(ContractError::Unauthorized {});
-    }
-    let validated = deps.api.addr_validate(&accepted_cw20)?.to_string();
-    config.accepted_cw20 = validated.clone();
-    CONFIG.save(deps.storage, &config)?;
-    Ok(Response::new()
-        .add_attribute("method", "update_accepted_cw20")
-        .add_attribute("accepted_cw20", validated))
 }
 
 fn update_price(deps: DepsMut, info: MessageInfo, price_usd: Uint128) -> Result<Response, ContractError> {
@@ -428,7 +450,8 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse {
         admin: config.admin,
         buyer: config.buyer,
-        accepted_cw20: config.accepted_cw20,
+        accepted_chain_id: config.accepted_chain_id,
+        accepted_eth_contract: config.accepted_eth_contract,
         price_usd: config.price_usd,
         native_denom: config.native_denom,
         is_paused: config.is_paused,
@@ -522,7 +545,8 @@ mod tests {
         InstantiateMsg {
             admin: api.addr_make("admin").to_string(),
             buyer: api.addr_make("buyer").to_string(),
-            accepted_cw20: api.addr_make("usdt").to_string(),
+            accepted_chain_id: "ethereum".to_string(),
+            accepted_eth_contract: "0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
             price_usd: Uint128::from(25000u128), // $0.025
         }
     }
@@ -532,7 +556,6 @@ mod tests {
         let deps = mock_dependencies();
         let api = MockApi::default();
         let buyer_addr = api.addr_make("buyer").to_string();
-        let usdt_addr = api.addr_make("usdt").to_string();
         
         let mut deps = deps;
         let env = mock_env();
@@ -543,7 +566,8 @@ mod tests {
 
         let res = instantiate(deps.as_mut(), env, info, mock_instantiate_msg(&api)).unwrap();
         assert!(res.attributes.iter().any(|a| a.key == "buyer" && a.value == buyer_addr));
-        assert!(res.attributes.iter().any(|a| a.key == "accepted_cw20" && a.value == usdt_addr));
+        assert!(res.attributes.iter().any(|a| a.key == "accepted_chain_id" && a.value == "ethereum"));
+        assert!(res.attributes.iter().any(|a| a.key == "accepted_eth_contract" && a.value == "0xdac17f958d2ee523a2206206994597c13d831ec7"));
     }
 
     #[test]
