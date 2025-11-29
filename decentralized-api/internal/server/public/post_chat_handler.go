@@ -7,6 +7,7 @@ import (
 	"decentralized-api/broker"
 	"decentralized-api/completionapi"
 	"decentralized-api/logging"
+	"decentralized-api/payloadstorage"
 	"decentralized-api/utils"
 	"encoding/json"
 	"fmt"
@@ -457,7 +458,13 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return err
 	}
 
-	err = s.sendInferenceTransaction(request.InferenceId, completionResponse, request.Body, s.recorder.GetAccountAddress(), request)
+	_, promptPayload, err := getPromptHash(modifiedRequestBody.NewBody)
+	if err != nil {
+		logging.Error("Failed to get prompt hash", types.Inferences, "error", err)
+		return err
+	}
+
+	err = s.sendInferenceTransaction(request.InferenceId, completionResponse, request.Body, s.recorder.GetAccountAddress(), request, promptPayload)
 	if err != nil {
 		// Not http.Error, because we assume we already returned everything to the client during proxyResponse execution
 		logging.Error("Failed to send inference transaction", types.Inferences, "error", err)
@@ -618,7 +625,7 @@ func (s *Server) calculateSignature(payload string, timestamp int64, transferAdd
 	return signature, nil
 }
 
-func (s *Server) sendInferenceTransaction(inferenceId string, response completionapi.CompletionResponse, requestBody []byte, executorAddress string, request *ChatRequest) error {
+func (s *Server) sendInferenceTransaction(inferenceId string, response completionapi.CompletionResponse, requestBody []byte, executorAddress string, request *ChatRequest, promptPayload string) error {
 	responseHash, err := response.GetHash()
 	if err != nil || responseHash == "" {
 		logging.Error("Failed to get responseHash from response", types.Inferences, "error", err)
@@ -696,8 +703,68 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 		} else {
 			logging.Debug("Submitted MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
 		}
+
+		// Dual write: store payloads to storage
+		s.storePayloadsToStorage(context.Background(), inferenceId, promptPayload, string(bodyBytes), responseHash)
 	}
 	return nil
+}
+
+func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, promptPayload, responsePayload, expectedResponseHash string) {
+	if s.payloadStorage == nil || s.phaseTracker == nil {
+		return
+	}
+
+	epochState := s.phaseTracker.GetCurrentEpochState()
+	if epochState == nil {
+		logging.Warn("Cannot store payload: epoch state is nil", types.Inferences, "inferenceId", inferenceId)
+		return
+	}
+	epochId := epochState.LatestEpoch.EpochIndex
+
+	err := s.payloadStorage.Store(ctx, inferenceId, epochId, promptPayload, responsePayload)
+	if err != nil {
+		logging.Error("Failed to store payloads locally", types.Inferences, "inferenceId", inferenceId, "epochId", epochId, "error", err)
+		return
+	}
+	logging.Debug("Stored payloads locally", types.Inferences, "inferenceId", inferenceId, "epochId", epochId)
+
+	// TODO: delete before merge
+	s.verifyStoredPayloads(ctx, inferenceId, epochId, promptPayload, expectedResponseHash)
+}
+
+// TODO: delete before merge
+func (s *Server) verifyStoredPayloads(ctx context.Context, inferenceId string, epochId uint64, expectedPromptPayload, expectedResponseHash string) {
+	storedPrompt, storedResponse, err := s.payloadStorage.Retrieve(ctx, inferenceId, epochId)
+	if err != nil {
+		logging.Warn("Consistency check: failed to retrieve stored payloads", types.Inferences, "inferenceId", inferenceId, "error", err)
+		return
+	}
+
+	// Verify prompt hash
+	expectedPromptHash := utils.GenerateSHA256Hash(expectedPromptPayload)
+	storedPromptHash := utils.GenerateSHA256Hash(storedPrompt)
+	if expectedPromptHash != storedPromptHash {
+		logging.Warn("Consistency check: prompt hash mismatch", types.Inferences,
+			"inferenceId", inferenceId,
+			"expected", expectedPromptHash,
+			"stored", storedPromptHash)
+	}
+
+	// Verify response hash
+	storedResponseHash, err := payloadstorage.ComputeResponseHash(storedResponse)
+	if err != nil {
+		logging.Warn("Consistency check: failed to compute stored response hash", types.Inferences, "inferenceId", inferenceId, "error", err)
+		return
+	}
+	if expectedResponseHash != storedResponseHash {
+		logging.Warn("Consistency check: response hash mismatch", types.Inferences,
+			"inferenceId", inferenceId,
+			"expected", expectedResponseHash,
+			"stored", storedResponseHash)
+	}
+
+	logging.Debug("Consistency check passed", types.Inferences, "inferenceId", inferenceId)
 }
 
 func getPromptHash(requestBytes []byte) (string, string, error) {

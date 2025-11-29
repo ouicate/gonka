@@ -7,6 +7,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal"
 	"decentralized-api/internal/server/middleware"
+	"decentralized-api/payloadstorage"
 	"decentralized-api/training"
 	"net/http"
 
@@ -22,6 +23,8 @@ type Server struct {
 	blockQueue       *BridgeQueue
 	bandwidthLimiter *internal.BandwidthLimiter
 	identityCache    *identityCache
+	payloadStorage   payloadstorage.PayloadStorage
+	phaseTracker     *chainphase.ChainPhaseTracker
 }
 
 // TODO: think about rate limits
@@ -46,6 +49,8 @@ func NewServer(
 		trainingExecutor: trainingExecutor,
 		blockQueue:       blockQueue,
 		identityCache:    newIdentityCache(),
+		payloadStorage:   payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
+		phaseTracker:     phaseTracker,
 	}
 
 	s.bandwidthLimiter = internal.NewBandwidthLimiterFromConfig(configManager, recorder, phaseTracker)
