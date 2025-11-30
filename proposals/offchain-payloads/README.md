@@ -24,11 +24,11 @@ All inference prompts and response artifacts are currently stored on-chain. Vali
 - Validators retrieve `prompt_payload` and `response_payload` offchain for validation
 
 **Signature verification:** 
-Both user and transfer agent sign `prompt_hash` instead of full payload:
-- User signature: `prompt_hash + timestamp + transfer_address`
-- Transfer agent signature: `prompt_hash + timestamp + transfer_address + executor_address`
+Signatures use hashes instead of full payloads:
+- User signature: `original_prompt_hash + timestamp + transfer_address` (verified by TA off-chain)
+- Transfer agent signature: `prompt_hash + timestamp + transfer_address + executor_address` (verified by chain)
 
-Chain verifies both signatures on-chain using only hash. User maintains cryptographic commitment to their request. More secure and standard practice than signing full payload.
+Where `original_prompt_hash` = SHA256(original_prompt), `prompt_hash` = SHA256(prompt_payload). TA verifies user signature, then creates prompt_payload and signs prompt_hash. Chain only verifies TA signature.
 
 ## Proposal
 
@@ -48,14 +48,15 @@ Move validation payloads offchain while preserving validation integrity and sign
 - File-based initially, interface supports future PostgreSQL backend
 
 **Execution flow:**
-1. User computes `prompt_hash`, signs it with their key, sends request to transfer agent REST API
-2. Transfer agent assigns executor, sends `prompt_payload` to executor via REST API
-3. Transfer agent signs `prompt_hash` + timestamp + addresses with their key
-4. Transfer agent broadcasts `MsgStartInference` with hash, metadata, and both signatures
-5. Chain verifies both user and transfer agent signatures over `prompt_hash`
-6. Executor validates `prompt_payload` matches `prompt_hash` from chain/TA before execution to prevent processing invalid requests
-7. Executor runs inference, stores both `prompt_payload` and `response_payload` locally
-8. Executor computes `response_hash`, broadcasts `MsgFinishInference` with hash and metadata
+1. User computes `original_prompt_hash`, signs it with their key, sends request to transfer agent REST API
+2. Transfer agent verifies user signature, assigns executor
+3. Transfer agent creates `prompt_payload` (adds seed, logprobs), computes `prompt_hash`
+4. Transfer agent signs `prompt_hash` + timestamp + addresses, sends `prompt_payload` to executor via REST API
+5. Transfer agent broadcasts `MsgStartInference` with `prompt_hash`, metadata, and TA signature
+6. Chain verifies TA signature over `prompt_hash`
+7. Executor validates `prompt_payload` matches `prompt_hash` before execution
+8. Executor runs inference, stores both `prompt_payload` and `response_payload` locally
+9. Executor computes `response_hash`, broadcasts `MsgFinishInference` with hash and metadata
 
 **Validation flow:**
 1. Validator requests both payloads from executor's REST API endpoint
@@ -102,12 +103,12 @@ Request signature includes timestamp. Executor rejects requests with timestamps 
   - Executor: Storage layer for payloads, REST API endpoints for receiving prompts and serving payloads
   - Validator: Payload retrieval from executor REST API
 - `inference-chain`: Transaction protos remove all payload fields, signature verification uses hash instead of full payload
-- `mlnode`: Executor stores both payloads after inference
 - `testermint`: Integration tests for offchain p2p communication between TA→Executor and Validator→Executor
 
 **Key changes:**
 - Transfer agent must send prompt to executor via REST before broadcasting transaction
-- Signature uses `prompt_hash` instead of `original_prompt`: `SHA256(prompt_hash + timestamp + addresses)`
+- User signature: `original_prompt` → `original_prompt_hash` (verified by TA off-chain)
+- TA signature: `original_prompt` → `prompt_hash` (verified by chain)
 - All payload data eliminated from transactions
 
 **Storage Interface:**
@@ -124,7 +125,7 @@ Hash computation and verification in application layer.
 **Implementation Phases:**
 1. **Storage Layer** - Executor storage module for payloads, file-based backend, unit tests
 2. **Dual Write** - TA sends prompts to executor REST API, store payloads both on-chain and locally, verify consistency
-3. **Signature Migration** - Migrate to signing hashes: user signs `hash(original_prompt)` (TA verifies), TA signs `hash(prompt)` (executor verifies)
+3. **Signature Migration** - Migrate to signing hashes: user signs `original_prompt_hash` (TA verifies off-chain), TA signs `prompt_hash` (chain verifies)
 4. **Validator Retrieval** - Implement payload serving endpoints for validators, fallback to on-chain for old inferences
 5. **Validation Migration** - Validators use REST API primary, on-chain fallback for old inferences, vote for invalidation if executor unavailable after retry window (~20m)
 6. **Chain Migration** - Remove all payload fields from transactions, state, and `Inference` proto
