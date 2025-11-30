@@ -27,6 +27,7 @@ data class InferencePayload(
     val transferSignature: String? = null,
     val executionSignature: String? = null,
     val perTokenPrice: Long? = null,
+    val originalPromptHash: String? = null,  // Phase 3: for dev signature verification
 ) {
     companion object {
         fun empty() = InferencePayload(
@@ -104,6 +105,7 @@ data class MsgStartInference(
     val requestTimestamp: Long = 0,
     val transferSignature: String = "",
     val originalPrompt: String = promptPayload,
+    val originalPromptHash: String = "",  // Phase 3: for dev signature verification
 ) : TxMessage
 
 data class MsgFinishInference(
@@ -122,6 +124,8 @@ data class MsgFinishInference(
     val requestedBy: String = "",
     val originalPrompt: String = "",
     val model: String = "",
+    val promptHash: String = "",          // Phase 3: for TA/executor signature verification
+    val originalPromptHash: String = "",  // Phase 3: for dev signature verification
 ) : TxMessage
 
 data class MsgValidation(

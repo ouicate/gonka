@@ -12,6 +12,13 @@ import kotlin.experimental.xor
 import kotlin.test.assertNotNull
 import java.util.Base64
 import com.productscience.assertions.assertThat
+import java.security.MessageDigest
+
+// Phase 3: SHA256 hash utility for signature migration
+fun sha256(input: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    return digest.digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
+}
 
 class InferenceTests : TestermintTest() {
     @Test
@@ -21,8 +28,9 @@ class InferenceTests : TestermintTest() {
 
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
+        // Phase 3: Dev signs hash of original_prompt
         val signature = genesis.node.signPayload(
-            inferenceRequest,
+            sha256(inferenceRequest),
             accountAddress = null,
             timestamp = timestamp,
             endpointAccount = genesisAddress
@@ -40,8 +48,9 @@ class InferenceTests : TestermintTest() {
 
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
+        // Phase 3: Dev signs hash of original_prompt
         val signature = genesis.node.signPayload(
-            inferenceRequest,
+            sha256(inferenceRequest),
             accountAddress = null,
             timestamp = timestamp,
             endpointAccount = "NotTheRightAddress"
@@ -57,18 +66,22 @@ class InferenceTests : TestermintTest() {
     fun `submit raw transaction`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
+        // Phase 3: Dev signs original_prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
         val signature = genesis.node.signPayload(
-            inferenceRequest,
+            originalPromptHash,
             accountAddress = null,
             timestamp = timestamp,
             endpointAccount = genesisAddress
         )
+        // Phase 3: TA signs prompt_hash (= originalPromptHash when no seed modification)
+        val promptHash = originalPromptHash
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature,
-            promptHash = "not_verified",
+            promptHash = promptHash,
             promptPayload = inferenceRequest,
             model = "gpt-o3",
             requestedBy = genesisAddress,
@@ -77,7 +90,8 @@ class InferenceTests : TestermintTest() {
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature
+            transferSignature = taSignature,
+            originalPromptHash = originalPromptHash
         )
 
         val response = genesis.submitMessage(message)
@@ -96,13 +110,15 @@ class InferenceTests : TestermintTest() {
     fun `submit duplicate transaction`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Use hashes for signatures
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature,
-            promptHash = "not_verified",
+            promptHash = originalPromptHash,
             promptPayload = inferenceRequest,
             model = "gpt-o3",
             requestedBy = genesisAddress,
@@ -111,7 +127,8 @@ class InferenceTests : TestermintTest() {
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature
+            transferSignature = taSignature,
+            originalPromptHash = originalPromptHash
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isSuccess()
@@ -123,13 +140,15 @@ class InferenceTests : TestermintTest() {
     fun `submit StartInference with bad dev signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Use hashes for signatures
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature.invalidate(),
-            promptHash = "not_verified",
+            promptHash = originalPromptHash,
             promptPayload = "Say Hello",
             model = "gpt-o3",
             requestedBy = genesisAddress,
@@ -138,7 +157,8 @@ class InferenceTests : TestermintTest() {
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature
+            transferSignature = taSignature,
+            originalPromptHash = originalPromptHash
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isFailure()
@@ -148,13 +168,15 @@ class InferenceTests : TestermintTest() {
     fun `submit StartInference with bad TA signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Use hashes for signatures
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgStartInference(
             creator = genesisAddress,
             inferenceId = signature,
-            promptHash = "not_verified",
+            promptHash = originalPromptHash,
             promptPayload = "Say Hello",
             model = "gpt-o3",
             requestedBy = genesisAddress,
@@ -163,7 +185,8 @@ class InferenceTests : TestermintTest() {
             maxTokens = 500,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
-            transferSignature = taSignature.invalidate()
+            transferSignature = taSignature.invalidate(),
+            originalPromptHash = originalPromptHash
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isFailure()
@@ -176,7 +199,8 @@ class InferenceTests : TestermintTest() {
         genesis.waitForNextInferenceWindow()
         val timestamp = Instant.now().minusSeconds(params.validationParams.timestampExpiration + 10).toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs hash of original_prompt
+        val signature = genesis.node.signPayload(sha256(inferenceRequest) + timestamp.toString() + genesisAddress, null)
 
         assertThatThrownBy {
             genesis.api.makeInferenceRequest(inferenceRequest, genesisAddress, signature, timestamp)
@@ -190,7 +214,8 @@ class InferenceTests : TestermintTest() {
         genesis.waitForNextInferenceWindow()
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs hash of original_prompt
+        val signature = genesis.node.signPayload(sha256(inferenceRequest) + timestamp.toString() + genesisAddress, null)
         val valid = genesis.api.makeInferenceRequest(inferenceRequest, genesisAddress, signature, timestamp)
         assertThat(valid.id).isEqualTo(signature)
         assertThat(valid.model).isEqualTo(inferenceRequestObject.model)
@@ -208,9 +233,11 @@ class InferenceTests : TestermintTest() {
 
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val valid = genesis.api.makeExecutorInferenceRequest(
             inferenceRequest,
             genesisAddress,
@@ -242,9 +269,11 @@ class InferenceTests : TestermintTest() {
         genesis.waitForNextInferenceWindow()
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         assertThatThrownBy {
             genesis.api.makeExecutorInferenceRequest(
                 inferenceRequest,
@@ -263,9 +292,11 @@ class InferenceTests : TestermintTest() {
     fun `executor validates TA signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         assertThatThrownBy {
             genesis.api.makeExecutorInferenceRequest(
                 inferenceRequest,
@@ -284,9 +315,11 @@ class InferenceTests : TestermintTest() {
         val params = genesis.getParams()
         val timestamp = Instant.now().minusSeconds(params.validationParams.timestampExpiration + 10).toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         assertThatThrownBy {
             genesis.api.makeExecutorInferenceRequest(
                 inferenceRequest,
@@ -307,9 +340,11 @@ class InferenceTests : TestermintTest() {
 
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val valid = genesis.api.makeExecutorInferenceRequest(
             inferenceRequest,
             genesisAddress,
@@ -338,9 +373,12 @@ class InferenceTests : TestermintTest() {
     fun `direct finish inference works`() {
         val finishTimestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val finishSignature = genesis.node.signPayload(inferenceRequest + finishTimestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val promptHash = originalPromptHash // Same when no seed modification
+        val finishSignature = genesis.node.signPayload(originalPromptHash + finishTimestamp.toString() + genesisAddress, null)
         val finishTaSignature =
-            genesis.node.signPayload(inferenceRequest + finishTimestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + finishTimestamp.toString() + genesisAddress + genesisAddress, null)
         val finishMessage = MsgFinishInference(
             creator = genesisAddress,
             inferenceId = finishSignature,
@@ -355,7 +393,9 @@ class InferenceTests : TestermintTest() {
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             originalPrompt = inferenceRequest,
-            model = defaultModel
+            model = defaultModel,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash
         )
         val response = genesis.submitMessage(finishMessage)
         assertThat(response).isSuccess()
@@ -365,9 +405,12 @@ class InferenceTests : TestermintTest() {
     fun `finish inference validates dev signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val promptHash = originalPromptHash
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgFinishInference(
             creator = genesisAddress,
             inferenceId = signature.invalidate(),
@@ -383,6 +426,8 @@ class InferenceTests : TestermintTest() {
             requestedBy = genesisAddress,
             model = defaultModel,
             originalPrompt = inferenceRequest,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash,
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isFailure()
@@ -392,9 +437,12 @@ class InferenceTests : TestermintTest() {
     fun `finish inference validates ta signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val promptHash = originalPromptHash
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgFinishInference(
             creator = genesisAddress,
             inferenceId = signature,
@@ -409,7 +457,9 @@ class InferenceTests : TestermintTest() {
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             model = "default",
-            originalPrompt = inferenceRequest
+            originalPrompt = inferenceRequest,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isFailure()
@@ -419,9 +469,12 @@ class InferenceTests : TestermintTest() {
     fun `finish inference validates ea signature`() {
         val timestamp = Instant.now().toEpochNanos()
         val genesisAddress = genesis.node.getColdAddress()
-        val signature = genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress, null)
+        // Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+        val originalPromptHash = sha256(inferenceRequest)
+        val promptHash = originalPromptHash
+        val signature = genesis.node.signPayload(originalPromptHash + timestamp.toString() + genesisAddress, null)
         val taSignature =
-            genesis.node.signPayload(inferenceRequest + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         val message = MsgFinishInference(
             creator = genesisAddress,
             inferenceId = signature,
@@ -437,6 +490,8 @@ class InferenceTests : TestermintTest() {
             requestedBy = genesisAddress,
             model = defaultModel,
             originalPrompt = inferenceRequest,
+            promptHash = promptHash,
+            originalPromptHash = originalPromptHash,
         )
         val response = genesis.submitMessage(message)
         assertThat(response).isFailure()
