@@ -276,6 +276,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	req.Header.Set(utils.XTransferAddressHeader, request.TransferAddress)
 	req.Header.Set(utils.XRequesterAddressHeader, request.RequesterAddress)
 	req.Header.Set(utils.XTASignatureHeader, inferenceRequest.TransferSignature)
+	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash) // Phase 3: for executor validation
 	req.Header.Set("Content-Type", request.Request.Header.Get("Content-Type"))
 
 	resp, err := http.DefaultClient.Do(req)
@@ -409,6 +410,20 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 	if err != nil {
 		logging.Warn("Unable to modify request body", types.Inferences, "error", err)
 		return err
+	}
+
+	// Phase 3: Executor validates prompt_hash matches computed hash
+	if request.PromptHash != "" {
+		computedHash, _, err := getPromptHash(modifiedRequestBody.NewBody)
+		if err != nil {
+			logging.Error("Failed to compute prompt hash", types.Inferences, "error", err)
+			return echo.NewHTTPError(http.StatusBadRequest, "Failed to compute prompt hash")
+		}
+		if computedHash != request.PromptHash {
+			logging.Error("Prompt hash mismatch", types.Inferences,
+				"expected", request.PromptHash, "computed", computedHash)
+			return echo.NewHTTPError(http.StatusBadRequest, "Prompt hash mismatch")
+		}
 	}
 
 	logging.Info("Attempting to lock node for inference", types.Inferences,
@@ -673,8 +688,12 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	}
 
 	if s.recorder != nil {
-		// Calculate executor signature
-		executorSignature, err := s.calculateSignature(string(request.Body), request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
+		// Phase 3: Compute hashes for signature verification
+		promptHash := utils.GenerateSHA256Hash(promptPayload)
+		originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
+
+		// Phase 3: Executor signs prompt_hash (not original_prompt)
+		executorSignature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
 		if err != nil {
 			return err
 		}
@@ -694,6 +713,8 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			RequestedBy:          request.RequesterAddress,
 			OriginalPrompt:       string(request.Body),
 			Model:                model,
+			PromptHash:           promptHash,
+			OriginalPromptHash:   originalPromptHash,
 		}
 
 		logging.Info("Submitting MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
@@ -792,21 +813,27 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	} else if request.OpenAiRequest.MaxTokens > 0 {
 		maxTokens = int(request.OpenAiRequest.MaxTokens)
 	}
+
+	// Phase 3: Compute original_prompt_hash for dev signature verification
+	originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
+
 	transaction := &inference.MsgStartInference{
-		InferenceId:      inferenceId,
-		PromptHash:       promptHash,
-		PromptPayload:    promptPayload,
-		RequestedBy:      request.RequesterAddress,
-		Model:            request.OpenAiRequest.Model,
-		AssignedTo:       executor.Address,
-		NodeVersion:      nodeVersion,
-		MaxTokens:        uint64(maxTokens),
-		PromptTokenCount: uint64(promptTokenCount),
-		RequestTimestamp: request.Timestamp,
-		OriginalPrompt:   string(request.Body),
+		InferenceId:        inferenceId,
+		PromptHash:         promptHash,
+		PromptPayload:      promptPayload,
+		RequestedBy:        request.RequesterAddress,
+		Model:              request.OpenAiRequest.Model,
+		AssignedTo:         executor.Address,
+		NodeVersion:        nodeVersion,
+		MaxTokens:          uint64(maxTokens),
+		PromptTokenCount:   uint64(promptTokenCount),
+		RequestTimestamp:   request.Timestamp,
+		OriginalPrompt:     string(request.Body),
+		OriginalPromptHash: originalPromptHash,
 	}
 
-	signature, err := s.calculateSignature(string(request.Body), request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
+	// Phase 3: TA signs prompt_hash (not original_prompt)
+	signature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -858,6 +885,7 @@ func readRequest(request *http.Request, transferAddress string) (*ChatRequest, e
 		Timestamp:         timestamp,
 		TransferAddress:   transferAddress,
 		TransferSignature: request.Header.Get(utils.XTASignatureHeader),
+		PromptHash:        request.Header.Get(utils.XPromptHashHeader),
 	}, nil
 }
 

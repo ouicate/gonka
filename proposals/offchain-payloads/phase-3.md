@@ -1,0 +1,135 @@
+# Phase 3: Signature Migration
+
+## Summary
+
+This phase migrates signatures from full payloads to cryptographic hashes, reducing signature computation overhead while maintaining security.
+
+### Changes
+
+- **Developer signature**: Signs `SHA256(original_prompt) + timestamp + ta_address`
+- **Transfer Agent signature**: Signs `SHA256(prompt_payload) + timestamp + ta_address + executor_address`
+- **Executor signature**: Signs `SHA256(prompt_payload) + timestamp + ta_address + executor_address`
+
+### Terminology
+
+| Term | Description |
+|------|-------------|
+| `original_prompt` | Raw user request body |
+| `original_prompt_hash` | `SHA256(original_prompt)` - what developer signs |
+| `prompt_payload` | Modified request (original_prompt + seed) |
+| `prompt_hash` | `SHA256(prompt_payload)` - what TA/Executor sign |
+
+## Implementation Details
+
+### Proto Changes
+
+**tx.proto** - Transaction messages:
+- `MsgStartInference`: Added `original_prompt_hash` (field 16)
+- `MsgFinishInference`: Added `prompt_hash` (field 15), `original_prompt_hash` (field 16)
+- Deprecated: `original_prompt`, `prompt_payload`, `response_payload`
+
+**inference.proto** - Stored state:
+- `Inference`: Added `original_prompt_hash` (field 33)
+- Deprecated: `original_prompt`, `prompt_payload`, `response_payload`
+
+### Chain Changes
+
+**msg_server_start_inference.go**:
+- `getDevSignatureComponents`: Returns components with `original_prompt_hash` as payload
+- `getTASignatureComponents`: Returns components with `prompt_hash` as payload
+- `verifyKeys`: Verifies dev and TA signatures separately with different components
+
+**msg_server_finish_inference.go**:
+- `getFinishDevSignatureComponents`: Returns components with `original_prompt_hash` as payload
+- `getFinishTASignatureComponents`: Returns components with `prompt_hash` as payload
+- `verifyFinishKeys`: Verifies dev, TA, and executor signatures with appropriate components
+
+### API Changes
+
+**utils.go**:
+- `validateTransferRequest`: Validates user signature against `SHA256(request.Body)` instead of raw body
+- `validateExecuteRequestWithGrantees`: Validates TA signature against `prompt_hash` header
+
+**post_chat_handler.go**:
+- `createInferenceStartRequest`: TA signs `prompt_hash`, populates `original_prompt_hash`
+- `sendInferenceTransaction`: Computes both hashes, executor signs `prompt_hash`
+- Added `X-Prompt-Hash` header for executor hash validation
+
+**entities.go**:
+- `ChatRequest`: Added `PromptHash` field for receiving hash from TA
+
+### Testermint Changes
+
+**data/inference.kt**:
+- `MsgStartInference`: Added `originalPromptHash`
+- `MsgFinishInference`: Added `promptHash`, `originalPromptHash`
+- `InferencePayload`: Added `originalPromptHash`
+
+**InferenceTests.kt**:
+- Added `sha256()` utility function
+- All tests updated to create signatures over hashes instead of full payloads
+
+## Issues Found During Implementation
+
+### 1. Separate Signature Components Required
+
+The initial plan assumed a single `SignatureComponents` struct could be used for all signatures. However, since dev and TA sign different data (original_prompt_hash vs prompt_hash), we needed separate component functions:
+- `getDevSignatureComponents` / `getFinishDevSignatureComponents`
+- `getTASignatureComponents` / `getFinishTASignatureComponents`
+
+### 2. Executor Hash Validation
+
+Added explicit hash validation in executor to catch mismatches early:
+- TA sends `X-Prompt-Hash` header to executor
+- Executor computes its own hash from modified request body
+- Mismatch returns HTTP 400 before ML inference
+
+### 3. Backward Compatibility Fallback
+
+In `validateExecuteRequestWithGrantees`, added fallback for when `PromptHash` header is empty:
+```go
+payload := request.PromptHash
+if payload == "" {
+    payload = string(request.Body)
+}
+```
+This allows gradual rollout but should be removed in Phase 6.
+
+## Breaking Change
+
+This is a breaking change requiring coordinated deployment of:
+- Chain nodes (inference-chain)
+- API nodes (decentralized-api)
+- Client SDKs (signature creation)
+
+## Test Coverage
+
+All inference-related testermint tests verify:
+- Valid signatures with hash-based components
+- Invalid dev signatures rejected
+- Invalid TA signatures rejected
+- Invalid executor signatures rejected
+- Timestamp validation still works
+- Duplicate request rejection still works
+
+Run tests with:
+```bash
+make run-tests TESTS="InferenceTests"
+```
+
+## Files Modified
+
+| Component | File | Change |
+|-----------|------|--------|
+| Chain | `proto/.../tx.proto` | Add hash fields, deprecate payloads |
+| Chain | `proto/.../inference.proto` | Add original_prompt_hash, deprecate payloads |
+| Chain | `keeper/msg_server_start_inference.go` | Separate components for dev vs TA |
+| Chain | `keeper/msg_server_finish_inference.go` | Separate components for dev vs TA/executor |
+| API | `utils/api_headers.go` | Add X-Prompt-Hash header constant |
+| API | `internal/server/public/utils.go` | Validate sig with original_prompt_hash |
+| API | `internal/server/public/post_chat_handler.go` | TA/executor sign prompt_hash, hash validation |
+| API | `internal/server/public/entities.go` | Add PromptHash to ChatRequest |
+| Testermint | `data/inference.kt` | Add hash fields to data classes |
+| Testermint | `InferenceTests.kt` | Update signatures to use hashes |
+
+

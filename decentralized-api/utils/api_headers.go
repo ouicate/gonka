@@ -8,4 +8,5 @@ const (
 	XTimestampHeader        = "X-Timestamp"
 	XTransferAddressHeader  = "X-Transfer-Address"
 	XTASignatureHeader      = "X-TA-Signature"
+	XPromptHashHeader       = "X-Prompt-Hash" // Phase 3: for executor hash validation
 )

@@ -96,38 +96,73 @@ func (k msgServer) FinishInference(goCtx context.Context, msg *types.MsgFinishIn
 }
 
 func (k msgServer) verifyFinishKeys(ctx sdk.Context, msg *types.MsgFinishInference, transferAgent *types.Participant, requestor *types.Participant, executor *types.Participant) error {
-	components := getFinishSignatureComponents(msg)
-	// The extra seconds here need to be high enough to account for a very long inference.
-	// Remember, deduping (via inferenceId) is our first defense against replay attacks, this is only
-	// to make sure there are no replays from pruned inferences.
-	err := k.validateTimestamp(ctx, components, msg.InferenceId, 60*60)
-	if err != nil {
+	// Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+	devComponents := getFinishDevSignatureComponents(msg)
+	taComponents := getFinishTASignatureComponents(msg)
+
+	// Extra seconds for long-running inferences; deduping via inferenceId is primary replay defense
+	if err := k.validateTimestamp(ctx, devComponents, msg.InferenceId, 60*60); err != nil {
 		return err
 	}
 
-	// Create SignatureData with the necessary participants and signatures
-	sigData := calculations.SignatureData{
-		DevSignature:      msg.InferenceId,
-		TransferSignature: msg.TransferSignature,
-		ExecutorSignature: msg.ExecutorSignature,
-		Dev:               requestor,
-		TransferAgent:     transferAgent,
-		Executor:          executor,
+	// Verify dev signature (original_prompt_hash)
+	if err := calculations.VerifyKeys(ctx, devComponents, calculations.SignatureData{
+		DevSignature: msg.InferenceId, Dev: requestor,
+	}, k); err != nil {
+		k.LogError("FinishInference: dev signature failed", types.Inferences, "error", err)
+		return err
 	}
 
-	// Use the generic VerifyKeys function
-	err = calculations.VerifyKeys(ctx, components, sigData, k)
-	if err != nil {
-		k.LogError("FinishInference: verifyKeys failed", types.Inferences, "error", err)
+	// Verify TA signature
+	// Transfer flow: TA signs prompt_hash (modified body)
+	// Direct executor: TA signs original_prompt_hash (client acts as TA)
+	// Try prompt_hash first (transfer flow), fallback to original_prompt_hash (direct executor)
+	taErr := calculations.VerifyKeys(ctx, taComponents, calculations.SignatureData{
+		TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
+	}, k)
+	if taErr != nil {
+		// Fallback: try original_prompt_hash with executor address for direct executor flow
+		directExecutorComponents := calculations.SignatureComponents{
+			Payload:         msg.OriginalPromptHash,
+			Timestamp:       msg.RequestTimestamp,
+			TransferAddress: msg.TransferredBy,
+			ExecutorAddress: msg.ExecutedBy, // Include executor (unlike dev signature)
+		}
+		if devErr := calculations.VerifyKeys(ctx, directExecutorComponents, calculations.SignatureData{
+			TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
+		}, k); devErr != nil {
+			k.LogError("FinishInference: TA signature failed", types.Inferences, "promptHashErr", taErr, "originalHashErr", devErr)
+			return taErr
+		}
+	}
+
+	// Verify Executor signature (prompt_hash)
+	if err := calculations.VerifyKeys(ctx, taComponents, calculations.SignatureData{
+		ExecutorSignature: msg.ExecutorSignature, Executor: executor,
+	}, k); err != nil {
+		k.LogError("FinishInference: Executor signature failed", types.Inferences, "error", err)
 		return err
 	}
 
 	return nil
 }
 
-func getFinishSignatureComponents(msg *types.MsgFinishInference) calculations.SignatureComponents {
+// getFinishDevSignatureComponents returns components for dev signature verification
+// Dev signs: original_prompt_hash + timestamp + ta_address (no executor)
+func getFinishDevSignatureComponents(msg *types.MsgFinishInference) calculations.SignatureComponents {
 	return calculations.SignatureComponents{
-		Payload:         msg.OriginalPrompt,
+		Payload:         msg.OriginalPromptHash,
+		Timestamp:       msg.RequestTimestamp,
+		TransferAddress: msg.TransferredBy,
+		ExecutorAddress: "", // Dev doesn't include executor address
+	}
+}
+
+// getFinishTASignatureComponents returns components for TA/Executor signature verification
+// TA/Executor sign: prompt_hash + timestamp + ta_address + executor_address
+func getFinishTASignatureComponents(msg *types.MsgFinishInference) calculations.SignatureComponents {
+	return calculations.SignatureComponents{
+		Payload:         msg.PromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.TransferredBy,
 		ExecutorAddress: msg.ExecutedBy,
