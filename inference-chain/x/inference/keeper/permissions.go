@@ -33,7 +33,6 @@ var MessagePermissions = map[reflect.Type][]Permission{
 	reflect.TypeOf((*types.MsgRegisterLiquidityPool)(nil)):           {GovernancePermission},
 	reflect.TypeOf((*types.MsgRegisterModel)(nil)):                   {GovernancePermission},
 	reflect.TypeOf((*types.MsgRegisterTokenMetadata)(nil)):           {GovernancePermission},
-	reflect.TypeOf((*types.MsgRemoveUserFromTrainingAllowList)(nil)): {GovernancePermission},
 	reflect.TypeOf((*types.MsgSetTrainingAllowList)(nil)):            {GovernancePermission},
 
 	reflect.TypeOf((*types.MsgBridgeExchange)(nil)):          {AccountPermission},
@@ -160,7 +159,7 @@ func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if !has {
+	if has {
 		return types.ErrParticipantNotFound
 	}
 	return nil
