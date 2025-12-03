@@ -27,42 +27,30 @@ class NodeDisableInferenceTests : TestermintTest() {
         // 2. Verify active participants and Genesis ML nodes
         genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
         val participants = genesis.api.getActiveParticipants().activeParticipants
-        assertThat(participants).hasSize(3)
+        assertThat(participants.participants).hasSize(3)
 
         val genesisParticipant = participants.getParticipant(genesis)
         assertThat(genesisParticipant).isNotNull
-        // Genesis should have 2 ML nodes (implied by configuration)
-        // We can check this via getNodes() as well
-        
-        val nodes = genesis.api.getNodes()
-        val genesisNodeInfo = nodes.first { it.node.id == genesis.node.id }
-        // The node state might not directly list 'mlNodes' count in 'activeParticipants' object structure depending on deserialization
-        // But let's check 'mlNodes' property of ActiveParticipant if available.
-        // Based on participants.kt, ActiveParticipant has 'mlNodes: List<MlNodes>' where MlNodes wraps List<MlNode>
-        assertThat(genesisParticipant?.mlNodes?.firstOrNull()?.mlNodes).hasSize(2)
-
-        logSection("Verifying inference allocation")
-        // Check that one of genesis's ML nodes is allocated to serve inference
-        // Allocation is usually visible in node state or via active participants epoch info
-        // SchedulingTests.kt checks node.state.epochMlNodes
-        
-        val genesisAllocated = genesisNodeInfo.state.epochMlNodes?.any { (_, mlNodeState) ->
-            // Check timeslot allocation for inference (usually index 1 or similar, depending on logic)
-            // SchedulingTests uses: x.timeslotAllocation.getOrNull(1) == true
-            mlNodeState.timeslotAllocation.getOrNull(1) == true
-        } ?: false
-        
-        assertThat(genesisAllocated).isTrue()
-            .`as`("One of Genesis ML nodes should be allocated for inference")
+        genesisParticipant?.mlNodes?.firstOrNull()?.mlNodes.also { genesisMlNodes ->
+            assertThat(genesisMlNodes).hasSize(2)
+            assertThat(genesisMlNodes!![0].timeslotAllocation[1] || genesisMlNodes[1].timeslotAllocation[1])
+                .isTrue()
+                .`as`("At least one Genesis ML node should have inference timeslot allocation")
+        }
 
         // 3. Wait for INFERENCE phase and disable join-1
         logSection("Waiting for Inference Window")
         genesis.waitForNextInferenceWindow()
         
         val join1 = cluster.joinPairs[0]
-        logSection("Disabling join-1: ${join1.node.id}")
-        val disableResponse = genesis.api.disableNode(join1.node.id)
-        assertThat(disableResponse.nodeId).isEqualTo(join1.node.id)
+        logSection("Disabling join-1")
+        join1.api.getNodes()
+            .first()
+            .also { n ->
+                val nodeId = n.node.id
+                val disableResponse = genesis.api.disableNode(n.node.id)
+                assertThat(disableResponse.nodeId).isEqualTo(nodeId)
+            }
 
         // 4. Wait for beginning of PoC stage and make ~15 inference requests
         logSection("Waiting for PoC start")
@@ -89,7 +77,7 @@ class NodeDisableInferenceTests : TestermintTest() {
         
         // Try to claim rewards for join-1
         logSection("Attempting to claim rewards for join-1")
-        val currentEpoch = genesis.getEpochData().epochIndex
+        val currentEpoch = genesis.getEpochData().latestEpoch
         // We want to claim for the epoch where PoC just happened? 
         // Usually rewards are claimed for previous epochs. 
         // initCluster puts us at some epoch. We waited for stages.
