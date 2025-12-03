@@ -11,7 +11,7 @@ import (
 
 // TODO: Once ready this needs to validate the message payload per specs (max number of hardware resources or string length.
 func (k msgServer) CreateTrainingTask(goCtx context.Context, msg *types.MsgCreateTrainingTask) (*types.MsgCreateTrainingTaskResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, TrainingStartPermission); err != nil {
 		return nil, err
 	}
 

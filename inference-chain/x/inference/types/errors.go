@@ -60,4 +60,5 @@ var (
 	ErrTrainingAssignmentEmpty               = sdkerrors.Register(ModuleName, 1154, "training assignment has no assignees")
 	ErrInvalidPermission                     = sdkerrors.Register(ModuleName, 1155, "invalid permission for message")
 	ErrAccountNotFound                       = sdkerrors.Register(ModuleName, 1156, "account not found")
+	ErrNotAContractAddress                   = sdkerrors.Register(ModuleName, 1157, "address is not a contract address")
 )

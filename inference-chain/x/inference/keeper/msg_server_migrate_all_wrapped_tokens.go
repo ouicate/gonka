@@ -10,7 +10,7 @@ import (
 
 // MigrateAllWrappedTokens migrates all known wrapped-token instances to the provided code id.
 func (k msgServer) MigrateAllWrappedTokens(goCtx context.Context, req *types.MsgMigrateAllWrappedTokens) (*types.MsgMigrateAllWrappedTokensResponse, error) {
-	if err := k.CheckPermission(goCtx, req, req.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, req, GovernancePermission); err != nil {
 		return nil, err
 	}
 	ctx := sdk.UnwrapSDKContext(goCtx)

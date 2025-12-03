@@ -8,7 +8,7 @@ import (
 )
 
 func (k msgServer) RegisterBridgeAddresses(goCtx context.Context, msg *types.MsgRegisterBridgeAddresses) (*types.MsgRegisterBridgeAddressesResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 

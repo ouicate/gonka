@@ -11,7 +11,7 @@ import (
 )
 
 func (k msgServer) FinishInference(goCtx context.Context, msg *types.MsgFinishInference) (*types.MsgFinishInferenceResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, ActiveParticipantPermission); err != nil {
 		return nil, err
 	}
 

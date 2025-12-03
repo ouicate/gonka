@@ -10,7 +10,7 @@ import (
 )
 
 func (k msgServer) TrainingHeartbeat(goCtx context.Context, msg *types.MsgTrainingHeartbeat) (*types.MsgTrainingHeartbeatResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, TrainingExecPermission); err != nil {
 		return nil, err
 	}
 	ctx := sdk.UnwrapSDKContext(goCtx)

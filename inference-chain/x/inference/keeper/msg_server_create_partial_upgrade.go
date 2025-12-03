@@ -10,7 +10,7 @@ import (
 )
 
 func (k msgServer) CreatePartialUpgrade(goCtx context.Context, msg *types.MsgCreatePartialUpgrade) (*types.MsgCreatePartialUpgradeResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 	ctx := sdk.UnwrapSDKContext(goCtx)

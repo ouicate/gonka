@@ -13,7 +13,7 @@ import (
 )
 
 func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInference) (*types.MsgStartInferenceResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, ActiveParticipantPermission); err != nil {
 		return nil, err
 	}
 

@@ -10,7 +10,7 @@ import (
 )
 
 func (k msgServer) SubmitHardwareDiff(goCtx context.Context, msg *types.MsgSubmitHardwareDiff) (*types.MsgSubmitHardwareDiffResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, ParticipantPermission); err != nil {
 		return nil, err
 	}
 

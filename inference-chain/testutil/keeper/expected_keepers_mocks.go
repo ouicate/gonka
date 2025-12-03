@@ -15,6 +15,7 @@ import (
 
 	math "cosmossdk.io/math"
 	types "cosmossdk.io/x/upgrade/types"
+	wasmtypes "github.com/CosmWasm/wasmd/x/wasm/types"
 	types0 "github.com/cosmos/cosmos-sdk/types"
 	authz "github.com/cosmos/cosmos-sdk/x/authz"
 	types1 "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -1336,4 +1337,42 @@ func (m *MockUpgradeKeeper) GetUpgradePlan(ctx context.Context) (types.Plan, err
 func (mr *MockUpgradeKeeperMockRecorder) GetUpgradePlan(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpgradePlan", reflect.TypeOf((*MockUpgradeKeeper)(nil).GetUpgradePlan), ctx)
+}
+
+// MockWasmKeeper is a mock of WasmKeeper interface.
+type MockWasmKeeper struct {
+	ctrl     *gomock.Controller
+	recorder *MockWasmKeeperMockRecorder
+	isgomock struct{}
+}
+
+// MockWasmKeeperMockRecorder is the mock recorder for MockWasmKeeper.
+type MockWasmKeeperMockRecorder struct {
+	mock *MockWasmKeeper
+}
+
+// NewMockWasmKeeper creates a new mock instance.
+func NewMockWasmKeeper(ctrl *gomock.Controller) *MockWasmKeeper {
+	mock := &MockWasmKeeper{ctrl: ctrl}
+	mock.recorder = &MockWasmKeeperMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWasmKeeper) EXPECT() *MockWasmKeeperMockRecorder {
+	return m.recorder
+}
+
+// GetContractInfo mocks base method.
+func (m *MockWasmKeeper) GetContractInfo(ctx context.Context, contractAddress types0.AccAddress) *wasmtypes.ContractInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetContractInfo", ctx, contractAddress)
+	ret0, _ := ret[0].(*wasmtypes.ContractInfo)
+	return ret0
+}
+
+// GetContractInfo indicates an expected call of GetContractInfo.
+func (mr *MockWasmKeeperMockRecorder) GetContractInfo(ctx, contractAddress any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContractInfo", reflect.TypeOf((*MockWasmKeeper)(nil).GetContractInfo), ctx, contractAddress)
 }

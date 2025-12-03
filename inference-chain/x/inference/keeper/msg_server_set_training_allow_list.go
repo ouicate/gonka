@@ -9,7 +9,7 @@ import (
 )
 
 func (k msgServer) SetTrainingAllowList(goCtx context.Context, msg *types.MsgSetTrainingAllowList) (*types.MsgSetTrainingAllowListResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 	ctx := sdk.UnwrapSDKContext(goCtx)

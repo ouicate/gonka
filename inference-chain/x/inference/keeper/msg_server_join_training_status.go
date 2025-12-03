@@ -10,7 +10,7 @@ import (
 )
 
 func (k msgServer) JoinTrainingStatus(goCtx context.Context, msg *types.MsgJoinTrainingStatus) (*types.MsgJoinTrainingStatusResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, TrainingExecPermission); err != nil {
 		return nil, err
 	}
 

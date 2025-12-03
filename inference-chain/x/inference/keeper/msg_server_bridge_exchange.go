@@ -26,10 +26,9 @@ func PubKeyToAddress(pubKey string) (string, error) {
 }
 
 func (k msgServer) BridgeExchange(goCtx context.Context, msg *types.MsgBridgeExchange) (*types.MsgBridgeExchangeResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Validator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, AccountPermission); err != nil {
 		return nil, err
 	}
-
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	k.LogInfo("Bridge exchange: Processing transaction request", types.Messages,

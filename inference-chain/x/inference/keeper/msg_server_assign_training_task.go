@@ -9,7 +9,7 @@ import (
 )
 
 func (k msgServer) AssignTrainingTask(goCtx context.Context, msg *types.MsgAssignTrainingTask) (*types.MsgAssignTrainingTaskResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, TrainingStartPermission); err != nil {
 		return nil, err
 	}
 

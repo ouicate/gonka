@@ -7,7 +7,7 @@ import (
 )
 
 func (k msgServer) SubmitSeed(ctx context.Context, msg *types.MsgSubmitSeed) (*types.MsgSubmitSeedResponse, error) {
-	if err := k.CheckPermission(ctx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(ctx, msg, ParticipantPermission); err != nil {
 		return nil, err
 	}
 	currentEpoch, found := k.GetEffectiveEpochIndex(ctx)

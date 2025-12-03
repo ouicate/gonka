@@ -13,7 +13,7 @@ const TrainingTaskAssignmentDeadline = 100
 
 // TODO: ideally this should check that one participant can't claim more than 1 task at a time
 func (k msgServer) ClaimTrainingTaskForAssignment(goCtx context.Context, msg *types.MsgClaimTrainingTaskForAssignment) (*types.MsgClaimTrainingTaskForAssignmentResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Creator); err != nil {
+	if err := k.CheckPermission(goCtx, msg, TrainingStartPermission); err != nil {
 		return nil, err
 	}
 

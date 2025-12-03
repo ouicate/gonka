@@ -10,7 +10,7 @@ import (
 )
 
 func (k msgServer) UpdateParams(goCtx context.Context, req *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
-	if err := k.CheckPermission(goCtx, req, req.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, req, GovernancePermission); err != nil {
 		return nil, err
 	}
 

@@ -42,11 +42,3 @@ func (msg *MsgRequestBridgeWithdrawal) ValidateBasic() error {
 
 	return nil
 }
-
-func (msg *MsgRequestBridgeWithdrawal) GetSigners() []sdk.AccAddress {
-	creatorAddr, err := sdk.AccAddressFromBech32(msg.Creator)
-	if err != nil {
-		panic(err)
-	}
-	return []sdk.AccAddress{creatorAddr}
-}

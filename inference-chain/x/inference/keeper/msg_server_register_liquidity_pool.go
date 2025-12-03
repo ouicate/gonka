@@ -18,7 +18,7 @@ import (
 // This operation instantiates a new contract and registers it atomically.
 // Only the authorized governance account can perform this registration.
 func (k msgServer) RegisterLiquidityPool(goCtx context.Context, msg *types.MsgRegisterLiquidityPool) (*types.MsgRegisterLiquidityPoolResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 

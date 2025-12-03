@@ -8,7 +8,7 @@ import (
 )
 
 func (k msgServer) RegisterTokenMetadata(goCtx context.Context, msg *types.MsgRegisterTokenMetadata) (*types.MsgRegisterTokenMetadataResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 

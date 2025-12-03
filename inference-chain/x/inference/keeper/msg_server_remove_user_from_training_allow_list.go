@@ -8,7 +8,7 @@ import (
 )
 
 func (k msgServer) RemoveUserFromTrainingAllowList(goCtx context.Context, msg *types.MsgRemoveUserFromTrainingAllowList) (*types.MsgRemoveUserFromTrainingAllowListResponse, error) {
-	if err := k.CheckPermission(goCtx, msg, msg.Authority); err != nil {
+	if err := k.CheckPermission(goCtx, msg, GovernancePermission); err != nil {
 		return nil, err
 	}
 	ctx := sdk.UnwrapSDKContext(goCtx)

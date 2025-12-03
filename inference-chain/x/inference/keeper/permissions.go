@@ -12,13 +12,16 @@ import (
 type Permission string
 
 const (
-	GovernancePermission               Permission = "governance"
-	TrainingExecPermission             Permission = "training_execution"
-	TrainingStartPermission            Permission = "training_start"
-	ParticipantPermission              Permission = "participant"
-	ActiveParticipantPermission        Permission = "active_participant"
-	AccountPermission                  Permission = "account"
-	CurrentActiveParticipantPermission Permission = "current_active_participant"
+	GovernancePermission                Permission = "governance"
+	TrainingExecPermission              Permission = "training_execution"
+	TrainingStartPermission             Permission = "training_start"
+	ParticipantPermission               Permission = "participant"
+	ActiveParticipantPermission         Permission = "active_participant"
+	AccountPermission                   Permission = "account"
+	CurrentActiveParticipantPermission  Permission = "current_active_participant"
+	ContractPermission                  Permission = "contract"
+	NoPermission                        Permission = "none"
+	PreviousActiveParticipantPermission Permission = "previous_active_participant"
 )
 
 var MessagePermissions = map[reflect.Type][]Permission{
@@ -33,14 +36,15 @@ var MessagePermissions = map[reflect.Type][]Permission{
 	reflect.TypeOf((*types.MsgRegisterLiquidityPool)(nil)):           {GovernancePermission},
 	reflect.TypeOf((*types.MsgRegisterModel)(nil)):                   {GovernancePermission},
 	reflect.TypeOf((*types.MsgRegisterTokenMetadata)(nil)):           {GovernancePermission},
-	reflect.TypeOf((*types.MsgSetTrainingAllowList)(nil)):            {GovernancePermission},
+	reflect.TypeOf((*types.MsgRegisterWrappedTokenContract)(nil)):    {GovernancePermission},
 
-	reflect.TypeOf((*types.MsgBridgeExchange)(nil)):          {AccountPermission},
-	reflect.TypeOf((*types.MsgRequestBridgeMint)(nil)):       {AccountPermission},
-	reflect.TypeOf((*types.MsgRequestBridgeWithdrawal)(nil)): {AccountPermission},
+	reflect.TypeOf((*types.MsgBridgeExchange)(nil)):    {AccountPermission},
+	reflect.TypeOf((*types.MsgRequestBridgeMint)(nil)): {AccountPermission},
 
-	reflect.TypeOf((*types.MsgSubmitNewParticipant)(nil)):         {},
-	reflect.TypeOf((*types.MsgSubmitNewUnfundedParticipant)(nil)): {},
+	reflect.TypeOf((*types.MsgRequestBridgeWithdrawal)(nil)): {ContractPermission},
+
+	reflect.TypeOf((*types.MsgSubmitNewParticipant)(nil)):         {NoPermission},
+	reflect.TypeOf((*types.MsgSubmitNewUnfundedParticipant)(nil)): {NoPermission},
 
 	reflect.TypeOf((*types.MsgClaimRewards)(nil)):                     {ParticipantPermission},
 	reflect.TypeOf((*types.MsgSubmitHardwareDiff)(nil)):               {ParticipantPermission},
@@ -59,16 +63,32 @@ var MessagePermissions = map[reflect.Type][]Permission{
 	reflect.TypeOf((*types.MsgCreateDummyTrainingTask)(nil)):        {TrainingStartPermission},
 	reflect.TypeOf((*types.MsgCreateTrainingTask)(nil)):             {TrainingStartPermission},
 
-	reflect.TypeOf((*types.MsgFinishInference)(nil)):     {ActiveParticipantPermission},
-	reflect.TypeOf((*types.MsgInvalidateInference)(nil)): {ActiveParticipantPermission},
-	reflect.TypeOf((*types.MsgRevalidateInference)(nil)): {ActiveParticipantPermission},
-	reflect.TypeOf((*types.MsgStartInference)(nil)):      {ActiveParticipantPermission},
+	reflect.TypeOf((*types.MsgFinishInference)(nil)): {ActiveParticipantPermission},
+	reflect.TypeOf((*types.MsgStartInference)(nil)):  {ActiveParticipantPermission},
 
-	reflect.TypeOf((*types.MsgValidation)(nil)): {ActiveParticipantPermission},
+	// Allow participants who are no longer active to perform catch up validations
+	reflect.TypeOf((*types.MsgValidation)(nil)): {ActiveParticipantPermission, PreviousActiveParticipantPermission},
 }
 
-func (k msgServer) CheckPermission(ctx context.Context, msg sdk.Msg, actor string) error {
-	actorAddr, err := sdk.AccAddressFromBech32(actor)
+type HasSigners interface {
+	GetSigners() []string
+}
+
+// One or more permissions (compile time error if none)
+func (k msgServer) CheckPermission(ctx context.Context, msg HasSigners, permission Permission, permissions ...Permission) error {
+	signers := msg.GetSigners()
+	var err error
+	for _, signer := range signers {
+		err = k.checkPermissions(ctx, msg, signer, append(permissions, permission))
+		if err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+func (k msgServer) checkPermissions(ctx context.Context, msg HasSigners, signer string, permissions []Permission) error {
+	signerAddr, err := sdk.AccAddressFromBech32(signer)
 	if err != nil {
 		return err
 	}
@@ -78,76 +98,119 @@ func (k msgServer) CheckPermission(ctx context.Context, msg sdk.Msg, actor strin
 		return types.ErrInvalidPermission
 	}
 
+	// Double check that the global and local lists match (order independent):
+	if len(permission) != len(permissions) {
+		return types.ErrInvalidPermission
+	}
+	permMap := make(map[Permission]bool)
+	for _, p := range permission {
+		permMap[p] = true
+	}
+	for _, p := range permissions {
+		if !permMap[p] {
+			return types.ErrInvalidPermission
+		}
+	}
+
+	var lastErr error
 	for _, perm := range permission {
 		switch perm {
 		case GovernancePermission:
-			if err := k.checkGovernancePermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkGovernancePermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case AccountPermission:
-			if err := k.checkAccountPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkAccountPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case ParticipantPermission:
-			if err := k.checkParticipantPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkParticipantPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case ActiveParticipantPermission:
-			if err := k.checkActiveParticipantPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkActiveParticipantPermission(ctx, signerAddr, 0); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		case PreviousActiveParticipantPermission:
+			if err := k.checkActiveParticipantPermission(ctx, signerAddr, 1); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case TrainingExecPermission:
-			if err := k.checkTrainingExecPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkTrainingExecPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case TrainingStartPermission:
-			if err := k.checkTrainingStartPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkTrainingStartPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
 		case CurrentActiveParticipantPermission:
-			if err := k.checkCurrentActiveParticipantPermission(ctx, actorAddr); err != nil {
-				return err
+			if err := k.checkCurrentActiveParticipantPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
+		case ContractPermission:
+			if err := k.checkContractPermission(ctx, signerAddr); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+		case NoPermission:
+			return nil
 		default:
 			return types.ErrInvalidPermission
 		}
 	}
-	return nil
+	return lastErr
 
 }
 
-func (k msgServer) checkAccountPermission(ctx context.Context, actor sdk.AccAddress) error {
-	acc := k.AccountKeeper.GetAccount(ctx, actor)
+func (k msgServer) checkAccountPermission(ctx context.Context, signer sdk.AccAddress) error {
+	acc := k.AccountKeeper.GetAccount(ctx, signer)
 	if acc == nil {
 		return types.ErrAccountNotFound
 	}
 	return nil
 }
 
-func (k msgServer) checkParticipantPermission(ctx context.Context, actor sdk.AccAddress) error {
-	_, err := k.Participants.Get(ctx, actor)
+func (k msgServer) checkParticipantPermission(ctx context.Context, signer sdk.AccAddress) error {
+	_, err := k.Participants.Get(ctx, signer)
 	return err
 }
 
-func (k msgServer) checkActiveParticipantPermission(ctx context.Context, actor sdk.AccAddress) error {
+func (k msgServer) checkActiveParticipantPermission(ctx context.Context, signer sdk.AccAddress, epochOffset uint64) error {
 	currentEpoch, err := k.EffectiveEpochIndex.Get(ctx)
 	if err != nil {
 		return err
 	}
-	p, found := k.GetActiveParticipants(ctx, currentEpoch)
+	p, found := k.GetActiveParticipants(ctx, currentEpoch-epochOffset)
 	if !found {
 		return types.ErrParticipantNotFound
 	}
 	for _, participant := range p.Participants {
-		if participant.Index == actor.String() {
+		if participant.Index == signer.String() {
 			return nil
 		}
 	}
 	return types.ErrParticipantNotFound
 }
 
-func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, actor sdk.AccAddress) error {
-	err := k.checkActiveParticipantPermission(ctx, actor)
+func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, signer sdk.AccAddress) error {
+	err := k.checkActiveParticipantPermission(ctx, signer, 0)
 	if err != nil {
 		return err
 	}
@@ -155,7 +218,7 @@ func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	has, err := k.ExcludedParticipantsMap.Has(ctx, collections.Join(currentEpoch, actor))
+	has, err := k.ExcludedParticipantsMap.Has(ctx, collections.Join(currentEpoch, signer))
 	if err != nil {
 		return err
 	}
@@ -165,8 +228,8 @@ func (k msgServer) checkCurrentActiveParticipantPermission(ctx context.Context, 
 	return nil
 }
 
-func (k msgServer) checkTrainingExecPermission(ctx context.Context, actor sdk.AccAddress) error {
-	allowed, err := k.TrainingExecAllowListSet.Has(ctx, actor)
+func (k msgServer) checkTrainingExecPermission(ctx context.Context, signer sdk.AccAddress) error {
+	allowed, err := k.TrainingExecAllowListSet.Has(ctx, signer)
 	if err != nil {
 		return err
 	}
@@ -176,8 +239,8 @@ func (k msgServer) checkTrainingExecPermission(ctx context.Context, actor sdk.Ac
 	return nil
 }
 
-func (k msgServer) checkTrainingStartPermission(ctx context.Context, actor sdk.AccAddress) error {
-	allowed, err := k.TrainingStartAllowListSet.Has(ctx, actor)
+func (k msgServer) checkTrainingStartPermission(ctx context.Context, signer sdk.AccAddress) error {
+	allowed, err := k.TrainingStartAllowListSet.Has(ctx, signer)
 	if err != nil {
 		return err
 	}
@@ -187,9 +250,17 @@ func (k msgServer) checkTrainingStartPermission(ctx context.Context, actor sdk.A
 	return nil
 }
 
-func (k msgServer) checkGovernancePermission(ctx context.Context, actor sdk.AccAddress) error {
-	if k.GetAuthority() != actor.String() {
+func (k msgServer) checkGovernancePermission(ctx context.Context, signer sdk.AccAddress) error {
+	if k.GetAuthority() != signer.String() {
 		return types.ErrInvalidSigner
+	}
+	return nil
+}
+
+func (k msgServer) checkContractPermission(ctx context.Context, signer sdk.AccAddress) error {
+	contractInfo := k.wasmKeeper.GetContractInfo(ctx, signer)
+	if contractInfo == nil {
+		return types.ErrNotAContractAddress
 	}
 	return nil
 }
