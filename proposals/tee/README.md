@@ -85,7 +85,7 @@ Current `/chat/completions` request flow:
 Dev -> Transfer Agent (Network Node) -> Executor (Network Node) -> Executor (MLNode)
 ```
 
-[current inference flow diagram](./image.png)
+![current inference flow diagram](./image.png)
 
 https://what-is-gonka.hashnode.dev/decentralized-ai-inference-balancing-security-and-performance
 
