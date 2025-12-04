@@ -7,12 +7,17 @@ import (
 	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/pkg/errors"
 	"github.com/productscience/inference/x/inference/types"
+	"github.com/productscience/inference/x/inference/utils"
 )
 
 // CreateTask creates a new task, storing the full object under /tasks/{taskID}
 // and adding its ID to the queued set.
 func (k Keeper) CreateTask(ctx sdk.Context, task *types.TrainingTask) error {
+	if err := k.validateTask(ctx, task); err != nil {
+		return err
+	}
 	store := EmptyPrefixStore(ctx, &k)
 
 	if task.Id == 0 {
@@ -31,6 +36,66 @@ func (k Keeper) CreateTask(ctx sdk.Context, task *types.TrainingTask) error {
 	queuedKey := types.QueuedTrainingTaskFullKey(task.Id)
 	store.Set(queuedKey, []byte{})
 
+	return nil
+}
+
+func (k Keeper) validateTask(ctx sdk.Context, task *types.TrainingTask) error {
+	if err := k.validateAccount(ctx, task.RequestedBy); err != nil {
+		return errors.Wrap(err, "invalid RequestedBy account")
+	}
+	if err := k.validateAccount(ctx, task.Assigner); err != nil {
+		return errors.Wrap(err, "invalid Assigner account")
+	}
+	if len(task.HardwareResources) > 1000 {
+		return fmt.Errorf("hardware resources too long: %d", len(task.HardwareResources))
+	}
+	for _, resource := range task.HardwareResources {
+		length := len(resource.Type)
+		if length == 0 {
+			return fmt.Errorf("hardware resource type cannot be empty")
+		}
+		if length > 256 {
+			return fmt.Errorf("hardware resource type too long: %d", length)
+		}
+	}
+	for _, assignee := range task.Assignees {
+		if err := k.validateAccount(ctx, assignee.Participant); err != nil {
+			return errors.Wrapf(err, "invalid assignee account: %s", assignee.Participant)
+		}
+		if len(assignee.NodeIds) > 1000 {
+			return fmt.Errorf("node ids too long: %d", len(assignee.NodeIds))
+		}
+		for _, nodeId := range assignee.NodeIds {
+			if err := utils.ValidateNodeId(nodeId); err != nil {
+				return errors.Wrapf(err, "invalid node id: %s", nodeId)
+			}
+		}
+	}
+	if task.Config == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
+	if task.Config.Datasets == nil {
+		return fmt.Errorf("config.Datasets cannot be nil")
+	}
+	if len(task.Config.Datasets.Train) > 10000 {
+		return fmt.Errorf("config.Datasets.Train too long: %d", len(task.Config.Datasets.Train))
+	}
+	if len(task.Config.Datasets.Test) > 10000 {
+		return fmt.Errorf("config.Datasets.Test too long: %d", len(task.Config.Datasets.Test))
+	}
+	return nil
+
+}
+
+func (k Keeper) validateAccount(ctx sdk.Context, address string) error {
+	requestedAccount, err := sdk.AccAddressFromBech32(address)
+	if err != nil {
+		return err
+	}
+	_, err = k.Participants.Get(ctx, requestedAccount)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

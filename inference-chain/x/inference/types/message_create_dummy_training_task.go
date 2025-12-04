@@ -1,10 +1,17 @@
 package types
 
 import (
+	"strings"
+
 	errorsmod "cosmossdk.io/errors"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	"strings"
+)
+
+const (
+	MaxHardwareResources  = 100
+	MaxAssignees          = 100
+	MaxNodeIdsPerAssignee = 100
 )
 
 var _ sdk.Msg = &MsgCreateDummyTrainingTask{}
@@ -23,11 +30,17 @@ func (msg *MsgCreateDummyTrainingTask) ValidateBasic() error {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "task is required")
 	}
 	// Minimal structural checks: hardware_resources types non-empty if present; assignees fields if present
+	if len(msg.Task.HardwareResources) > MaxHardwareResources {
+		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "number of hardware resources exceeds maximum allowed (%d)", MaxHardwareResources)
+	}
 	for i, hr := range msg.Task.HardwareResources {
 		if strings.TrimSpace(hr.Type) == "" {
 			return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "task.hardware_resources[%d].type is required", i)
 		}
 		// hr.Count is uint32; no negativity possible; no upper bound here
+	}
+	if len(msg.Task.Assignees) > MaxAssignees {
+		return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "number of assignees exceeds maximum allowed (%d)", MaxAssignees)
 	}
 	for i, a := range msg.Task.Assignees {
 		if strings.TrimSpace(a.Participant) == "" {
@@ -35,6 +48,9 @@ func (msg *MsgCreateDummyTrainingTask) ValidateBasic() error {
 		}
 		if _, err := sdk.AccAddressFromBech32(a.Participant); err != nil {
 			return errorsmod.Wrapf(sdkerrors.ErrInvalidAddress, "task.assignees[%d].participant invalid (%s)", i, err)
+		}
+		if len(a.NodeIds) > MaxNodeIdsPerAssignee {
+			return errorsmod.Wrapf(sdkerrors.ErrInvalidRequest, "number of node IDs for assignee %d exceeds maximum allowed (%d)", i, MaxNodeIdsPerAssignee)
 		}
 		for j, nid := range a.NodeIds {
 			if strings.TrimSpace(nid) == "" {

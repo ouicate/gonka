@@ -10,6 +10,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
+	"github.com/productscience/inference/x/inference/utils"
 )
 
 type OuterStepState struct {
@@ -141,6 +142,10 @@ func NewGlobalNodeId(globalNodeId string, creator string) (*GlobalNodeId, error)
 		return nil, errors.New("nodeId must start with creator")
 	}
 	localNodeId := splitRes[1]
+	err := utils.ValidateNodeId(localNodeId)
+	if err != nil {
+		return nil, err
+	}
 	return &GlobalNodeId{Participant: address, LocalNodeId: localNodeId}, nil
 }
 

@@ -23,7 +23,7 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 		k.LogError("Account already exists", types.Participants, "address", msg.Address)
 		return nil, types.ErrAccountAlreadyExists
 	}
-	newAccount := k.AccountKeeper.NewAccountWithAddress(ctx, actualAddress)
+
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(msg.PubKey)
 	if err != nil {
 		return nil, err
@@ -34,6 +34,8 @@ func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *type
 		k.LogError("Pubkey does not match address", types.Participants, "address", msg.Address, "expected", expectedAddress.String())
 		return nil, types.ErrPubKeyDoesNotMatchAddress
 	}
+
+	newAccount := k.AccountKeeper.NewAccountWithAddress(ctx, actualAddress)
 	err = newAccount.SetPubKey(&actualKey)
 	if err != nil {
 		k.LogError("Error setting pubkey", types.Participants, "error", err)
