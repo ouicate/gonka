@@ -459,7 +459,7 @@ val inferenceConfig = ApplicationConfig(
     genesisSpec = createSpec()
 )
 
-fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = spec {
+fun createSpec(epochLength: Long = 30L, epochShift: Int = 0): Spec<AppState> = spec {
     this[AppState::gov] = spec<GovState> {
         this[GovState::params] = spec<GovParams> {
             this[GovParams::votingPeriod] = Duration.ofSeconds(30)
@@ -470,11 +470,11 @@ fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = s
         this[InferenceState::params] = spec<InferenceParams> {
             this[InferenceParams::epochParams] = spec<EpochParams> {
                 this[EpochParams::epochLength] = epochLength
-                this[EpochParams::pocStageDuration] = 2L
-                this[EpochParams::pocExchangeDuration] = 1L
-                this[EpochParams::pocValidationDelay] = 1L
-                this[EpochParams::pocValidationDuration] = 2L
-                this[EpochParams::setNewValidatorsDelay] = 1L
+                this[EpochParams::pocStageDuration] = 10L
+                this[EpochParams::pocExchangeDuration] = 3L
+                this[EpochParams::pocValidationDelay] = 2L
+                this[EpochParams::pocValidationDuration] = 10L
+                this[EpochParams::setNewValidatorsDelay] = 2L
                 this[EpochParams::epochShift] = epochShift
             }
             this[InferenceParams::validationParams] = spec<ValidationParams> {

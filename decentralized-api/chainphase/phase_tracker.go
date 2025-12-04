@@ -19,6 +19,8 @@ type ChainPhaseTracker struct {
 	currentEpochParams         *types.EpochParams
 	currentIsSynced            bool
 	activeConfirmationPoCEvent *types.ConfirmationPoCEvent
+
+	waiters map[int64][]chan struct{}
 }
 
 type BlockInfo struct {
@@ -28,7 +30,9 @@ type BlockInfo struct {
 
 // NewChainPhaseTracker creates a new ChainPhaseTracker instance.
 func NewChainPhaseTracker() *ChainPhaseTracker {
-	return &ChainPhaseTracker{}
+	return &ChainPhaseTracker{
+		waiters: make(map[int64][]chan struct{}),
+	}
 }
 
 // Update caches the latest Epoch information from the network.
@@ -42,6 +46,16 @@ func (t *ChainPhaseTracker) Update(block BlockInfo, epoch *types.Epoch, params *
 	t.currentEpochParams = params
 	t.currentIsSynced = isSynced
 	t.activeConfirmationPoCEvent = confirmationPoCEvent
+
+	// Notify waiters
+	for height, chans := range t.waiters {
+		if height <= block.Height {
+			for _, c := range chans {
+				close(c)
+			}
+			delete(t.waiters, height)
+		}
+	}
 }
 
 type EpochState struct {
@@ -90,4 +104,21 @@ func (t *ChainPhaseTracker) UpdateEpochParams(params types.EpochParams) {
 	defer t.mu.Unlock()
 
 	t.currentEpochParams = &params
+}
+
+func (t *ChainPhaseTracker) WaitForHeight(height int64) <-chan struct{} {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	c := make(chan struct{})
+	if t.currentBlock.Height >= height {
+		close(c)
+		return c
+	}
+
+	if t.waiters == nil {
+		t.waiters = make(map[int64][]chan struct{})
+	}
+	t.waiters[height] = append(t.waiters[height], c)
+	return c
 }

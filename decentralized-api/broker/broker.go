@@ -335,6 +335,14 @@ func (b *Broker) TriggerStatusQuery(bypassDebounce bool) {
 	}
 }
 
+func (b *Broker) GetEpochState() *chainphase.EpochState {
+	return b.phaseTracker.GetCurrentEpochState()
+}
+
+func (b *Broker) WaitForHeight(height int64) <-chan struct{} {
+	return b.phaseTracker.WaitForHeight(height)
+}
+
 func (b *Broker) GetChainBridge() BrokerChainBridge {
 	return b.chainBridge
 }
