@@ -132,7 +132,7 @@ Hash computation and verification in application layer.
 6. **Chain Migration** - Remove all payload fields from transactions, state, and `Inference` proto
 7. **Invalidation Proof Endpoint** - Endpoint for validators to submit executor's signed payload as proof when hash mismatch detected (fast invalidation without voting)
 
-Feature flags control phase activation. Each phase independently testable with rollback capability.
+Each phase independently testable with rollback capability.
 
 **Testing Strategy:**
 - Unit: Storage operations, hash verification, pruning

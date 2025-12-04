@@ -84,16 +84,16 @@ Added explicit hash validation in executor to catch mismatches early:
 - Executor computes its own hash from modified request body
 - Mismatch returns HTTP 400 before ML inference
 
-### 3. Backward Compatibility Fallback
+### 3. Direct Executor Flow Fallback
 
 In `validateExecuteRequestWithGrantees`, added fallback for when `PromptHash` header is empty:
 ```go
 payload := request.PromptHash
 if payload == "" {
-    payload = string(request.Body)
+    payload = utils.GenerateSHA256Hash(string(request.Body))
 }
 ```
-This allows gradual rollout but should be removed in Phase 6.
+This handles the direct executor flow where the client acts as both dev and TA, sending the original_prompt as the body. The hash is computed from the body, which correctly validates the signature. Will be removed in Phase 6 when payload fields are eliminated.
 
 ## Signature Verification Architecture
 

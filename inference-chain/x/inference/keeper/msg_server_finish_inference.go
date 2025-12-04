@@ -134,6 +134,8 @@ func (k msgServer) verifyFinishKeys(ctx sdk.Context, msg *types.MsgFinishInferen
 			k.LogError("FinishInference: TA signature failed", types.Inferences, "promptHashErr", taErr, "originalHashErr", devErr)
 			return taErr
 		}
+		// Fallback succeeded - using direct executor flow
+		k.LogWarn("FinishInference: Using direct executor signature fallback", types.Inferences, "inferenceId", msg.InferenceId)
 	}
 
 	// Verify Executor signature (prompt_hash)
