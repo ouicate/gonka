@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // CLI tool to submit epoch group key to BridgeContract
-// Usage: node submit-epoch.js <contractAddress> <epochId> <groupPublicKey> <validationSignature>
+// Usage: HARDHAT_NETWORK=mainnet node submit-epoch.js <contractAddress> <epochId> <groupPublicKey> [validationSignature]
 
-import hre from "hardhat";
-import { ethers } from "ethers";
+import hardhat from "hardhat";
 import dotenv from "dotenv";
 import { base64ToHex, base64SignatureToHex, inspectBLSKey } from "./bls.js";
 
@@ -49,35 +48,25 @@ function convertSignatureToHex(input) {
     }
 }
 
-// Helper function to get provider and signer
+// Helper function to get provider and signer (supports Ledger via hardhat-ledger plugin)
 async function getProviderAndSigner() {
-    const networkConnection = await hre.network.connect();
-    const networkName = networkConnection.networkName;
+    // Connect to network and get ethers (Hardhat 3 API)
+    const connection = await hardhat.network.connect();
+    const { ethers } = connection;
     
-    let rpcUrl;
-    let signer;
-    
-    if (networkName === "localhost" || networkName === "hardhat") {
-        rpcUrl = "http://127.0.0.1:8545";
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = await provider.getSigner();
-        return { provider, signer, ethers };
-    } else {
-        // Remote network - use private key from env
-        rpcUrl = process.env[`${networkName.toUpperCase()}_RPC_URL`];
-        if (!rpcUrl) {
-            throw new Error(`RPC URL not found for network ${networkName}. Set ${networkName.toUpperCase()}_RPC_URL in your .env file.`);
-        }
-        
-        const privateKey = process.env.PRIVATE_KEY;
-        if (!privateKey) {
-            throw new Error(`PRIVATE_KEY not found in environment. Set PRIVATE_KEY in your .env file.`);
-        }
-        
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = new ethers.Wallet(privateKey, provider);
-        return { provider, signer, ethers };
+    if (!ethers) {
+        throw new Error("hardhat-ethers plugin not loaded. Make sure it's in the plugins array in hardhat.config.js");
     }
+    
+    // Get signers from Hardhat (includes Ledger accounts if configured)
+    const signers = await ethers.getSigners();
+    if (signers.length === 0) {
+        throw new Error("No signers available. Configure accounts in hardhat.config.js or set PRIVATE_KEY/LEDGER_ADDRESS in .env");
+    }
+    
+    const signer = signers[0];
+    const provider = ethers.provider;
+    return { provider, signer, ethers };
 }
 
 async function submitEpoch(contractAddress, epochId, groupPublicKey, validationSignature) {
@@ -87,8 +76,8 @@ async function submitEpoch(contractAddress, epochId, groupPublicKey, validationS
     const { provider, signer, ethers } = await getProviderAndSigner();
     
     // Show network info
-    const network = await provider.getNetwork();
-    console.log("Network:", network.name, `(chainId: ${network.chainId})`);
+    const networkInfo = await provider.getNetwork();
+    console.log("Network:", networkInfo.name, `(chainId: ${networkInfo.chainId})`);
     console.log();
     
     // Validate inputs
@@ -144,8 +133,7 @@ async function submitEpoch(contractAddress, epochId, groupPublicKey, validationS
     
     // Connect to contract
     console.log("Connecting to contract...");
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    const bridge = new ethers.Contract(contractAddress, artifact.abi, signer);
+    const bridge = await ethers.getContractAt("BridgeContract", contractAddress);
     
     // Verify contract exists and is a BridgeContract
     const code = await provider.getCode(contractAddress);
@@ -174,11 +162,23 @@ async function submitEpoch(contractAddress, epochId, groupPublicKey, validationS
     console.log("- Your Address:", await signer.getAddress());
     console.log();
     
+    // Get current gas fees from the network
+    const feeData = await provider.getFeeData();
+    console.log("Gas fees:");
+    console.log("- Max Fee:", ethers.formatUnits(feeData.maxFeePerGas, "gwei"), "gwei");
+    console.log("- Priority Fee:", ethers.formatUnits(feeData.maxPriorityFeePerGas, "gwei"), "gwei");
+    console.log();
+    
     // Submit epoch using admin function
     console.log(`Submitting epoch ${epochIdNum}...`);
+    console.log("(Confirm the transaction on your Ledger if using hardware wallet)");
     const tx = await bridge.setGroupKey(
         epochIdNum,
-        hexPublicKey
+        hexPublicKey,
+        {
+            maxFeePerGas: feeData.maxFeePerGas,
+            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+        }
     );
     
     console.log("✓ Transaction sent:", tx.hash);
@@ -213,7 +213,7 @@ function parseArgs() {
     const args = process.argv.slice(2);
     
     if (args.length < 3) {
-        console.error("Usage: node submit-epoch.js <contractAddress> <epochId> <groupPublicKey> [validationSignature]");
+        console.error("Usage: HARDHAT_NETWORK=<network> node submit-epoch.js <contractAddress> <epochId> <groupPublicKey> [validationSignature]");
         console.error("\nArguments:");
         console.error("  contractAddress       - Deployed BridgeContract address");
         console.error("  epochId              - Epoch ID (positive integer)");
@@ -222,12 +222,12 @@ function parseArgs() {
         console.error("  validationSignature  - BLS signature (128 bytes) or '0x' for genesis");
         console.error("                          Format: base64-encoded OR hex (0x-prefixed)");
         console.error("\nExamples:");
-        console.error("  # Genesis epoch (epoch 1) - no signature needed (base64)");
-        console.error('  node submit-epoch.js 0x1234... 1 "uLyVx3JCS..." "0x"');
+        console.error("  # Genesis epoch (epoch 1) with Ledger on mainnet");
+        console.error('  HARDHAT_NETWORK=mainnet node submit-epoch.js 0x1234... 1 "uLyVx3JCS..." 0x');
         console.error("\n  # Subsequent epochs - signature required (base64)");
-        console.error('  node submit-epoch.js 0x1234... 5 "uLyVx3JCS..." "petZ+65yf..."');
-        console.error("\n  # Using hex format");
-        console.error('  node submit-epoch.js 0x1234... 1 "0xb8bc95c7..." "0x"');
+        console.error('  HARDHAT_NETWORK=mainnet node submit-epoch.js 0x1234... 5 "uLyVx3JCS..." "petZ+65yf..."');
+        console.error("\n  # Using hex format on localhost");
+        console.error('  HARDHAT_NETWORK=localhost node submit-epoch.js 0x1234... 1 "0xb8bc95c7..." 0x');
         process.exit(1);
     }
     

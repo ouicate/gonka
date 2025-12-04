@@ -1,43 +1,32 @@
 #!/usr/bin/env node
 // CLI tool to enable normal operation mode on BridgeContract
-// Usage: node enable-normal-operation.js <contractAddress>
+// Usage: HARDHAT_NETWORK=mainnet node enable-normal-operation.js <contractAddress>
 
-import hre from "hardhat";
-import { ethers } from "ethers";
+import hardhat from "hardhat";
 import dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
 
-// Helper function to get provider and signer
+// Helper function to get provider and signer (supports Ledger via hardhat-ledger plugin)
 async function getProviderAndSigner() {
-    const networkConnection = await hre.network.connect();
-    const networkName = networkConnection.networkName;
+    // Connect to network and get ethers (Hardhat 3 API)
+    const connection = await hardhat.network.connect();
+    const { ethers } = connection;
     
-    let rpcUrl;
-    let signer;
-    
-    if (networkName === "localhost" || networkName === "hardhat") {
-        rpcUrl = "http://127.0.0.1:8545";
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = await provider.getSigner();
-        return { provider, signer, ethers };
-    } else {
-        // Remote network - use private key from env
-        rpcUrl = process.env[`${networkName.toUpperCase()}_RPC_URL`];
-        if (!rpcUrl) {
-            throw new Error(`RPC URL not found for network ${networkName}. Set ${networkName.toUpperCase()}_RPC_URL in your .env file.`);
-        }
-        
-        const privateKey = process.env.PRIVATE_KEY;
-        if (!privateKey) {
-            throw new Error(`PRIVATE_KEY not found in environment. Set PRIVATE_KEY in your .env file.`);
-        }
-        
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = new ethers.Wallet(privateKey, provider);
-        return { provider, signer, ethers };
+    if (!ethers) {
+        throw new Error("hardhat-ethers plugin not loaded. Make sure it's in the plugins array in hardhat.config.js");
     }
+    
+    // Get signers from Hardhat (includes Ledger accounts if configured)
+    const signers = await ethers.getSigners();
+    if (signers.length === 0) {
+        throw new Error("No signers available. Configure accounts in hardhat.config.js or set PRIVATE_KEY/LEDGER_ADDRESS in .env");
+    }
+    
+    const signer = signers[0];
+    const provider = ethers.provider;
+    return { provider, signer, ethers };
 }
 
 async function enableNormalOperation(contractAddress) {
@@ -46,8 +35,8 @@ async function enableNormalOperation(contractAddress) {
     const { provider, signer, ethers } = await getProviderAndSigner();
     
     // Show network info
-    const network = await provider.getNetwork();
-    console.log("Network:", network.name, `(chainId: ${network.chainId})`);
+    const networkInfo = await provider.getNetwork();
+    console.log("Network:", networkInfo.name, `(chainId: ${networkInfo.chainId})`);
     console.log();
     
     // Validate inputs
@@ -59,8 +48,7 @@ async function enableNormalOperation(contractAddress) {
     console.log();
     
     // Connect to contract
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    const bridge = new ethers.Contract(contractAddress, artifact.abi, signer);
+    const bridge = await ethers.getContractAt("BridgeContract", contractAddress);
     
     // Verify contract exists
     const code = await provider.getCode(contractAddress);
@@ -100,11 +88,22 @@ async function enableNormalOperation(contractAddress) {
     
     console.log();
     
+    // Get current gas fees from the network
+    const feeData = await provider.getFeeData();
+    console.log("Gas fees:");
+    console.log("- Max Fee:", ethers.formatUnits(feeData.maxFeePerGas, "gwei"), "gwei");
+    console.log("- Priority Fee:", ethers.formatUnits(feeData.maxPriorityFeePerGas, "gwei"), "gwei");
+    console.log();
+    
     // Enable normal operation
     console.log("Enabling normal operation...");
+    console.log("(Confirm the transaction on your Ledger if using hardware wallet)");
     
     try {
-        const tx = await bridge.resetToNormalOperation();
+        const tx = await bridge.resetToNormalOperation({
+            maxFeePerGas: feeData.maxFeePerGas,
+            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+        });
         
         console.log("✓ Transaction sent:", tx.hash);
         console.log("Waiting for confirmation...");
@@ -177,11 +176,11 @@ function parseArgs() {
     const args = process.argv.slice(2);
     
     if (args.length < 1) {
-        console.error("Usage: node enable-normal-operation.js <contractAddress>");
+        console.error("Usage: HARDHAT_NETWORK=<network> node enable-normal-operation.js <contractAddress>");
         console.error("\nArguments:");
         console.error("  contractAddress  - Deployed BridgeContract address");
         console.error("\nExample:");
-        console.error('  node enable-normal-operation.js 0x1234...');
+        console.error('  HARDHAT_NETWORK=mainnet node enable-normal-operation.js 0x1234...');
         console.error("\nNote:");
         console.error("  - Contract must be in ADMIN_CONTROL state");
         console.error("  - At least one epoch must be submitted");

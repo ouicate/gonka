@@ -4,8 +4,8 @@
 
 ### Request withdraw
 ```
-./inferenced tx wasm execute gonka14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sjhejf8 \
-    '{"withdraw":{"amount":"190000","destination_address":"0x8BF9D25F9a63764A52Bcbf8E742a475b38D3838c"}}' \
+./inferenced tx wasm execute <GONKA_WRAPPED_TOKEN_ADDRESS> \
+    '{"withdraw":{"amount":"190000","destination_address":"ETH_DESTINATION_ADDRESS"}}' \
     --from testnet \
     --keyring-backend file \
     --chain-id gonka-mainnet \
@@ -81,7 +81,7 @@ curl http://localhost:8000/v1/bls/signatures/bd24d688dd69be8a31705a032f378f084ab
 
 ```
 HARDHAT_NETWORK=mainnet node submit-epoch-public.js \
-    0xEf3BBA27779C4b08b3b3534407113747d6601180 \
+    <ETH_CONTRACT_ADDRESS> \
     135 \
     AAAAAAAAAAAAAAAAAAAAAA63vXLd3uPbuxH1yrS/bROB2nRYHjOY9K1QVOb8aQAd+zfE8LSn+OFj78VGwGGrlQAAAAAAAAAAAAAAAAAAAAAXaSw0bnEzpP5IFI3QJzex7bkeo3hKmGUOSd6M54JxgGdztl5/C8nTtZO/+LO8TCMAAAAAAAAAAAAAAAAAAAAAEvuyXmuyhnE7T3W0yn06GV4RoUb9ptfPxotVgM+CFf6JZXDY/0JmNg0AyE/pev2EAAAAAAAAAAAAAAAAAAAAAAWeLkP67OzhmOcLlubkTnGgclH0TiRCrRRaD1DfD4eo5kPlVjtdZKRSV9ydIsLUcQ== \
     AAAAAAAAAAAAAAAAAAAAAAZ99Eu4W7Ca2A0wBDwCw+fwGG/CbseFoNNYATktzvMTStrQ8pplV06XWPmBo8IpEQAAAAAAAAAAAAAAAAAAAAAIQ18sBomMuhw5x1LwUdRMbRUudE/p8yb08DanvEkdwYr0AnQeGtmMMrwDHWz2JuA=
@@ -91,7 +91,7 @@ HARDHAT_NETWORK=mainnet node submit-epoch-public.js \
 
 ```
 HARDHAT_NETWORK=mainnet node withdraw-tokens.js \
-  0xEf3BBA27779C4b08b3b3534407113747d6601180 \ # Contract address
+  <ETH_CONTRACT_ADDRESS> \ # Contract address
   135 \ # epochId
   "vSTWiN1pvooxcFoDLzePCEq3x/C5NQ+jFMvfcEozCm4=" \ # requestId
   "0x8BF9D25F9a63764A52Bcbf8E742a475b38D3838c" \ # destinationAddress
@@ -108,7 +108,7 @@ Similar but:
 ```
 ./inferenced tx inference request-bridge-mint \
     1000000000 \
-    "0xEeC5Ca4286A5A16Ea87C0612c55F73DD982a36C6" \
+    <ETH_CONTRACT_ADDRESS> \
     "ethereum" \
     --from testnet \
     --keyring-backend file \
@@ -123,9 +123,9 @@ And accordinly:
 
 
 ```bash
-HARDHAT_NETWORK=mainnet node mint-wgnk.js 0xEf3BBA27779C4b08b3b3534407113747d6601180 5 \
+HARDHAT_NETWORK=mainnet node mint-wgnk.js <ETH_CONTRACT_ADDRESS> 5 \
   TCjLmj/TXQtQzM8SLLKcOB1NUidAHLi1+SrHhTj4B34= \
-  0xEeC5Ca4286A5A16Ea87C0612c55F73DD982a36C6 \
+  <ETH_DESTINATION_ADDRESS> \
   1000000000 \
   AAAAAAAAAAAAAAAAAAAAAAaT1+fAtBplGOY8GLdhwfs0rC0qte+hrsPzbTTGKtjsW1IePQ3QmxFk7EufUNK8YgAAAAAAAAAAAAAAAAAAAAAXEuDg+U9cQzv9YKsWQXGfP1ljBECkZCv3HxrYlk6DsukefcYqyGkPsF6z8S6qH+Q=
 ```

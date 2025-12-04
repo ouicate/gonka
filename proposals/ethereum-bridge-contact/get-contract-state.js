@@ -99,7 +99,7 @@ async function getContractState(contractAddress, showFull = false) {
         // Calculate range of epochs to check
         const startEpoch = latestEpochId > maxStoredEpochs 
             ? latestEpochId - maxStoredEpochs + 1n 
-            : 1n;
+            : latestEpochId - 10n;
         
         console.log(`Checking epochs ${startEpoch} to ${latestEpochId}...\n`);
         

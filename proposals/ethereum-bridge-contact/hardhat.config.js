@@ -1,10 +1,15 @@
-import "@nomicfoundation/hardhat-ethers";
+import hardhatEthers from "@nomicfoundation/hardhat-ethers";
+import hardhatLedger from "@nomicfoundation/hardhat-ledger";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+// Ledger address (set via LEDGER_ADDRESS env var or hardcode here)
+const LEDGER_ADDRESS = process.env.LEDGER_ADDRESS || "0xc0eF863B1c566F82da3cD2Dd083c6716963452bF";
+
 /** @type import('hardhat/config').HardhatUserConfig */
 export default {
+  plugins: [hardhatEthers, hardhatLedger],
   solidity: {
     version: "0.8.19",
     settings: {
@@ -33,6 +38,7 @@ export default {
       type: "http",
       url: process.env.MAINNET_RPC_URL || "https://eth-mainnet.alchemyapi.io/v2/YOUR-API-KEY",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      ledgerAccounts: [LEDGER_ADDRESS],
       chainId: 1,
     },
     

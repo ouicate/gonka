@@ -1,79 +1,67 @@
 // Deployment script for BridgeContract
-// Usage: npx hardhat run deploy.js --network <network>
+// Usage: HARDHAT_NETWORK=mainnet node deploy.js
+// Ledger: Configure LEDGER_ADDRESS in .env, then run normally
 
-import hre from "hardhat";
-import { ethers } from "ethers";
+import hardhat from "hardhat";
 import dotenv from "dotenv";
 
 // Load environment variables from .env file
 dotenv.config();
 
 // Helper function to get provider and signer for current network
+// Uses Hardhat's built-in signer management (supports Ledger via hardhat-ledger plugin)
 async function getProviderAndSigner() {
-    const networkConnection = await hre.network.connect();
-    const networkName = networkConnection.networkName;
+    // Connect to network and get ethers (Hardhat 3 API)
+    const connection = await hardhat.network.connect();
+    const { ethers } = connection;
     
-    // Get RPC URL for the network
-    let rpcUrl;
-    let signer;
-    
-    if (networkName === "localhost" || networkName === "hardhat") {
-        rpcUrl = "http://127.0.0.1:8545";
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = await provider.getSigner();
-        return { provider, signer, ethers };
-    } else {
-        // Remote network - use private key from env
-        rpcUrl = process.env[`${networkName.toUpperCase()}_RPC_URL`];
-        if (!rpcUrl) {
-            throw new Error(`RPC URL not found for network ${networkName}. Set ${networkName.toUpperCase()}_RPC_URL in your .env file.`);
-        }
-        
-        const privateKey = process.env.PRIVATE_KEY;
-        if (!privateKey) {
-            throw new Error(`PRIVATE_KEY not found in environment. Set PRIVATE_KEY in your .env file.`);
-        }
-        
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
-        signer = new ethers.Wallet(privateKey, provider);
-        return { provider, signer, ethers };
+    if (!ethers) {
+        throw new Error("hardhat-ethers plugin not loaded. Make sure it's in the plugins array in hardhat.config.js");
     }
+    
+    // Get signers from Hardhat (includes Ledger accounts if configured)
+    const signers = await ethers.getSigners();
+    if (signers.length === 0) {
+        throw new Error("No signers available. Configure accounts in hardhat.config.js or set PRIVATE_KEY/LEDGER_ADDRESS in .env");
+    }
+    
+    const signer = signers[0];
+    const provider = ethers.provider;
+    return { provider, signer, ethers };
 }
 
 async function main() {
     console.log("Deploying BridgeContract...");
     
-    // Get provider and signer
+    // Get provider and signer (Ledger support via hardhat-ledger plugin)
     const { provider, signer, ethers } = await getProviderAndSigner();
-    console.log("Deploying from:", await signer.getAddress());
+    const deployerAddress = await signer.getAddress();
+    console.log("Deploying from:", deployerAddress);
     
-    // Load compiled contract artifacts
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    
-    // Create contract factory
-    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
-
     // Define chain IDs for cross-chain replay protection
     // Gonka chain identifier (using sha256 for unique chain ID)
     const gonkaChainId = ethers.sha256(ethers.toUtf8Bytes("gonka-mainnet"));
     
     // Ethereum chain ID (convert network chain ID to bytes32)
-    const network = await provider.getNetwork();
-    const ethereumChainId = ethers.zeroPadValue(ethers.toBeHex(network.chainId), 32);
+    const networkInfo = await signer.provider.getNetwork();
+    const ethereumChainId = ethers.zeroPadValue(ethers.toBeHex(networkInfo.chainId), 32);
     
     console.log("Chain IDs:");
     console.log("- Gonka Chain ID:", gonkaChainId);
-    console.log("- Ethereum Chain ID:", ethereumChainId, "(chain", network.chainId + ")");
+    console.log("- Ethereum Chain ID:", ethereumChainId, "(chain", networkInfo.chainId + ")");
 
-    // Deploy the contract with required constructor arguments
-    const bridge = await BridgeContract.deploy(gonkaChainId, ethereumChainId);
+    // Deploy the contract using ethers.deployContract (better Ledger support)
+    console.log("\nPlease confirm the transaction on your device if using Ledger...");
+    const bridge = await ethers.deployContract("BridgeContract", [gonkaChainId, ethereumChainId]);
     
-    console.log("Waiting for deployment...");
+    const deployTx = bridge.deploymentTransaction();
+    console.log("Transaction submitted:", deployTx.hash);
+    console.log("View on Etherscan: https://etherscan.io/tx/" + deployTx.hash);
+    console.log("Waiting for confirmation...");
     await bridge.waitForDeployment();
 
     const contractAddress = await bridge.getAddress();
     console.log("BridgeContract deployed to:", contractAddress);
-    console.log("Transaction hash:", bridge.deploymentTransaction().hash);
 
     // Verify the initial state
     const currentState = await bridge.getCurrentState();
@@ -96,10 +84,8 @@ async function main() {
 
 // Example usage functions for testing
 async function submitGenesisEpoch(bridgeAddress, groupPublicKey) {
-    const { provider, signer, ethers } = await getProviderAndSigner();
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
-    const bridge = BridgeContract.attach(bridgeAddress);
+    const { ethers } = await getProviderAndSigner();
+    const bridge = await ethers.getContractAt("BridgeContract", bridgeAddress);
 
     console.log("Submitting genesis epoch (epoch 1)...");
     
@@ -116,10 +102,8 @@ async function submitGenesisEpoch(bridgeAddress, groupPublicKey) {
 }
 
 async function enableNormalOperation(bridgeAddress) {
-    const { provider, signer, ethers } = await getProviderAndSigner();
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
-    const bridge = BridgeContract.attach(bridgeAddress);
+    const { ethers } = await getProviderAndSigner();
+    const bridge = await ethers.getContractAt("BridgeContract", bridgeAddress);
 
     console.log("Enabling normal operation...");
     
@@ -129,17 +113,15 @@ async function enableNormalOperation(bridgeAddress) {
     console.log("Normal operation enabled! Transaction:", tx.hash);
     
     const newState = await bridge.getCurrentState();
-    console.log("Current state:", newState === 0 ? "ADMIN_CONTROL" : "NORMAL_OPERATION");
+    console.log("Current state:", newState === 0n ? "ADMIN_CONTROL" : "NORMAL_OPERATION");
 
     return tx;
 }
 
 // Example withdrawal function for testing
 async function testWithdrawal(bridgeAddress, withdrawalCommand) {
-    const { provider, signer, ethers } = await getProviderAndSigner();
-    const artifact = await hre.artifacts.readArtifact("BridgeContract");
-    const BridgeContract = new ethers.ContractFactory(artifact.abi, artifact.bytecode, signer);
-    const bridge = BridgeContract.attach(bridgeAddress);
+    const { ethers } = await getProviderAndSigner();
+    const bridge = await ethers.getContractAt("BridgeContract", bridgeAddress);
 
     console.log("Testing withdrawal...");
     console.log("Command:", withdrawalCommand);
