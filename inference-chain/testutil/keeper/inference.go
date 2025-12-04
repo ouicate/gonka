@@ -16,6 +16,7 @@ import (
 	"cosmossdk.io/store"
 	"cosmossdk.io/store/metrics"
 	storetypes "cosmossdk.io/store/types"
+	wasmkeeper "github.com/CosmWasm/wasmd/x/wasm/keeper"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -76,6 +77,7 @@ type InferenceMocks struct {
 	StreamVestingKeeper *MockStreamVestingKeeper
 	BankViewKeeper      *MockBankKeeper
 	AuthzKeeper         *MockAuthzKeeper
+	WasmKeeper          *MockWasmKeeper
 }
 
 func (mocks *InferenceMocks) StubForInitGenesis(ctx context.Context) {
@@ -218,7 +220,7 @@ func InferenceKeeperWithMock(
 		collateralKeeper,
 		streamvestingKeeper,
 		authzKeeper,
-		nil,
+		func() wasmkeeper.Keeper { return wasmkeeper.Keeper{} },
 		upgradeKeeper,
 	)
 

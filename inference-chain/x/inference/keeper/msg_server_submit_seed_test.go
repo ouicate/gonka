@@ -71,6 +71,9 @@ func TestSubmitSeed(t *testing.T) {
 			}
 			k.SetEpoch(ctx, &types.Epoch{Index: uint64(tc.effectiveEpochIndex + 1)})
 			// Call the function
+			k.SetParticipant(ctx, types.Participant{
+				Index: tc.inputMsg.Creator,
+			})
 			resp, err := ms.SubmitSeed(ctx, tc.inputMsg)
 
 			// Assertions

@@ -11,6 +11,9 @@ import (
 )
 
 func (k msgServer) SubmitNewUnfundedParticipant(goCtx context.Context, msg *types.MsgSubmitNewUnfundedParticipant) (*types.MsgSubmitNewUnfundedParticipantResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, NoPermission); err != nil {
+		return nil, err
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	actualAddress, err := sdk.AccAddressFromBech32(msg.Address)

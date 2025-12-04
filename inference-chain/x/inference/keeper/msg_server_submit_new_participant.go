@@ -8,6 +8,9 @@ import (
 )
 
 func (k msgServer) SubmitNewParticipant(goCtx context.Context, msg *types.MsgSubmitNewParticipant) (*types.MsgSubmitNewParticipantResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, NoPermission); err != nil {
+		return nil, err
+	}
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	// Check if participant already exists. If it does, restrict updates to only

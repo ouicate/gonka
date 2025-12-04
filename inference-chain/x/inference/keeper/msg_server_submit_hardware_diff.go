@@ -10,6 +10,10 @@ import (
 )
 
 func (k msgServer) SubmitHardwareDiff(goCtx context.Context, msg *types.MsgSubmitHardwareDiff) (*types.MsgSubmitHardwareDiffResponse, error) {
+	if err := k.CheckPermission(goCtx, msg, ParticipantPermission); err != nil {
+		return nil, err
+	}
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	_, found := k.GetParticipant(goCtx, msg.Creator)

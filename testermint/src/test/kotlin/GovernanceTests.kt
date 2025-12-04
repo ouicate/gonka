@@ -30,6 +30,25 @@ class GovernanceTests : TestermintTest() {
     }
 
     @Test
+    fun `veto a setParamsProposal`() {
+        val (cluster, genesis) = initCluster()
+        genesis.setPocWeight(11)
+        genesis.waitForNextEpoch()
+        val params = genesis.getParams()
+        val modifiedParams = params.copy(
+            validationParams = params.validationParams.copy(
+                expirationBlocks = params.validationParams.expirationBlocks + 1
+            )
+        )
+        logSection("Submitting Proposal")
+        genesis.runProposal(cluster, UpdateParams(params = modifiedParams), vetoVoters = listOf(genesis.name))
+        logSection("Verifying Fail")
+        val newParams = genesis.getParams()
+        assertThat(newParams.validationParams).isEqualTo(params.validationParams)
+
+    }
+
+    @Test
     fun `fail a setParams proposal`() {
         val (cluster, genesis) = initCluster()
         val params = genesis.getParams()
