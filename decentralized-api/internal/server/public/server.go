@@ -15,16 +15,17 @@ import (
 )
 
 type Server struct {
-	e                *echo.Echo
-	nodeBroker       *broker.Broker
-	configManager    *apiconfig.ConfigManager
-	recorder         cosmosclient.CosmosMessageClient
-	trainingExecutor *training.Executor
-	blockQueue       *BridgeQueue
-	bandwidthLimiter *internal.BandwidthLimiter
-	identityCache    *identityCache
-	payloadStorage   payloadstorage.PayloadStorage
-	phaseTracker     *chainphase.ChainPhaseTracker
+	e                    *echo.Echo
+	nodeBroker           *broker.Broker
+	configManager        *apiconfig.ConfigManager
+	recorder             cosmosclient.CosmosMessageClient
+	trainingExecutor     *training.Executor
+	blockQueue           *BridgeQueue
+	bandwidthLimiter     *internal.BandwidthLimiter
+	identityCache        *identityCache
+	payloadStorage       payloadstorage.PayloadStorage
+	phaseTracker         *chainphase.ChainPhaseTracker
+	epochGroupDataCache  *internal.EpochGroupDataCache
 }
 
 // TODO: think about rate limits
@@ -42,15 +43,16 @@ func NewServer(
 	configManagerRef = configManager
 
 	s := &Server{
-		e:                e,
-		nodeBroker:       nodeBroker,
-		configManager:    configManager,
-		recorder:         recorder,
-		trainingExecutor: trainingExecutor,
-		blockQueue:       blockQueue,
-		identityCache:    newIdentityCache(),
-		payloadStorage:   payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
-		phaseTracker:     phaseTracker,
+		e:                    e,
+		nodeBroker:           nodeBroker,
+		configManager:        configManager,
+		recorder:             recorder,
+		trainingExecutor:     trainingExecutor,
+		blockQueue:           blockQueue,
+		identityCache:        newIdentityCache(),
+		payloadStorage:       payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
+		phaseTracker:         phaseTracker,
+		epochGroupDataCache:  internal.NewEpochGroupDataCache(recorder),
 	}
 
 	s.bandwidthLimiter = internal.NewBandwidthLimiterFromConfig(configManager, recorder, phaseTracker)
@@ -63,6 +65,9 @@ func NewServer(
 
 	g.POST("chat/completions", s.postChat)
 	g.GET("chat/completions/:id", s.getChatById)
+
+	// Phase 4: Validator payload retrieval
+	g.GET("inference/:inferenceId/payloads", s.getInferencePayloads)
 
 	g.GET("participants/:address", s.getInferenceParticipantByAddress)
 	g.GET("participants", s.getAllParticipants)

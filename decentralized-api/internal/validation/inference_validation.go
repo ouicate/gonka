@@ -504,16 +504,23 @@ func logInferencesToValidate(toValidate []string) {
 }
 
 func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
+	// Phase 4: Retrieve payloads with retry
+	promptPayload, responsePayload, err := s.retrievePayloadsWithRetry(inf)
+	if err != nil {
+		logging.Error("Failed to retrieve payloads", types.Validation,
+			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
 	const maxRetries = 5
 	const retryInterval = 4 * time.Minute
 
 	var valResult ValidationResult
-	var err error
 
 	// Retry logic for LockNode operation
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		valResult, err = broker.LockNode(s.nodeBroker, inf.Model, func(node *broker.Node) (ValidationResult, error) {
-			return s.validate(inf, node)
+			return s.validateWithPayloads(inf, node, promptPayload, responsePayload)
 		})
 
 		if err == nil {
@@ -560,7 +567,50 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	logging.Info("Successfully validated inference", types.Validation, "id", inf.InferenceId)
 }
 
-func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *broker.Node) (ValidationResult, error) {
+// retrievePayloadsWithRetry retrieves payloads from executor with retry logic.
+// Falls back to DEPRECATED chain retrieval after retries are exhausted.
+func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (string, string, error) {
+	const maxRetries = 10
+	const retryInterval = 2 * time.Minute // ~20 min total
+
+	ctx := s.recorder.GetContext()
+	var lastErr error
+
+	logging.Info("[PHASE4-DEBUG] Starting payload retrieval", types.Validation,
+		"inferenceId", inf.InferenceId, "executedBy", inf.ExecutedBy, "epochId", inf.EpochId)
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		promptPayload, responsePayload, err := RetrievePayloadsFromExecutor(
+			ctx, inf.InferenceId, inf.ExecutedBy, inf.EpochId, s.recorder)
+
+		if err == nil {
+			logging.Info("[PHASE4-DEBUG] Successfully retrieved payloads from executor", types.Validation,
+				"inferenceId", inf.InferenceId, "attempt", attempt)
+			return promptPayload, responsePayload, nil
+		}
+
+		lastErr = err
+		logging.Warn("[PHASE4-DEBUG] Payload retrieval failed", types.Validation,
+			"inferenceId", inf.InferenceId,
+			"attempt", attempt,
+			"maxRetries", maxRetries,
+			"error", err)
+
+		// Don't wait on first few attempts for faster fallback during testing
+		if attempt < maxRetries {
+			time.Sleep(retryInterval)
+		}
+	}
+
+	// Fall back to DEPRECATED chain retrieval
+	logging.Warn("[PHASE4-DEBUG] Retries exhausted, falling back to DEPRECATED chain retrieval", types.Validation,
+		"inferenceId", inf.InferenceId, "lastError", lastErr)
+	return retrievePayloadsFromChain(ctx, inf.InferenceId, s.recorder)
+}
+
+// validateWithPayloads validates inference using provided payloads.
+// Phase 4: Payloads are retrieved from executor instead of chain.
+func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, promptPayload, responsePayload string) (ValidationResult, error) {
 	logging.Debug("Validating inference", types.Validation, "id", inference.InferenceId)
 
 	if inference.Status == types.InferenceStatus_STARTED {
@@ -569,13 +619,13 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 	}
 
 	var requestMap map[string]interface{}
-	if err := json.Unmarshal([]byte(inference.PromptPayload), &requestMap); err != nil {
-		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal inference.PromptPayload.", err}, nil
+	if err := json.Unmarshal([]byte(promptPayload), &requestMap); err != nil {
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal promptPayload.", err}, nil
 	}
 
-	originalResponse, err := unmarshalResponse(&inference)
+	originalResponse, err := unmarshalResponsePayload(responsePayload)
 	if err != nil {
-		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal inference.ResponsePayload.", err}, nil
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal responsePayload.", err}, nil
 	}
 
 	enforcedTokens, err := originalResponse.GetEnforcedTokens()
@@ -636,19 +686,25 @@ func (s *InferenceValidator) validate(inference types.Inference, inferenceNode *
 }
 
 func unmarshalResponse(inference *types.Inference) (completionapi.CompletionResponse, error) {
-	resp, err := completionapi.NewCompletionResponseFromLinesFromResponsePayload(inference.ResponsePayload)
+	return unmarshalResponsePayload(inference.ResponsePayload)
+}
+
+// unmarshalResponsePayload parses response payload string into CompletionResponse.
+// Phase 4: Used by validateWithPayloads to work with retrieved payloads.
+func unmarshalResponsePayload(responsePayload string) (completionapi.CompletionResponse, error) {
+	resp, err := completionapi.NewCompletionResponseFromLinesFromResponsePayload(responsePayload)
 
 	if err != nil {
-		logging.Error("Failed to unmarshal inference.ResponsePayload.", types.Validation, "id", inference.InferenceId, "error", err)
+		logging.Error("Failed to unmarshal responsePayload", types.Validation, "error", err)
 	}
 
 	switch resp.(type) {
 	case *completionapi.StreamedCompletionResponse:
-		logging.Info("Unmarshalled inference.ResponsePayload into StreamedResponse", types.Validation, "id", inference.InferenceId)
+		logging.Debug("Unmarshalled responsePayload into StreamedResponse", types.Validation)
 	case *completionapi.JsonCompletionResponse:
-		logging.Info("Unmarshalled inference.ResponsePayload into JsonResponse", types.Validation, "id", inference.InferenceId)
+		logging.Debug("Unmarshalled responsePayload into JsonResponse", types.Validation)
 	default:
-		logging.Error("Failed to unmarshal inference.ResponsePayload into StreamedResponse or JsonResponse", types.Validation, "id", inference.InferenceId)
+		logging.Error("Failed to unmarshal responsePayload into StreamedResponse or JsonResponse", types.Validation)
 	}
 
 	return resp, err

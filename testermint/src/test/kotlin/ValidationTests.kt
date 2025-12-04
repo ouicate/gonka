@@ -57,10 +57,10 @@ class ValidationTests : TestermintTest() {
     fun `test invalid gets marked invalid`() {
         var tries = 3
         val (cluster, genesis) = initCluster(reboot = true)
-        genesis.waitForNextInferenceWindow(10)
         val oddPair = cluster.joinPairs.last()
         val badResponse = defaultInferenceResponseObject.withMissingLogit()
         oddPair.mock?.setInferenceResponse(badResponse)
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         var newState: InferencePayload
         do {
             logSection("Trying to get invalid inference. Tries left: $tries")
@@ -271,7 +271,7 @@ fun getInferenceValidationState(
 ): InferencePayload {
     val invalidResult =
         generateSequence { getInferenceResult(highestFunded, modelName) }
-            .take(10)
+            .take(5)
             .firstOrNull {
                 Logger.warn("Got result: ${it.executorBefore.id} ${it.executorAfter.id}")
                 it.executorBefore.id == oddPair.node.getColdAddress()
