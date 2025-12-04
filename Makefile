@@ -26,7 +26,7 @@ proxy-ssl-build-docker:
 	@make -C proxy-ssl build-docker SET_LATEST=1
 
 bridge-build-docker:
-	@make -C bridge build-docker SET_LATEST=1
+	@make -C bridge build-docker SET_LATEST=1 VERSION=$(VERSION)
 
 release: decentralized-api-release inference-chain-release tmkms-release proxy-release proxy-ssl-release bridge-release
 	@git tag $(TAG_NAME)
@@ -57,8 +57,8 @@ proxy-ssl-release:
 
 bridge-release:
 	@echo "Releasing bridge..."
-	@make -C bridge release
-	@make -C bridge docker-push
+	@make -C bridge release VERSION=$(VERSION)
+	@make -C bridge docker-push VERSION=$(VERSION)
 
 check-docker:
 	@docker info > /dev/null 2>&1 || (echo "Docker Desktop is not running. Please start Docker Desktop." && exit 1)

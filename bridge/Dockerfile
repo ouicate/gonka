@@ -24,6 +24,10 @@ ENV GETH_DATA_DIR=/data/geth
 ENV PRYSM_DATA_DIR=/data/prysm
 ENV JWT_SECRET_PATH=/data/jwt/jwt.hex
 
+# Allow passing version at build time
+ARG VERSION
+ENV VERSION=${VERSION}
+
 # Copy startup script
 COPY script.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/script.sh

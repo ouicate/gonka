@@ -41,7 +41,7 @@ mkdir -p /var/log/geth /var/log/prysm
 PRYSM_RAW_LOG=/var/log/prysm/beacon.raw.log
 PRYSM_FORMATTED_LOG=/var/log/prysm/beacon.log
 
-echo "Initializing Ethereum Bridge Service Version 0.1.0"
+echo "Initializing Ethereum Bridge Service Version $VERSION"
 
 # Generate JWT secret if it doesn't exist
 if [ ! -f "$JWT_SECRET_PATH" ]; then
@@ -176,6 +176,9 @@ start_geth() {
          --http.port $GETH_HTTP_PORT \
          --http.api "eth,net,engine" \
           --ipcdisable \
+         --state.scheme=path \
+         --db.engine=pebble \
+         --history.state=128 \
          --bridge.postblock $BRIDGE_POSTBLOCK \
          --bridge.getaddresses $BRIDGE_GETADDRESSES \
          --authrpc.addr 127.0.0.1 \
@@ -203,6 +206,9 @@ start_geth() {
                  --http.port $GETH_HTTP_PORT \
                  --http.api "eth,net,engine" \
                  --ipcdisable \
+                 --state.scheme=path \
+                 --db.engine=pebble \
+                 --history.state=128 \
                  --bridge.postblock $BRIDGE_POSTBLOCK \
                  --bridge.getaddresses $BRIDGE_GETADDRESSES \
                  --authrpc.addr 127.0.0.1 \
