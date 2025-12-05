@@ -83,6 +83,7 @@ class BLSDKGSuccessTest : TestermintTest() {
     
     @Test 
     @Tag("bls-integration")
+    @Timeout(value = 20, unit = TimeUnit.MINUTES)
     fun `BLS state consistency across cluster nodes`() {
         logSection("Testing BLS state consistency across cluster nodes")
         

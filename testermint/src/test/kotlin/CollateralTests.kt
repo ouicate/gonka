@@ -171,6 +171,7 @@ class CollateralTests : TestermintTest() {
         logSection("Waiting for slashing on downtime")
         genesis.node.waitForNextBlock(2)
         logSection("Verifying inference was processed and status updated")
+        genesis.waitForNextEpoch()
 
         logSection("Verifying collateral has been slashed proportionally")
         val inferenceParams = genesis.node.getInferenceParams().params

@@ -87,7 +87,7 @@ class InvalidationTests : TestermintTest() {
     fun `test invalid gets marked invalid`() {
         var tries = 3
         val (cluster, genesis) = initCluster(reboot = true)
-        genesis.waitForNextInferenceWindow(10)
+        genesis.waitForNextInferenceWindow()
         val oddPair = cluster.joinPairs.last()
         val badResponse = defaultInferenceResponseObject.withMissingLogit()
         oddPair.mock?.setInferenceResponse(badResponse)
