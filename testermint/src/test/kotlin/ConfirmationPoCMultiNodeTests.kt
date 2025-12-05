@@ -206,7 +206,7 @@ class ConfirmationPoCMultiNodeTests : TestermintTest() {
         genesis.addNodes(2)
         genesis.setPocWeight(101)
         join1.setPocWeight(200)
-        join2.setPocWeight(200)
+        join2.setPocWeight(250)
         genesis.waitForNextEpoch()
 
         var genesisNodes = genesis.api.getNodes()
