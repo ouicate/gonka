@@ -121,6 +121,8 @@ class ValidationTests : TestermintTest() {
         val oddPair = cluster.joinPairs.last()
         oddPair.mock?.setInferenceResponse(defaultInferenceResponseObject.withMissingLogit())
         logSection("Getting invalid invalidation")
+        genesis.waitForNextInferenceWindow()
+        genesis.node.waitForNextBlock(3)
         val invalidResult =
             generateSequence { getInferenceResult(genesis) }
                 .first { it.executorBefore.id != oddPair.node.getColdAddress() }
