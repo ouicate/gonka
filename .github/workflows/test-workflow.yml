@@ -35,7 +35,7 @@ jobs:
   # This job dynamically scans for test classes and sets up the matrix for parallel test execution
   # It replaces the previous hardcoded matrix with a dynamically generated one based on the actual test classes
   setup-test-matrix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -98,7 +98,7 @@ jobs:
           echo "Generated matrix: {\"test_group\":[${TEST_CLASSES}]}"
 
   build-images:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Check initial disk space
         run: |
@@ -192,7 +192,7 @@ jobs:
   # It depends on both setup-test-matrix (for the matrix) and build-images (for the Docker images)
   run-tests:
     needs: [setup-test-matrix, build-images]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       # Use the dynamically generated matrix from the setup-test-matrix job
@@ -405,7 +405,7 @@ jobs:
   # Simple summary job
   test-summary:
     needs: run-tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     if: always()
     steps:
       - name: Download All Test Counts
