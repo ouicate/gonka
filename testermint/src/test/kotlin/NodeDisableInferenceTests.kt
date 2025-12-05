@@ -77,13 +77,7 @@ class NodeDisableInferenceTests : TestermintTest() {
         
         // Try to claim rewards for join-1
         logSection("Attempting to claim rewards for join-1")
-        val currentEpoch = genesis.getEpochData().latestEpoch
-        // We want to claim for the epoch where PoC just happened? 
-        // Usually rewards are claimed for previous epochs. 
-        // initCluster puts us at some epoch. We waited for stages.
-        // Let's try to claim for the current epoch - 1 or use the seed logic.
-        
-        val seed = join1.api.getConfig().currentSeed
+        val seed = join1.api.getConfig().previousSeed
         val claimMsg = MsgClaimRewards(
             creator = join1.node.getColdAddress(),
             seed = seed.seed,
