@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"sort"
 	"strconv"
 
@@ -20,6 +21,8 @@ type WeightCalculator struct {
 	EpochStartBlockHeight   int64
 	Logger                  types.InferenceLogger
 }
+
+const WeightScaleFactor = 2.5
 
 // NewWeightCalculator creates a new WeightCalculator instance
 func NewWeightCalculator(
@@ -676,6 +679,7 @@ func calculateParticipantWeight(batches []types.PoCBatch) ([]nodeWeight, int64) 
 			}
 		}
 
+		weight = int64(math.Round(WeightScaleFactor * float64(weight)))
 		nodeId := batch.NodeId // Keep empty string for legacy batches without node_id
 		nodeWeights[nodeId] += weight
 		totalWeight += weight
