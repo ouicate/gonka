@@ -69,8 +69,7 @@ func ProcessStartInference(
 	currentInference.TransferredBy = startMessage.Creator
 	currentInference.TransferSignature = startMessage.TransferSignature
 	currentInference.PromptHash = startMessage.PromptHash
-	currentInference.PromptPayload = startMessage.PromptPayload
-	currentInference.OriginalPrompt = startMessage.OriginalPrompt
+	// Phase 6: PromptPayload and OriginalPrompt no longer stored on-chain
 	if currentInference.PromptTokenCount == 0 {
 		currentInference.PromptTokenCount = startMessage.PromptTokenCount
 	}
@@ -135,7 +134,7 @@ func ProcessFinishInference(
 	}
 	currentInference.Status = types.InferenceStatus_FINISHED
 	currentInference.ResponseHash = finishMessage.ResponseHash
-	currentInference.ResponsePayload = finishMessage.ResponsePayload
+	// Phase 6: ResponsePayload no longer stored on-chain
 	// PromptTokenCount for Finish can be set to 0 if the inference was streamed and interrupted
 	// before the end of the response. Then we should default to the value set in StartInference.
 	logger.LogDebug("FinishInference with prompt token count", types.Inferences, "inference_id", finishMessage.InferenceId, "prompt_token_count", finishMessage.PromptTokenCount)
@@ -146,7 +145,7 @@ func ProcessFinishInference(
 	currentInference.TransferredBy = finishMessage.TransferredBy
 	currentInference.TransferSignature = finishMessage.TransferSignature
 	currentInference.ExecutionSignature = finishMessage.ExecutorSignature
-	currentInference.OriginalPrompt = finishMessage.OriginalPrompt
+	// Phase 6: OriginalPrompt no longer stored on-chain
 
 	currentInference.CompletionTokenCount = finishMessage.CompletionTokenCount
 	currentInference.ExecutedBy = finishMessage.ExecutedBy

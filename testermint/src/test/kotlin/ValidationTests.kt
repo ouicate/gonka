@@ -60,10 +60,10 @@ class ValidationTests : TestermintTest() {
         val oddPair = cluster.joinPairs.last()
         val badResponse = defaultInferenceResponseObject.withMissingLogit()
         oddPair.mock?.setInferenceResponse(badResponse)
-        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         var newState: InferencePayload
         do {
             logSection("Trying to get invalid inference. Tries left: $tries")
+            genesis.waitForNextInferenceWindow()
             newState = getInferenceValidationState(genesis, oddPair)
         } while (newState.statusEnum != InferenceStatus.INVALIDATED && tries-- > 0)
         logSection("Verifying invalidation")
@@ -232,8 +232,8 @@ class ValidationTests : TestermintTest() {
                     }
                     this[InferenceParams::epochParams] = spec<EpochParams> {
                         this[EpochParams::inferencePruningEpochThreshold] = 100L
-                        // need longer epochs to have time for invalidations
-//                        this[EpochParams::epochLength] = 20L
+                        this[EpochParams::epochLength] = 20L
+                        this[EpochParams::epochShift] = 15
                     }
                 }
             }

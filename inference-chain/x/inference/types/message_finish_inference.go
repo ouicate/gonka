@@ -42,15 +42,17 @@ func (msg *MsgFinishInference) ValidateBasic() error {
 	if strings.TrimSpace(msg.ResponseHash) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "response_hash is required")
 	}
-	if strings.TrimSpace(msg.ResponsePayload) == "" {
-		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "response_payload is required")
+	// Phase 6: ResponsePayload no longer required (offchain)
+	if strings.TrimSpace(msg.PromptHash) == "" {
+		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "prompt_hash is required")
+	}
+	if strings.TrimSpace(msg.OriginalPromptHash) == "" {
+		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "original_prompt_hash is required")
 	}
 	if strings.TrimSpace(msg.Model) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "model is required")
 	}
-	if strings.TrimSpace(msg.OriginalPrompt) == "" {
-		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "original_prompt is required")
-	}
+	// Phase 6: OriginalPrompt no longer required (offchain)
 	// request_timestamp must be > 0
 	if msg.RequestTimestamp <= 0 {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "request_timestamp must be > 0")

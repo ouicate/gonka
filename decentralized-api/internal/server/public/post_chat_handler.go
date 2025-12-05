@@ -703,7 +703,7 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			Creator:              executorAddress,
 			InferenceId:          inferenceId,
 			ResponseHash:         responseHash,
-			ResponsePayload:      string(bodyBytes),
+			// Phase 6: ResponsePayload no longer sent on-chain
 			PromptTokenCount:     usage.PromptTokens,
 			CompletionTokenCount: usage.CompletionTokens,
 			ExecutedBy:           executorAddress,
@@ -712,10 +712,10 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			ExecutorSignature:    executorSignature,
 			RequestTimestamp:     request.Timestamp,
 			RequestedBy:          request.RequesterAddress,
-			OriginalPrompt:       string(request.Body),
-			Model:                model,
-			PromptHash:           promptHash,
-			OriginalPromptHash:   originalPromptHash,
+			// Phase 6: OriginalPrompt no longer sent on-chain
+			Model:              model,
+			PromptHash:         promptHash,
+			OriginalPromptHash: originalPromptHash,
 		}
 
 		// Store payloads FIRST before broadcasting transaction
@@ -806,7 +806,7 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	if err != nil {
 		return nil, err
 	}
-	promptHash, promptPayload, err := getPromptHash(finalRequest.NewBody)
+	promptHash, _, err := getPromptHash(finalRequest.NewBody)
 	if err != nil {
 		return nil, err
 	}
@@ -821,9 +821,9 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
 
 	transaction := &inference.MsgStartInference{
-		InferenceId:        inferenceId,
-		PromptHash:         promptHash,
-		PromptPayload:      promptPayload,
+		InferenceId:  inferenceId,
+		PromptHash:   promptHash,
+		// Phase 6: PromptPayload no longer sent on-chain
 		RequestedBy:        request.RequesterAddress,
 		Model:              request.OpenAiRequest.Model,
 		AssignedTo:         executor.Address,
@@ -831,7 +831,7 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 		MaxTokens:          uint64(maxTokens),
 		PromptTokenCount:   uint64(promptTokenCount),
 		RequestTimestamp:   request.Timestamp,
-		OriginalPrompt:     string(request.Body),
+		// Phase 6: OriginalPrompt no longer sent on-chain
 		OriginalPromptHash: originalPromptHash,
 	}
 

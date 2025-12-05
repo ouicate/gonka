@@ -76,4 +76,3 @@ func (s *Server) storePayload(c echo.Context) error {
 		EpochId:     epochId,
 	})
 }
-
