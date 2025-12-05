@@ -54,8 +54,8 @@ class NodeDisableInferenceTests : TestermintTest() {
 
         // 4. Wait for beginning of PoC stage and make ~15 inference requests
         logSection("Waiting for PoC start")
-        genesis.waitForStage(EpochStage.START_OF_POC)
-        
+        val waitForPocResult = genesis.waitForStage(EpochStage.START_OF_POC)
+
         logSection("Sending 15 inference requests")
         val requests = 10
         // Assuming runParallelInferencesWithResults is available and imports are correct
@@ -72,11 +72,11 @@ class NodeDisableInferenceTests : TestermintTest() {
         logSection("All 15 inferences succeeded")
 
         // 5. Wait for end of PoC and check if join-1 could claim rewards
-        logSection("Waiting for End of PoC (New Validators)")
-        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
+        logSection("Waiting for End of PoC (New Validators). pocStart = ${waitForPocResult.stageBlock}")
+        val waitForSetVals = genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         
         // Try to claim rewards for join-1
-        logSection("Attempting to claim rewards for join-1")
+        logSection("Attempting to claim rewards for join-1. setVals = ${waitForSetVals.stageBlock}")
         val seed = join1.api.getConfig().previousSeed
         val claimMsg = MsgClaimRewards(
             creator = join1.node.getColdAddress(),
