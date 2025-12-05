@@ -10,7 +10,6 @@ import (
 	"decentralized-api/payloadstorage"
 	"decentralized-api/training"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -36,7 +35,8 @@ func NewServer(
 	recorder cosmosclient.CosmosMessageClient,
 	trainingExecutor *training.Executor,
 	blockQueue *BridgeQueue,
-	phaseTracker *chainphase.ChainPhaseTracker) *Server {
+	phaseTracker *chainphase.ChainPhaseTracker,
+	payloadStorage payloadstorage.PayloadStorage) *Server {
 	e := echo.New()
 	e.HTTPErrorHandler = middleware.TransparentErrorHandler
 
@@ -44,17 +44,14 @@ func NewServer(
 	configManagerRef = configManager
 
 	s := &Server{
-		e:                e,
-		nodeBroker:       nodeBroker,
-		configManager:    configManager,
-		recorder:         recorder,
-		trainingExecutor: trainingExecutor,
-		blockQueue:       blockQueue,
-		identityCache:    newIdentityCache(),
-		payloadStorage: payloadstorage.NewCachedStorage(
-			payloadstorage.NewFileStorage("/root/.dapi/data/inference"),
-			3*time.Minute,
-		),
+		e:                   e,
+		nodeBroker:          nodeBroker,
+		configManager:       configManager,
+		recorder:            recorder,
+		trainingExecutor:    trainingExecutor,
+		blockQueue:          blockQueue,
+		identityCache:       newIdentityCache(),
+		payloadStorage:      payloadStorage,
 		phaseTracker:        phaseTracker,
 		epochGroupDataCache: internal.NewEpochGroupDataCache(recorder),
 	}

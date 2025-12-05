@@ -74,7 +74,7 @@ class ValidationTests : TestermintTest() {
     @Timeout(15, unit = TimeUnit.MINUTES)
     @Order(Int.MAX_VALUE - 1)
     fun `test invalid gets removed and restored`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate, reboot = true)
         cluster.allPairs.forEach { pair ->
             pair.waitForMlNodesToLoad()
         }
@@ -94,7 +94,7 @@ class ValidationTests : TestermintTest() {
 
         genesis.markNeedsReboot()
         logSection("Waiting for removal")
-        genesis.node.waitForNextBlock(2)
+        genesis.node.waitForNextBlock(5)
         val participants = genesis.api.getActiveParticipants()
         val excluded = participants.excludedParticipants.firstOrNull()
         assertNotNull(excluded, "Participant was not excluded")
@@ -312,11 +312,24 @@ data class InferenceTestHelper(
         val startMessage = getStartInference()
         val response = genesis.submitMessage(startMessage)
         assertThat(response).isSuccess()
+
+        // Store payloads BEFORE MsgFinishInference to avoid race condition:
+        // Validators start retrieving payloads immediately when MsgFinishInference is confirmed,
+        // so payloads must already be stored by then.
+        val epochId = genesis.api.getLatestEpoch().latestEpoch.index
+        genesis.api.storePayload(
+            inferenceId = devSignature,  // inferenceId = devSignature
+            promptPayload = request,
+            responsePayload = responsePayload,
+            epochId = epochId
+        )
+
         val finishMessage = getFinishInference()
         val response2 = genesis.submitMessage(finishMessage)
         assertThat(response2).isSuccess()
         val inference = genesis.node.getInference(finishMessage.inferenceId)?.inference
         assertNotNull(inference)
+
         return inference
     }
 

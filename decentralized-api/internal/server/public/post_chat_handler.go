@@ -718,6 +718,11 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			OriginalPromptHash:   originalPromptHash,
 		}
 
+		// Store payloads FIRST before broadcasting transaction
+		// If storage fails, we still proceed with broadcast (but log error)
+		// If tx fails after storage succeeds, that's a separate issue (downtime)
+		s.storePayloadsToStorage(context.Background(), inferenceId, promptPayload, string(bodyBytes), responseHash)
+
 		logging.Info("Submitting MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
 		err = s.recorder.FinishInference(message)
 		if err != nil {
@@ -725,9 +730,6 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 		} else {
 			logging.Debug("Submitted MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
 		}
-
-		// Dual write: store payloads to storage
-		s.storePayloadsToStorage(context.Background(), inferenceId, promptPayload, string(bodyBytes), responseHash)
 	}
 	return nil
 }

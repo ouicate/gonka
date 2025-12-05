@@ -2,12 +2,15 @@ package payloadstorage
 
 import (
 	"context"
+	"decentralized-api/logging"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/productscience/inference/x/inference/types"
 )
 
 type storedPayload struct {
@@ -43,6 +46,7 @@ func filenameToInferenceId(filename string) (string, error) {
 
 // Atomic write: temp file + rename
 func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uint64, promptPayload, responsePayload string) error {
+	logging.Debug("Storing payload", types.PayloadStorage, "inferenceId", inferenceId, "epochId", epochId, "baseDir", f.baseDir)
 	epochDir := filepath.Join(f.baseDir, strconv.FormatUint(epochId, 10))
 	if err := os.MkdirAll(epochDir, 0755); err != nil {
 		return fmt.Errorf("create epoch dir: %w", err)
@@ -81,6 +85,7 @@ func (f *FileStorage) Retrieve(ctx context.Context, inferenceId string, epochId 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			logging.Info("Payload not found", types.PayloadStorage, "inferenceId", inferenceId, "epochId", epochId, "filePath", filePath)
 			return "", "", ErrNotFound
 		}
 		return "", "", fmt.Errorf("read file: %w", err)

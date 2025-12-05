@@ -7,6 +7,7 @@ import (
 	"decentralized-api/payloadstorage"
 	apiutils "decentralized-api/utils"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,10 @@ import (
 	"github.com/productscience/inference/x/inference/calculations"
 	"github.com/productscience/inference/x/inference/types"
 )
+
+// ErrHashMismatch indicates executor served payload with valid signature but hash doesn't match on-chain commitment.
+// This should trigger immediate invalidation (no retry).
+var ErrHashMismatch = errors.New("hash mismatch: executor served wrong payload with valid signature")
 
 // HTTP client with timeout for payload retrieval
 var payloadRetrievalClient = apiutils.NewHttpClient(30 * time.Second)
@@ -101,31 +106,8 @@ func RetrievePayloadsFromExecutor(
 		return "", "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// 6. Verify hashes match on-chain commitment
-	inference, err := queryClient.Inference(ctx, &types.QueryGetInferenceRequest{Index: inferenceId})
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get inference from chain: %w", err)
-	}
-
-	actualPromptHash, err := payloadstorage.ComputePromptHash(payloadResp.PromptPayload)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to compute prompt hash: %w", err)
-	}
-	if inference.Inference.PromptHash != "" && actualPromptHash != inference.Inference.PromptHash {
-		return "", "", fmt.Errorf("prompt hash mismatch: expected %s, got %s",
-			inference.Inference.PromptHash, actualPromptHash)
-	}
-
-	actualResponseHash, err := payloadstorage.ComputeResponseHash(payloadResp.ResponsePayload)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to compute response hash: %w", err)
-	}
-	if inference.Inference.ResponseHash != "" && actualResponseHash != inference.Inference.ResponseHash {
-		return "", "", fmt.Errorf("response hash mismatch: expected %s, got %s",
-			inference.Inference.ResponseHash, actualResponseHash)
-	}
-
-	// 7. Verify executor signature for non-repudiation
+	// 6. FIRST: Verify executor signature
+	// If signature is invalid, return error to trigger retry (could be network issue, corrupted data)
 	// Get executor pubkeys (granter + grantees/warm keys)
 	grantees, err := queryClient.GranteesByMessageType(ctx, &types.QueryGranteesByMessageTypeRequest{
 		GranterAddress: executorAddress,
@@ -155,7 +137,64 @@ func RetrievePayloadsFromExecutor(
 		executorAddress,
 		executorPubkeys,
 	); err != nil {
+		// Signature invalid - could be network issue, corrupted data, etc.
+		// Return error to trigger retry
 		return "", "", fmt.Errorf("executor signature verification failed: %w", err)
+	}
+
+	logging.Debug("Executor signature verified successfully", types.Validation,
+		"inferenceId", inferenceId, "executorAddress", executorAddress)
+
+	// 7. SECOND: Verify hashes match on-chain commitment
+	// Signature is valid, so executor definitively signed this payload.
+	// If hash mismatch, executor served wrong data - immediately invalidate (no retry)
+	inference, err := queryClient.Inference(ctx, &types.QueryGetInferenceRequest{Index: inferenceId})
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get inference from chain: %w", err)
+	}
+
+	// Check prompt hash
+	if inference.Inference.PromptHash != "" {
+		actualPromptHash, err := payloadstorage.ComputePromptHash(payloadResp.PromptPayload)
+		if err != nil {
+			// Hash computation failed - payload is malformed
+			// Executor signed malformed data - immediate invalidation
+			// TODO: Phase 7 - use executor's signed proof for fast invalidation
+			logging.Error("Failed to compute prompt hash, executor served malformed payload", types.Validation,
+				"inferenceId", inferenceId, "error", err)
+			return "", "", ErrHashMismatch
+		}
+		if actualPromptHash != inference.Inference.PromptHash {
+			// Hash mismatch - executor signed wrong payload - immediate invalidation
+			// TODO: Phase 7 - use executor's signed proof for fast invalidation
+			logging.Error("Prompt hash mismatch, executor served wrong payload", types.Validation,
+				"inferenceId", inferenceId,
+				"expectedHash", inference.Inference.PromptHash,
+				"actualHash", actualPromptHash)
+			return "", "", ErrHashMismatch
+		}
+	}
+
+	// Check response hash
+	if inference.Inference.ResponseHash != "" {
+		actualResponseHash, err := payloadstorage.ComputeResponseHash(payloadResp.ResponsePayload)
+		if err != nil {
+			// Hash computation failed - payload is malformed
+			// Executor signed malformed data - immediate invalidation
+			// TODO: Phase 7 - use executor's signed proof for fast invalidation
+			logging.Error("Failed to compute response hash, executor served malformed payload", types.Validation,
+				"inferenceId", inferenceId, "error", err)
+			return "", "", ErrHashMismatch
+		}
+		if actualResponseHash != inference.Inference.ResponseHash {
+			// Hash mismatch - executor signed wrong payload - immediate invalidation
+			// TODO: Phase 7 - use executor's signed proof for fast invalidation
+			logging.Error("Response hash mismatch, executor served wrong payload", types.Validation,
+				"inferenceId", inferenceId,
+				"expectedHash", inference.Inference.ResponseHash,
+				"actualHash", actualResponseHash)
+			return "", "", ErrHashMismatch
+		}
 	}
 
 	logging.Debug("Successfully retrieved and verified payloads from executor", types.Validation,

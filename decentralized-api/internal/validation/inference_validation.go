@@ -29,6 +29,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ErrPayloadUnavailable indicates payloads could not be retrieved after all retries
+// and the inference is post-upgrade (no on-chain fallback available).
+var ErrPayloadUnavailable = errors.New("payload unavailable after all retries")
+
 type InferenceValidator struct {
 	recorder      cosmosclient.CosmosMessageClient
 	nodeBroker    *broker.Broker
@@ -507,6 +511,16 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	// Phase 4: Retrieve payloads with retry
 	promptPayload, responsePayload, err := s.retrievePayloadsWithRetry(inf)
 	if err != nil {
+		if errors.Is(err, ErrPayloadUnavailable) {
+			// Post-upgrade inference: executor unavailable after 1 hour of retries
+			s.checkAndInvalidateUnavailable(inf, transactionRecorder, revalidation)
+			return
+		}
+		if errors.Is(err, ErrHashMismatch) {
+			// Executor served wrong payload with valid signature - immediate invalidation
+			s.submitHashMismatchInvalidation(inf, transactionRecorder, revalidation)
+			return
+		}
 		logging.Error("Failed to retrieve payloads", types.Validation,
 			"inferenceId", inf.InferenceId, "error", err)
 		return
@@ -568,10 +582,12 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 }
 
 // retrievePayloadsWithRetry retrieves payloads from executor with retry logic.
-// Falls back to DEPRECATED chain retrieval after retries are exhausted.
+// For pre-upgrade inferences (PromptPayload not empty), falls back to chain retrieval.
+// For post-upgrade inferences, returns ErrPayloadUnavailable for caller to handle invalidation.
+// Returns ErrHashMismatch immediately (no retry) when executor serves wrong payload with valid signature.
 func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (string, string, error) {
-	const maxRetries = 10
-	const retryInterval = 2 * time.Minute // ~20 min total
+	const maxRetries = 30
+	const retryInterval = 2 * time.Minute // 30 * 2 min = 1 hour total
 
 	ctx := s.recorder.GetContext()
 	var lastErr error
@@ -589,6 +605,13 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 			return promptPayload, responsePayload, nil
 		}
 
+		// Hash mismatch = executor signed wrong data = immediate invalidation (no retry)
+		if errors.Is(err, ErrHashMismatch) {
+			logging.Error("Hash mismatch detected, will invalidate immediately", types.Validation,
+				"inferenceId", inf.InferenceId, "attempt", attempt)
+			return "", "", ErrHashMismatch
+		}
+
 		lastErr = err
 		logging.Warn("Payload retrieval failed, will retry", types.Validation,
 			"inferenceId", inf.InferenceId,
@@ -602,10 +625,104 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 		}
 	}
 
-	// Fall back to DEPRECATED chain retrieval
-	logging.Warn("Retries exhausted, falling back to chain retrieval", types.Validation,
+	// Check if this is a pre-upgrade inference (has on-chain payload)
+	if inf.PromptPayload != "" {
+		logging.Warn("Retries exhausted, falling back to chain retrieval for pre-upgrade inference", types.Validation,
+			"inferenceId", inf.InferenceId, "lastError", lastErr)
+		return retrievePayloadsFromChain(ctx, inf.InferenceId, s.recorder)
+	}
+
+	// Post-upgrade inference: no on-chain fallback available
+	logging.Warn("Retries exhausted for post-upgrade inference, will invalidate", types.Validation,
 		"inferenceId", inf.InferenceId, "lastError", lastErr)
-	return retrievePayloadsFromChain(ctx, inf.InferenceId, s.recorder)
+	return "", "", ErrPayloadUnavailable
+}
+
+// checkAndInvalidateUnavailable checks if inference is already invalidated by consensus,
+// and if not, submits an invalidation for payload unavailability.
+func (s *InferenceValidator) checkAndInvalidateUnavailable(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
+	ctx := s.recorder.GetContext()
+	queryClient := transactionRecorder.NewInferenceQueryClient()
+
+	// Query current inference status from chain
+	response, err := queryClient.Inference(ctx, &types.QueryGetInferenceRequest{Index: inf.InferenceId})
+	if err != nil {
+		logging.Error("Failed to query inference status for unavailability invalidation", types.Validation,
+			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
+	// Check if already invalidated by consensus
+	if response.Inference.Status == types.InferenceStatus_INVALIDATED {
+		logging.Info("Inference already invalidated by consensus, skipping unavailability invalidation", types.Validation,
+			"inferenceId", inf.InferenceId)
+		return
+	}
+
+	// Submit invalidation for payload unavailability
+	logging.Warn("Submitting invalidation for payload unavailability", types.Validation,
+		"inferenceId", inf.InferenceId, "currentStatus", response.Inference.Status)
+
+	msgValidation := &inference.MsgValidation{
+		Id:           uuid.New().String(),
+		InferenceId:  inf.InferenceId,
+		ResponseHash: "", // No response available
+		Value:        0,  // Invalidation
+		Revalidation: revalidation,
+	}
+
+	if err := transactionRecorder.ReportValidation(msgValidation); err != nil {
+		logging.Error("Failed to report unavailability invalidation", types.Validation,
+			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
+	logging.Info("Successfully submitted unavailability invalidation", types.Validation,
+		"inferenceId", inf.InferenceId)
+}
+
+// submitHashMismatchInvalidation submits an invalidation when executor served wrong payload
+// with a valid signature (hash mismatch detected).
+// TODO: Phase 7 - use executor's signed proof for fast invalidation without voting
+func (s *InferenceValidator) submitHashMismatchInvalidation(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
+	ctx := s.recorder.GetContext()
+	queryClient := transactionRecorder.NewInferenceQueryClient()
+
+	// Query current inference status from chain
+	response, err := queryClient.Inference(ctx, &types.QueryGetInferenceRequest{Index: inf.InferenceId})
+	if err != nil {
+		logging.Error("Failed to query inference status for hash mismatch invalidation", types.Validation,
+			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
+	// Check if already invalidated by consensus
+	if response.Inference.Status == types.InferenceStatus_INVALIDATED {
+		logging.Info("Inference already invalidated by consensus, skipping hash mismatch invalidation", types.Validation,
+			"inferenceId", inf.InferenceId)
+		return
+	}
+
+	// Submit invalidation for hash mismatch (executor served wrong data)
+	logging.Warn("Submitting invalidation for hash mismatch (executor served wrong payload)", types.Validation,
+		"inferenceId", inf.InferenceId, "currentStatus", response.Inference.Status)
+
+	msgValidation := &inference.MsgValidation{
+		Id:           uuid.New().String(),
+		InferenceId:  inf.InferenceId,
+		ResponseHash: "", // Wrong payload - don't use its hash
+		Value:        0,  // Invalidation
+		Revalidation: revalidation,
+	}
+
+	if err := transactionRecorder.ReportValidation(msgValidation); err != nil {
+		logging.Error("Failed to report hash mismatch invalidation", types.Validation,
+			"inferenceId", inf.InferenceId, "error", err)
+		return
+	}
+
+	logging.Info("Successfully submitted hash mismatch invalidation", types.Validation,
+		"inferenceId", inf.InferenceId)
 }
 
 // validateWithPayloads validates inference using provided payloads.

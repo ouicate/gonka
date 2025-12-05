@@ -28,6 +28,8 @@ data class InferencePayload(
     val executionSignature: String? = null,
     val perTokenPrice: Long? = null,
     val originalPromptHash: String? = null,  // Phase 3: for dev signature verification
+    @com.google.gson.annotations.SerializedName("epoch_id")
+    val epochId: Long = 0,  // Phase 4: for offchain payload storage
 ) {
     companion object {
         fun empty() = InferencePayload(
@@ -53,6 +55,7 @@ data class InferencePayload(
             assignedTo = null,
             validatedBy = listOf(),
             perTokenPrice = null,
+            epochId = 0,
         )
 
     }
@@ -145,3 +148,21 @@ data class MsgClaimRewards(
     val seed: Long = 0,
     val epochIndex: Long = 0
 ) : TxMessage
+
+// Admin endpoint request/response for storing payloads directly
+data class StorePayloadRequest(
+    @com.google.gson.annotations.SerializedName("prompt_payload")
+    val promptPayload: String,
+    @com.google.gson.annotations.SerializedName("response_payload")
+    val responsePayload: String,
+    @com.google.gson.annotations.SerializedName("epoch_id")
+    val epochId: Long
+)
+
+data class StorePayloadResponse(
+    val status: String,
+    @com.google.gson.annotations.SerializedName("inference_id")
+    val inferenceId: String,
+    @com.google.gson.annotations.SerializedName("epoch_id")
+    val epochId: Long
+)

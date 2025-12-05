@@ -95,6 +95,23 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid signature")
 	}
 
+	// Verify epochId from header matches inference's actual epoch
+	queryClient := s.recorder.NewInferenceQueryClient()
+	inferenceResp, err := queryClient.Inference(ctx.Request().Context(), &types.QueryGetInferenceRequest{Index: inferenceId})
+	if err != nil {
+		logging.Error("Failed to query inference for epochId verification", types.Validation,
+			"inferenceId", inferenceId, "error", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to verify inference")
+	}
+	if inferenceResp.Inference.EpochId != epochId {
+		logging.Warn("EpochId mismatch: header epochId doesn't match inference's epoch", types.Validation,
+			"inferenceId", inferenceId,
+			"headerEpochId", epochId,
+			"inferenceEpochId", inferenceResp.Inference.EpochId)
+		// Use the correct epochId from inference
+		epochId = inferenceResp.Inference.EpochId
+	}
+
 	// Retrieve payloads from storage (with caching handled by storage layer)
 	promptPayload, responsePayload, err := s.payloadStorage.Retrieve(ctx.Request().Context(), inferenceId, epochId)
 	if err != nil {
