@@ -48,7 +48,7 @@ class NodeDisableInferenceTests : TestermintTest() {
             .first()
             .also { n ->
                 val nodeId = n.node.id
-                val disableResponse = genesis.api.disableNode(n.node.id)
+                val disableResponse = join1.api.disableNode(n.node.id)
                 assertThat(disableResponse.nodeId).isEqualTo(nodeId)
             }
 
