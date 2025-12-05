@@ -12,11 +12,6 @@ import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
 
 class StreamVestingTests : TestermintTest() {
-
-    @Test
-    fun `4 join`() {
-        val (cluster, genesis) = initCluster(joinCount = 3)
-    }
     @Test
     fun `comprehensive vesting test with automatic reward system detection`() {
         // Configure genesis with 2-epoch vesting periods for fast testing

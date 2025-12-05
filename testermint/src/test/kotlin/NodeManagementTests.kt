@@ -66,8 +66,6 @@ class NodeManagementTests : TestermintTest() {
     @Test
     fun `add multiple nodes`() {
         val (_, genesis) = initCluster()
-        val beforeStats = genesis.node.getParticipantCurrentStats()
-        println(beforeStats.participantCurrentStats?.first()?.weight)
         val node1Name = "multinode1"
         val node2Name = "multinode2"
         val (node1, node2) = genesis.api.addNodes(
@@ -104,7 +102,6 @@ class NodeManagementTests : TestermintTest() {
         assertThat(nodes).anyMatch { it.node.id == node2Name }
         genesis.waitForNextEpoch()
         val genesisStatus = genesis.node.getParticipantCurrentStats().getParticipant(genesis)
-        println(genesisStatus)
         val nodes2 = genesis.api.getNodes()
         assertThat(nodes2).anyMatch { it.node.id == node1Name }
         assertThat(nodes2).anyMatch { it.node.id == node2Name }

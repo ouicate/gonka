@@ -158,6 +158,7 @@ class ResponseService {
         val endpointKey = Endpoint(endpoint)
         return inferenceResponses[Triple(endpointKey, model?.let { ModelName(it) }, host)] ?:
           inferenceResponses[Triple(endpointKey, null, host)] ?:
+          inferenceResponses[Triple(endpointKey, model?.let { ModelName(it) }, null)] ?:
           inferenceResponses[Triple(endpointKey, null, null)]
     }
 
