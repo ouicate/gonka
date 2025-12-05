@@ -1,22 +1,33 @@
 package keeper_test
 
 import (
+	"testing"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/productscience/inference/testutil"
 	keepertest "github.com/productscience/inference/testutil/keeper"
 	"github.com/productscience/inference/x/inference/keeper"
 	"github.com/productscience/inference/x/inference/types"
-	"testing"
 )
 
 func TestTrainingTaskLifecycle(t *testing.T) {
 	keeper, ctx := keepertest.InferenceKeeper(t)
 
+	participant := types.Participant{Index: testutil.Creator, Address: testutil.Creator}
+	keeper.SetParticipant(ctx, participant)
 	checkPoolSize(t, ctx, keeper, 0, 0)
 
 	task := types.TrainingTask{
 		Id:                   0,
-		RequestedBy:          "participant",
+		RequestedBy:          testutil.Creator,
+		Assigner:             testutil.Creator,
 		CreatedAtBlockHeight: 10,
+		Config: &types.TrainingConfig{
+			Datasets: &types.TrainingDatasets{
+				Train: "train_data",
+				Test:  "test_data",
+			},
+		},
 	}
 	err := keeper.CreateTask(ctx, &task)
 	if err != nil {
@@ -42,7 +53,7 @@ func TestTrainingTaskLifecycle(t *testing.T) {
 
 	assignees := []*types.TrainingTaskAssignee{
 		{
-			Participant: "participant",
+			Participant: testutil.Creator,
 			NodeIds:     []string{"node1", "node2"},
 		},
 	}
