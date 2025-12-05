@@ -55,6 +55,11 @@ class NodeDisableInferenceTests : TestermintTest() {
         // 4. Wait for beginning of PoC stage and make ~15 inference requests
         logSection("Waiting for PoC start")
         val waitForPocResult = genesis.waitForStage(EpochStage.START_OF_POC)
+        val latestEpoch = genesis.api.getLatestEpoch()
+        val claimMoneyBlock = when {
+            latestEpoch.epochStages.claimMoney > waitForPocResult.stageBlock -> latestEpoch.epochStages.claimMoney
+            else -> latestEpoch.nextEpochStages.claimMoney
+        }
 
         logSection("Sending 15 inference requests")
         val requests = 10
@@ -72,8 +77,9 @@ class NodeDisableInferenceTests : TestermintTest() {
         logSection("All 15 inferences succeeded")
 
         // 5. Wait for end of PoC and check if join-1 could claim rewards
-        logSection("Waiting for End of PoC (New Validators). pocStart = ${waitForPocResult.stageBlock}")
+        logSection("Waiting for claimMoneyBlock. pocStart = ${waitForPocResult.stageBlock}. claimMoney = $claimMoneyBlock")
         val waitForSetVals = genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
+        genesis.node.waitForMinimumBlock(claimMoneyBlock + 2, "Waiting for claim money block to be passed")
         
         // Try to claim rewards for join-1
         logSection("Attempting to claim rewards for join-1. setVals = ${waitForSetVals.stageBlock}")
