@@ -498,6 +498,10 @@ func CalculateParticipantBitcoinRewards(
 		totalPoCWeight += weight
 	}
 
+	// 4. Check and punish for downtime
+	logger.Info("Bitcoin Rewards: Checking downtime for participants", "participants", len(participants))
+	CheckAndPunishForDowntimeForParticipants(participants, participantWeights, logger)
+	logger.Info("Bitcoin Rewards: weights after downtime check", "participants", participantWeights)
 	// Recalculate total weight after downtime punishment
 	// This ensures fair distribution based on actual eligible weights
 	totalPoCWeight = uint64(0)

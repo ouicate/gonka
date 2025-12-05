@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/productscience/inference/x/inference/calculations"
 	"github.com/productscience/inference/x/inference/types"
 )
 
@@ -38,6 +40,35 @@ func (k *Keeper) GetSettleParameters(ctx context.Context) (*SettleParameters, er
 		StageDecrease:            params.TokenomicsParams.SubsidyReductionAmount.ToFloat32(),
 		TotalSubsidySupply:       normalizedTotalSuply.Amount.Int64(),
 	}, nil
+}
+
+func CheckAndPunishForDowntimeForParticipants(participants []types.Participant, rewards map[string]uint64, logger log.Logger) {
+	for _, participant := range participants {
+		rewards[participant.Address] = CheckAndPunishForDowntimeForParticipant(participant, rewards[participant.Address], logger)
+	}
+}
+
+func CheckAndPunishForDowntimeForParticipant(participant types.Participant, reward uint64, logger log.Logger) uint64 {
+	totalRequests := participant.CurrentEpochStats.InferenceCount + participant.CurrentEpochStats.MissedRequests
+	missedRequests := participant.CurrentEpochStats.MissedRequests
+	logger.Info("Checking downtime for participant", "participant", participant.Address, "totalRequests", totalRequests, "missedRequests", missedRequests, "reward", reward)
+	finalReward := CheckAndPunishForDowntime(totalRequests, missedRequests, reward)
+	logger.Info("Final reward after downtime check", "participant", participant.Address, "finalReward", finalReward)
+	return finalReward
+}
+
+func CheckAndPunishForDowntime(total, missed, reward uint64) uint64 {
+	if total == 0 {
+		return reward
+	}
+	passed, err := calculations.MissedStatTest(int(missed), int(total))
+	if err != nil {
+		return reward
+	}
+	if !passed {
+		return 0
+	}
+	return reward
 }
 
 // AggregateMLNodesFromModelSubgroups builds a map of participant addresses to their aggregated MLNodes
