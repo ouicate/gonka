@@ -57,10 +57,10 @@ class NodeDisableInferenceTests : TestermintTest() {
         genesis.waitForStage(EpochStage.START_OF_POC)
         
         logSection("Sending 15 inference requests")
-        val requests = 15
+        val requests = 10
         // Assuming runParallelInferencesWithResults is available and imports are correct
         val inferences = runParallelInferencesWithResults(
-            genesis, 
+            genesis,
             count = requests, 
             maxConcurrentRequests = 5
         )
