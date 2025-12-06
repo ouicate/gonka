@@ -9,7 +9,7 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
-const nonceDistCutoff = 999
+const nonceDistCutoff = 999.0
 
 func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPocBatch) (*types.MsgSubmitPocBatchResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -130,14 +130,19 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 		NodeId:                   msg.NodeId,
 	}
 
-	k.SetPocBatch(ctx, storedBatch)
 	storedBatch, err = filterPocBatch(storedBatch)
 	if err != nil {
-		k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: error filtering PoC batch", types.PoC,
+		k.LogError(PocFailureTag+"[SubmitPocBatch] Regular PoC: error filtering PoC batch", types.PoC,
 			"participant", msg.Creator,
 			"error", err)
 		return nil, sdkerrors.Wrap(types.ErrPocBatchFilteringFailed, "Error filtering PoC batch")
 	}
+	k.SetPocBatch(ctx, storedBatch)
+
+	k.LogInfo("[SubmitPocBatch] PoC batch stored", types.PoC,
+		"participant", msg.Creator,
+		"pocStageStartBlockHeight", msg.PocStageStartBlockHeight,
+		"nodeId", msg.NodeId)
 
 	return &types.MsgSubmitPocBatchResponse{}, nil
 }
@@ -145,13 +150,14 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 func filterPocBatch(batch types.PoCBatch) (types.PoCBatch, error) {
 	filteredDist := make([]float64, 0, len(batch.Dist))
 	filteredNonce := make([]int64, 0, len(batch.Nonces))
-	for i, dist := range batch.Nonces {
+	for i, nonce := range batch.Nonces {
+		dist := batch.Dist[i]
 		if dist > nonceDistCutoff {
 			continue
 		}
 
-		filteredNonce = append(filteredNonce, batch.Nonces[i])
-		filteredDist = append(filteredDist, batch.Dist[i])
+		filteredNonce = append(filteredNonce, nonce)
+		filteredDist = append(filteredDist, dist)
 	}
 
 	if len(filteredNonce) == 0 {
