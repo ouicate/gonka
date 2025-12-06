@@ -166,8 +166,8 @@ func TestComputeResponseHash_Reproducible(t *testing.T) {
 	}
 }
 
-func TestComputeResponseHash_HashesContent(t *testing.T) {
-	// Same content, different metadata should produce same hash
+func TestComputeResponseHash_HashesFullPayload(t *testing.T) {
+	// Different payloads should produce different hashes (even if content is same)
 	payload1 := `{"id":"inf-1","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"}}]}`
 	payload2 := `{"id":"inf-2","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"}}]}`
 
@@ -179,8 +179,27 @@ func TestComputeResponseHash_HashesContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeResponseHash failed: %v", err)
 	}
-	if hash1 != hash2 {
-		t.Errorf("same content should produce same hash: %s != %s", hash1, hash2)
+	if hash1 == hash2 {
+		t.Errorf("different payloads should produce different hashes: %s == %s", hash1, hash2)
+	}
+}
+
+func TestComputeResponseHash_IncludesLogprobs(t *testing.T) {
+	// Same content but different logprobs must produce different hashes
+	// This prevents the attack where executor serves fake logprobs with valid content
+	payloadWithLogprobs := `{"id":"inf-1","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"logprobs":{"content":[{"token":"Hello","logprob":-0.5,"top_logprobs":[{"token":"Hello","logprob":-0.5}]}]}}]}`
+	payloadWithFakeLogprobs := `{"id":"inf-1","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"},"logprobs":{"content":[{"token":"Hello","logprob":-0.1,"top_logprobs":[{"token":"Hello","logprob":-0.1}]}]}}]}`
+
+	hash1, err := ComputeResponseHash(payloadWithLogprobs)
+	if err != nil {
+		t.Fatalf("ComputeResponseHash failed: %v", err)
+	}
+	hash2, err := ComputeResponseHash(payloadWithFakeLogprobs)
+	if err != nil {
+		t.Fatalf("ComputeResponseHash failed: %v", err)
+	}
+	if hash1 == hash2 {
+		t.Errorf("payloads with different logprobs must produce different hashes: %s == %s", hash1, hash2)
 	}
 }
 

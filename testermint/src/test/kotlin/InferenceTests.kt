@@ -69,24 +69,9 @@ fun canonicalSha256(json: String): String {
 }
 
 // Compute response hash matching Go's CompletionResponse.GetHash()
-// Extracts message content from all choices and hashes the concatenated content
-// For invalid JSON (like test payloads), falls back to hashing the raw string
+// Hashes full payload bytes to include logprobs (security fix: prevents logprob manipulation)
 fun computeResponseHash(responsePayload: String): String {
-    return try {
-        val gson = Gson()
-        val json = gson.fromJson(responsePayload, JsonObject::class.java)
-        val choices = json.getAsJsonArray("choices") ?: return sha256("")
-        val content = StringBuilder()
-        for (choice in choices) {
-            val message = choice.asJsonObject.getAsJsonObject("message")
-            val messageContent = message?.get("content")?.asString ?: ""
-            content.append(messageContent)
-        }
-        sha256(content.toString())
-    } catch (e: Exception) {
-        // Invalid JSON - hash the raw payload (for test cases with intentionally bad payloads)
-        sha256(responsePayload)
-    }
+    return sha256(responsePayload)
 }
 
 class InferenceTests : TestermintTest() {

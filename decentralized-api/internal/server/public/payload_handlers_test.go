@@ -220,3 +220,4 @@ func pubKeyToBase64(key *secp256k1.PrivKey) string {
 	return base64.StdEncoding.EncodeToString(key.PubKey().Bytes())
 }
 
+
