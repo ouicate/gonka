@@ -22,8 +22,8 @@ class ValidationTests : TestermintTest() {
         val (_, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100,
-                    epochShift = 80
+                    epochLength = 100
+                    epochShift = 60
                 ),
             ),
             reboot = true,
@@ -55,7 +55,14 @@ class ValidationTests : TestermintTest() {
 
     @Test
     fun `late validation of inference`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        val (cluster, genesis) = initCluster(
+            config = inferenceConfig.copy(
+                genesisSpec = createSpec(
+                    epochLength = 100
+                )
+            ),
+            mergeSpec = alwaysValidate
+        )
         genesis.waitForNextEpoch()
         cluster.allPairs.forEach { pair ->
             pair.waitForMlNodesToLoad()

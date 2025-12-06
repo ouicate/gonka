@@ -12,7 +12,13 @@ class NodeAdminStateTests : TestermintTest() {
 
     @Test
     fun `test node disable during inference phase`() {
-        val (_, genesis) = initCluster(reboot = true)
+        val (_, genesis) = initCluster(
+            reboot = true,
+            inferenceConfig = InferenceConfig(
+                epochLength = 100L,
+                epochShift = 60L
+            )
+        )
         genesis.waitForNextInferenceWindow()
 
         val genesisValidatorBeforeDisabled = genesis.node.getStakeValidator()
@@ -80,7 +86,13 @@ class NodeAdminStateTests : TestermintTest() {
 
     @Test
     fun `test node disable during PoC phase`() {
-        val (_, genesis) = initCluster(reboot = true)
+        val (_, genesis) = initCluster(
+            reboot = true,
+            inferenceConfig = InferenceConfig(
+                epochLength = 100L,
+                epochShift = 60L
+            )
+        )
         
         logSection("Waiting for PoC phase")
         genesis.waitForStage(EpochStage.START_OF_POC)

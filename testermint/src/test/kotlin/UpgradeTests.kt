@@ -21,7 +21,7 @@ class UpgradeTests : TestermintTest() {
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
                     epochLength = 100,
-                    epochShift = 80
+                    epochShift = 60
                 )
             ),
             reboot = true
@@ -73,7 +73,7 @@ class UpgradeTests : TestermintTest() {
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
                     epochLength = 100,
-                    epochShift = 80
+                    epochShift = 60
                 )
             ),
             reboot = true
@@ -127,7 +127,14 @@ class UpgradeTests : TestermintTest() {
     @Test
     @Timeout(value = 15, unit = TimeUnit.MINUTES)
     fun testVersionedEndpointSwitching() {
-        val (cluster, genesis) = initCluster(reboot = true)
+        val (cluster, genesis) = initCluster(
+            config = inferenceConfig.copy(
+                genesisSpec = createSpec(
+                    epochLength = 100 
+                )
+            ),
+            reboot = true
+        )
 
         logSection("Waiting for initial system to be ready")
         var currentHeight = genesis.getCurrentBlockHeight()

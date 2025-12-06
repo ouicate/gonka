@@ -24,7 +24,7 @@ class StreamVestingTests : TestermintTest() {
                         this[TokenomicsParams::topMinerVestingPeriod] = 2L   // 2 epochs for top miner rewards
                     }
                     this[InferenceParams::epochParams] = spec<EpochParams> {
-                        this[EpochParams::epochLength] = 25L                 // This test doesn't fit in 15 blocks
+                        this[EpochParams::epochLength] = 30L                 // This test doesn't fit in 15 blocks
 
                     }
                 }
