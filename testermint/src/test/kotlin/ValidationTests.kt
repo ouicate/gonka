@@ -22,7 +22,7 @@ class ValidationTests : TestermintTest() {
         val (_, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100
+                    epochLength = 100,
                     epochShift = 60
                 ),
             ),

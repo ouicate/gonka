@@ -14,9 +14,11 @@ class NodeAdminStateTests : TestermintTest() {
     fun `test node disable during inference phase`() {
         val (_, genesis) = initCluster(
             reboot = true,
-            inferenceConfig = InferenceConfig(
-                epochLength = 100L,
-                epochShift = 60L
+            config = inferenceConfig.copy(
+                genesisSpec = createSpec(
+                    epochLength = 100L,
+                    epochShift = 60
+                )
             )
         )
         genesis.waitForNextInferenceWindow()
@@ -88,9 +90,11 @@ class NodeAdminStateTests : TestermintTest() {
     fun `test node disable during PoC phase`() {
         val (_, genesis) = initCluster(
             reboot = true,
-            inferenceConfig = InferenceConfig(
-                epochLength = 100L,
-                epochShift = 60L
+            config = inferenceConfig.copy(
+                genesisSpec = createSpec(
+                    epochLength = 100L,
+                    epochShift = 60
+                )
             )
         )
         
