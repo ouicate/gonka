@@ -160,11 +160,7 @@ func filterPocBatch(batch types.PoCBatch) (types.PoCBatch, error) {
 		filteredDist = append(filteredDist, dist)
 	}
 
-	if len(filteredNonce) == 0 {
-		return batch, fmt.Errorf("all nonces were filtered out")
-	}
-
-	return types.PoCBatch{
+	filteredBatch := types.PoCBatch{
 		ParticipantAddress:       batch.ParticipantAddress,
 		PocStageStartBlockHeight: batch.PocStageStartBlockHeight,
 		ReceivedAtBlockHeight:    batch.ReceivedAtBlockHeight,
@@ -172,5 +168,11 @@ func filterPocBatch(batch types.PoCBatch) (types.PoCBatch, error) {
 		Dist:                     filteredDist,
 		BatchId:                  batch.BatchId,
 		NodeId:                   batch.NodeId,
-	}, nil
+	}
+
+	if len(filteredBatch.Nonces) == 0 {
+		return filteredBatch, fmt.Errorf("all nonces were filtered out")
+	}
+
+	return filteredBatch, nil
 }
