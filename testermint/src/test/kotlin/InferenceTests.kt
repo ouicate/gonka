@@ -13,11 +13,80 @@ import kotlin.test.assertNotNull
 import java.util.Base64
 import com.productscience.assertions.assertThat
 import java.security.MessageDigest
+import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
+import java.util.TreeMap
 
 // Phase 3: SHA256 hash utility for signature migration
 fun sha256(input: String): String {
     val digest = MessageDigest.getInstance("SHA-256")
     return digest.digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
+}
+
+// Phase 6: Canonicalize JSON to match Go's CanonicalizeJSON behavior
+// Recursively sorts object keys and outputs compact JSON
+// IMPORTANT: Go's json.Encoder.Encode() adds a trailing newline, so we must match that
+fun canonicalizeJson(json: String): String {
+    val gson = Gson()
+    val element = gson.fromJson(json, JsonElement::class.java)
+    val canonical = canonicalizeElement(element)
+    // Go's json.Encoder.Encode() adds trailing newline - must match for hash compatibility
+    return gson.toJson(canonical) + "\n"
+}
+
+private fun canonicalizeElement(element: JsonElement): JsonElement {
+    return when {
+        element.isJsonObject -> {
+            val obj = element.asJsonObject
+            val sortedMap = TreeMap<String, JsonElement>()
+            for (entry in obj.entrySet()) {
+                sortedMap[entry.key] = canonicalizeElement(entry.value)
+            }
+            val result = JsonObject()
+            for ((key, value) in sortedMap) {
+                result.add(key, value)
+            }
+            result
+        }
+        element.isJsonArray -> {
+            val arr = element.asJsonArray
+            val result = JsonArray()
+            for (item in arr) {
+                result.add(canonicalizeElement(item))
+            }
+            result
+        }
+        else -> element // primitives and nulls stay as-is
+    }
+}
+
+// Compute SHA256 of canonicalized JSON (matches Go's ComputePromptHash)
+fun canonicalSha256(json: String): String {
+    return sha256(canonicalizeJson(json))
+}
+
+// Compute response hash matching Go's CompletionResponse.GetHash()
+// Extracts message content from all choices and hashes the concatenated content
+// For invalid JSON (like test payloads), falls back to hashing the raw string
+fun computeResponseHash(responsePayload: String): String {
+    return try {
+        val gson = Gson()
+        val json = gson.fromJson(responsePayload, JsonObject::class.java)
+        val choices = json.getAsJsonArray("choices") ?: return sha256("")
+        val content = StringBuilder()
+        for (choice in choices) {
+            val message = choice.asJsonObject.getAsJsonObject("message")
+            val messageContent = message?.get("content")?.asString ?: ""
+            content.append(messageContent)
+        }
+        sha256(content.toString())
+    } catch (e: Exception) {
+        // Invalid JSON - hash the raw payload (for test cases with intentionally bad payloads)
+        sha256(responsePayload)
+    }
 }
 
 class InferenceTests : TestermintTest() {
@@ -82,7 +151,7 @@ class InferenceTests : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature,
             promptHash = promptHash,
-            promptPayload = inferenceRequest,
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = "gpt-o3",
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -119,7 +188,7 @@ class InferenceTests : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature,
             promptHash = originalPromptHash,
-            promptPayload = inferenceRequest,
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = "gpt-o3",
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -149,7 +218,7 @@ class InferenceTests : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature.invalidate(),
             promptHash = originalPromptHash,
-            promptPayload = "Say Hello",
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = "gpt-o3",
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -177,7 +246,7 @@ class InferenceTests : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature,
             promptHash = originalPromptHash,
-            promptPayload = "Say Hello",
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = "gpt-o3",
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -397,13 +466,13 @@ class InferenceTests : TestermintTest() {
             requestTimestamp = finishTimestamp,
             transferSignature = finishTaSignature,
             responseHash = "fjdsf",
-            responsePayload = "AI is cool",
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = finishTaSignature,
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
-            originalPrompt = inferenceRequest,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             model = defaultModel,
             promptHash = promptHash,
             originalPromptHash = originalPromptHash
@@ -429,14 +498,14 @@ class InferenceTests : TestermintTest() {
             requestTimestamp = timestamp,
             transferSignature = taSignature,
             responseHash = "fjdsf",
-            responsePayload = "AI is cool",
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = taSignature,
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             model = defaultModel,
-            originalPrompt = inferenceRequest,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             promptHash = promptHash,
             originalPromptHash = originalPromptHash,
         )
@@ -461,14 +530,14 @@ class InferenceTests : TestermintTest() {
             requestTimestamp = timestamp,
             transferSignature = taSignature.invalidate(),
             responseHash = "fjdsf",
-            responsePayload = "AI is cool",
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = taSignature,
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             model = "default",
-            originalPrompt = inferenceRequest,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             promptHash = promptHash,
             originalPromptHash = originalPromptHash
         )
@@ -493,14 +562,14 @@ class InferenceTests : TestermintTest() {
             requestTimestamp = timestamp,
             transferSignature = taSignature,
             responseHash = "fjdsf",
-            responsePayload = "AI is cool",
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = taSignature.invalidate(),
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
             model = defaultModel,
-            originalPrompt = inferenceRequest,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             promptHash = promptHash,
             originalPromptHash = originalPromptHash,
         )

@@ -78,7 +78,8 @@ class ValidationTests : TestermintTest() {
         cluster.allPairs.forEach { pair ->
             pair.waitForMlNodesToLoad()
         }
-        genesis.waitForNextInferenceWindow()
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
+        genesis.node.waitForNextBlock(3)
 
         val dispatcher = Executors.newFixedThreadPool(10).asCoroutineDispatcher()
         runBlocking(dispatcher) {
@@ -121,7 +122,7 @@ class ValidationTests : TestermintTest() {
         val oddPair = cluster.joinPairs.last()
         oddPair.mock?.setInferenceResponse(defaultInferenceResponseObject.withMissingLogit())
         logSection("Getting invalid invalidation")
-        genesis.waitForNextInferenceWindow()
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
         genesis.node.waitForNextBlock(3)
         val invalidResult =
             generateSequence { getInferenceResult(genesis) }
@@ -140,7 +141,7 @@ class ValidationTests : TestermintTest() {
 
     @Test
     fun `late validation of inference`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
+        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate, reboot = true)
         genesis.waitForNextEpoch()
         cluster.allPairs.forEach { pair ->
             pair.waitForMlNodesToLoad()
@@ -152,9 +153,8 @@ class ValidationTests : TestermintTest() {
         val segment = "/${mlNodeVersion}"
         lateValidator.mock?.setInferenceErrorResponse(500, segment = segment)
         logSection("Make sure we're in safe inference zone")
-        if (!genesis.getEpochData().safeForInference) {
-            genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
-        }
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
+        genesis.node.waitForNextBlock(3)
         val lateValidatorBeforeBalance = lateValidator.node.getSelfBalance()
         logSection("Use messages only for inference")
         val seed = lateValidator.api.getConfig().currentSeed
@@ -163,6 +163,9 @@ class ValidationTests : TestermintTest() {
         genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
         // Both helpers should have validated and been rewarded
         val updatedInference = genesis.node.getInference(inference.inferenceId)
+        println(updatedInference)
+        println(inference.inferenceId)
+        println(inference.validatedBy)
         // Only the other join should have validated
         assertNotNull(updatedInference)
         assertNotNull(updatedInference.inference)
@@ -302,6 +305,10 @@ data class InferenceTestHelper(
 ) {
     val genesisAddress = genesis.node.getColdAddress()
     
+    // Phase 6: Canonicalize request to match Go's CanonicalizeJSON behavior
+    // This ensures hash computation matches validator's ComputePromptHash
+    val canonicalRequest: String by lazy { canonicalizeJson(request) }
+    
     // Lazy initialization: timestamp is generated when first accessed (at execution time)
     // This prevents "signature is too old" errors when there are delays between
     // InferenceTestHelper construction and runFullInference() call
@@ -325,15 +332,46 @@ data class InferenceTestHelper(
         // Store payloads BEFORE MsgFinishInference to avoid race condition:
         // Validators start retrieving payloads immediately when MsgFinishInference is confirmed,
         // so payloads must already be stored by then.
+        // Phase 6: Store canonicalized request to match hash computation
         val epochId = genesis.api.getLatestEpoch().latestEpoch.index
+        
+        // Explicit hash verification: ensure message hashes match expected values
+        // Phase 3: originalPromptHash = sha256(raw) - matches dev signature
+        // Phase 6: promptHash = sha256(canonical) - what validators verify against stored payload
+        val storedPromptPayload = canonicalRequest
+        val expectedOriginalPromptHash = sha256(request)  // RAW hash
+        val expectedPromptHash = sha256(storedPromptPayload)  // CANONICAL hash
+        
+        assertThat(startMessage.originalPromptHash)
+            .describedAs("StartInference.originalPromptHash must match SHA256 of raw request (dev signature)")
+            .isEqualTo(expectedOriginalPromptHash)
+        assertThat(startMessage.promptHash)
+            .describedAs("StartInference.promptHash must match SHA256 of stored canonical payload")
+            .isEqualTo(expectedPromptHash)
+        
         genesis.api.storePayload(
             inferenceId = devSignature,  // inferenceId = devSignature
-            promptPayload = request,
+            promptPayload = storedPromptPayload,
             responsePayload = responsePayload,
             epochId = epochId
         )
 
         val finishMessage = getFinishInference()
+        
+        // Explicit hash verification for FinishInference
+        assertThat(finishMessage.originalPromptHash)
+            .describedAs("FinishInference.originalPromptHash must match SHA256 of raw request (dev signature)")
+            .isEqualTo(expectedOriginalPromptHash)
+        assertThat(finishMessage.promptHash)
+            .describedAs("FinishInference.promptHash must match SHA256 of stored canonical payload")
+            .isEqualTo(expectedPromptHash)
+        
+        // Phase 6: Verify response hash matches computed hash from stored payload
+        val expectedResponseHash = computeResponseHash(responsePayload)
+        assertThat(finishMessage.responseHash)
+            .describedAs("FinishInference.responseHash must match computed hash of response content")
+            .isEqualTo(expectedResponseHash)
+        
         val response2 = genesis.submitMessage(finishMessage)
         assertThat(response2).isSuccess()
         val inference = genesis.node.getInference(finishMessage.inferenceId)?.inference
@@ -343,15 +381,17 @@ data class InferenceTestHelper(
     }
 
     fun getStartInference(): MsgStartInference {
-        // Phase 3: TA signs prompt_hash (not raw request)
-        val requestHash = sha256(request)
+        // Phase 3: originalPromptHash = sha256(raw request) - what dev signed
+        // Phase 6: promptHash = sha256(canonical request) - what validators verify
+        val originalPromptHash = sha256(request)  // RAW - matches dev signature
+        val promptHash = sha256(canonicalRequest)  // CANONICAL - for validator verification
         val taSignature =
-            genesis.node.signPayload(requestHash + timestamp.toString() + genesisAddress + genesisAddress, null)
+            genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgStartInference(
             creator = genesisAddress,
             inferenceId = devSignature,
-            promptHash = requestHash,
-            promptPayload = request,
+            promptHash = promptHash,
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = model,
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -360,30 +400,33 @@ data class InferenceTestHelper(
             promptTokenCount = 10,
             requestTimestamp = timestamp,
             transferSignature = taSignature,
-            originalPromptHash = requestHash
+            originalPromptHash = originalPromptHash
         )
     }
 
     fun getFinishInference(): MsgFinishInference {
-        // Phase 3: TA/Executor signs prompt_hash (not raw request)
-        val originalPromptHash = sha256(request)
-        val promptHash = originalPromptHash // Same when no seed modification
+        // Phase 3: originalPromptHash = sha256(raw request) - what dev signed
+        // Phase 6: promptHash = sha256(canonical request) - what validators verify
+        val originalPromptHash = sha256(request)  // RAW - matches dev signature
+        val promptHash = sha256(canonicalRequest)  // CANONICAL - for validator verification
         val finishTaSignature =
             genesis.node.signPayload(promptHash + timestamp.toString() + genesisAddress + genesisAddress, null)
+        // Phase 6: Compute actual response hash from content (matches Go's GetHash)
+        val actualResponseHash = computeResponseHash(responsePayload)
         return MsgFinishInference(
             creator = genesisAddress,
             inferenceId = devSignature,
             promptTokenCount = 10,
             requestTimestamp = timestamp,
             transferSignature = finishTaSignature,
-            responseHash = "fjdsf",
-            responsePayload = responsePayload,
+            responseHash = actualResponseHash,
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = finishTaSignature,
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
-            originalPrompt = request,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             model = model,
             promptHash = promptHash,
             originalPromptHash = originalPromptHash

@@ -98,7 +98,7 @@ data class MsgStartInference(
     val creator: String = "",
     val inferenceId: String,
     val promptHash: String,
-    val promptPayload: String,
+    val promptPayload: String = "",  // Deprecated - kept for backward compatibility
     val model: String = "",
     val requestedBy: String = "",
     val assignedTo: String = "",
@@ -107,7 +107,7 @@ data class MsgStartInference(
     val promptTokenCount: Long = 0,
     val requestTimestamp: Long = 0,
     val transferSignature: String = "",
-    val originalPrompt: String = promptPayload,
+    val originalPrompt: String = "",  // Deprecated - kept for backward compatibility
     val originalPromptHash: String = "",  // Phase 3: for dev signature verification
 ) : TxMessage
 
@@ -116,7 +116,7 @@ data class MsgFinishInference(
     val creator: String = "",
     val inferenceId: String = "",
     val responseHash: String = "",
-    val responsePayload: String = "",
+    val responsePayload: String = "",  // Deprecated - kept for backward compatibility
     val promptTokenCount: Long = 0,
     val completionTokenCount: Long = 0,
     val executedBy: String = "",
@@ -125,7 +125,7 @@ data class MsgFinishInference(
     val transferSignature: String = "",
     val executorSignature: String = "",
     val requestedBy: String = "",
-    val originalPrompt: String = "",
+    val originalPrompt: String = "",  // Deprecated - kept for backward compatibility
     val model: String = "",
     val promptHash: String = "",          // Phase 3: for TA/executor signature verification
     val originalPromptHash: String = "",  // Phase 3: for dev signature verification

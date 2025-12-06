@@ -189,7 +189,7 @@ class DynamicPricingTest : TestermintTest() {
             creator = genesisAddress,
             inferenceId = signature,
             promptHash = requestHash,
-            promptPayload = inferenceRequest,
+            // promptPayload removed - Phase 6: payloads stored offchain
             model = defaultModel,
             requestedBy = genesisAddress,
             assignedTo = genesisAddress,
@@ -228,13 +228,13 @@ class DynamicPricingTest : TestermintTest() {
             requestTimestamp = finishTimestamp,
             transferSignature = finishTaSignature,
             responseHash = "fjdsf",
-            responsePayload = "AI is cool",
+            // responsePayload removed - Phase 6: payloads stored offchain
             completionTokenCount = 100,
             executedBy = genesisAddress,
             executorSignature = finishTaSignature,
             transferredBy = genesisAddress,
             requestedBy = genesisAddress,
-            originalPrompt = inferenceRequest,
+            // originalPrompt removed - Phase 6: payloads stored offchain
             model = defaultModel,
             promptHash = promptHash,
             originalPromptHash = originalPromptHash
