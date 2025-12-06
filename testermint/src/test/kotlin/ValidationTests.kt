@@ -22,7 +22,7 @@ class ValidationTests : TestermintTest() {
         val (_, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100,
+                    epochLength = 100L,
                     epochShift = 60
                 ),
             ),
@@ -58,7 +58,7 @@ class ValidationTests : TestermintTest() {
         val (cluster, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100
+                    epochLength = 100L
                 )
             ),
             mergeSpec = alwaysValidate
@@ -138,6 +138,8 @@ class ValidationTests : TestermintTest() {
                     }
                     this[InferenceParams::epochParams] = spec<EpochParams> {
                         this[EpochParams::inferencePruningEpochThreshold] = 100L
+                        this[EpochParams::epochLength] = 100L
+                        this[EpochParams::epochShift] = 60
                     }
                 }
             }
@@ -260,7 +262,8 @@ val alwaysValidate = spec {
             this[InferenceParams::epochParams] = spec<EpochParams> {
                 this[EpochParams::inferencePruningEpochThreshold] = 100L
                 // need longer epochs to have time for invalidations
-//                        this[EpochParams::epochLength] = 20L
+                this[EpochParams::epochLength] = 100L
+                this[EpochParams::epochShift] = 60
             }
         }
     }

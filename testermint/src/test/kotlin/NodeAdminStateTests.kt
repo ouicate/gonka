@@ -7,12 +7,12 @@ import org.junit.jupiter.api.Timeout
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.TimeUnit
 
-@Timeout(value = 10, unit = TimeUnit.MINUTES)
+@Timeout(value = 30, unit = TimeUnit.MINUTES)
 class NodeAdminStateTests : TestermintTest() {
 
     @Test
     fun `test node disable during inference phase`() {
-        val (_, genesis) = initCluster(
+        val (cluster, genesis) = initCluster(
             reboot = true,
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
@@ -21,6 +21,7 @@ class NodeAdminStateTests : TestermintTest() {
                 )
             )
         )
+        cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
         genesis.waitForNextInferenceWindow()
 
         val genesisValidatorBeforeDisabled = genesis.node.getStakeValidator()
@@ -88,7 +89,7 @@ class NodeAdminStateTests : TestermintTest() {
 
     @Test
     fun `test node disable during PoC phase`() {
-        val (_, genesis) = initCluster(
+        val (cluster, genesis) = initCluster(
             reboot = true,
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
@@ -97,6 +98,7 @@ class NodeAdminStateTests : TestermintTest() {
                 )
             )
         )
+        cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
         
         logSection("Waiting for PoC phase")
         genesis.waitForStage(EpochStage.START_OF_POC)

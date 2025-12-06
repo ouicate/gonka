@@ -6,6 +6,7 @@ import com.productscience.data.AppState
 import com.productscience.data.InferenceState
 import com.productscience.data.InferenceParams
 import com.productscience.data.ValidationParams
+import com.productscience.data.EpochParams
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
@@ -101,6 +102,10 @@ class CollateralTests : TestermintTest() {
                 this[InferenceState::params] = spec<InferenceParams> {
                     this[InferenceParams::validationParams] = spec<ValidationParams> {
                         this[ValidationParams::expirationBlocks] = 2L // Fast expiration for testing
+                    }
+                    this[InferenceParams::epochParams] = spec<EpochParams> {
+                         this[EpochParams::epochLength] = 100L
+                         this[EpochParams::epochShift] = 60
                     }
                 }
             }

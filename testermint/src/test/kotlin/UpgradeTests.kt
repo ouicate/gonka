@@ -20,12 +20,13 @@ class UpgradeTests : TestermintTest() {
         val (cluster, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100,
+                    epochLength = 100L,
                     epochShift = 60
                 )
             ),
             reboot = true
         )
+        cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
         genesis.markNeedsReboot()
         val pairs = cluster.joinPairs
         val height = genesis.getCurrentBlockHeight()
@@ -72,12 +73,13 @@ class UpgradeTests : TestermintTest() {
         val (cluster, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100,
+                    epochLength = 100L,
                     epochShift = 60
                 )
             ),
             reboot = true
         )
+        cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
         genesis.markNeedsReboot()
         val pairs = cluster.joinPairs
         val height = genesis.getCurrentBlockHeight()
@@ -130,11 +132,13 @@ class UpgradeTests : TestermintTest() {
         val (cluster, genesis) = initCluster(
             config = inferenceConfig.copy(
                 genesisSpec = createSpec(
-                    epochLength = 100 
+                    epochLength = 100L,
+                    epochShift = 60
                 )
             ),
             reboot = true
         )
+        cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
 
         logSection("Waiting for initial system to be ready")
         var currentHeight = genesis.getCurrentBlockHeight()

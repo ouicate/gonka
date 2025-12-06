@@ -119,8 +119,9 @@ class ConsumerTests : TestermintTest() {
         this[AppState::inference] = spec<InferenceState> {
             this[InferenceState::params] = spec<InferenceParams> {
                 this[InferenceParams::epochParams] = spec<EpochParams> {
-                    this[EpochParams::inferencePruningEpochThreshold] = 4L
                     this[EpochParams::inferencePruningEpochThreshold] = 10000L
+                    this[EpochParams::epochLength] = 100L
+                    this[EpochParams::epochShift] = 60
                 }
                 this[InferenceParams::dynamicPricingParams] = spec<DynamicPricingParams> {
                     // Low token price for testing

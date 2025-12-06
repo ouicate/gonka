@@ -263,6 +263,8 @@ class InferenceAccountingTests : TestermintTest() {
                     this[InferenceState::params] = spec<InferenceParams> {
                         this[InferenceParams::epochParams] = spec<EpochParams> {
                             this[EpochParams::inferencePruningEpochThreshold] = 4L
+                            this[EpochParams::epochLength] = 100L
+                            this[EpochParams::epochShift] = 60
                         }
                     }
                 }
