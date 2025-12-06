@@ -9,6 +9,8 @@ import (
 	"github.com/productscience/inference/x/inference/types"
 )
 
+const nonceDistCutoff = 999
+
 func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPocBatch) (*types.MsgSubmitPocBatchResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -66,6 +68,14 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 			NodeId:                   msg.NodeId,
 		}
 
+		storedBatch, err = filterPocBatch(storedBatch)
+		if err != nil {
+			k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: error filtering PoC batch", types.PoC,
+				"participant", msg.Creator,
+				"error", err)
+			return nil, sdkerrors.Wrap(types.ErrPocBatchFilteringFailed, "Error filtering PoC batch")
+		}
+
 		k.SetPocBatch(ctx, storedBatch)
 		k.LogInfo("[SubmitPocBatch] Confirmation PoC batch stored", types.PoC,
 			"participant", msg.Creator,
@@ -121,6 +131,40 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 	}
 
 	k.SetPocBatch(ctx, storedBatch)
+	storedBatch, err = filterPocBatch(storedBatch)
+	if err != nil {
+		k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: error filtering PoC batch", types.PoC,
+			"participant", msg.Creator,
+			"error", err)
+		return nil, sdkerrors.Wrap(types.ErrPocBatchFilteringFailed, "Error filtering PoC batch")
+	}
 
 	return &types.MsgSubmitPocBatchResponse{}, nil
+}
+
+func filterPocBatch(batch types.PoCBatch) (types.PoCBatch, error) {
+	filteredDist := make([]float64, 0, len(batch.Dist))
+	filteredNonce := make([]int64, 0, len(batch.Nonces))
+	for i, dist := range batch.Nonces {
+		if dist > nonceDistCutoff {
+			continue
+		}
+
+		filteredNonce = append(filteredNonce, batch.Nonces[i])
+		filteredDist = append(filteredDist, batch.Dist[i])
+	}
+
+	if len(filteredNonce) == 0 {
+		return batch, fmt.Errorf("all nonces were filtered out")
+	}
+
+	return types.PoCBatch{
+		ParticipantAddress:       batch.ParticipantAddress,
+		PocStageStartBlockHeight: batch.PocStageStartBlockHeight,
+		ReceivedAtBlockHeight:    batch.ReceivedAtBlockHeight,
+		Nonces:                   filteredNonce,
+		Dist:                     filteredDist,
+		BatchId:                  batch.BatchId,
+		NodeId:                   batch.NodeId,
+	}, nil
 }
