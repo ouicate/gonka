@@ -99,13 +99,6 @@ class NodeDisableInferenceTests : TestermintTest() {
         val finalBalance = join1.node.getSelfBalance()
         logSection("Join-1 Balance after claim: $finalBalance")
         
-        // If join-1 was disabled during inference/PoC, did it participate?
-        // The disable happens in Inference window. 
-        // If it was disabled, it might not have participated in validation or PoC?
-        // However, the test goal says "nodes have mlnodes in inference state by default, even if they are turned off from the network"
-        // If the ML node was still active (by default?), maybe it gets rewards?
-        // Or maybe the test just checks "could claim", implying the tx succeeds.
-        
         // If the balance increases, it got rewards.
         if (finalBalance > initialBalance) {
             Logger.info("Join-1 successfully claimed rewards.")
