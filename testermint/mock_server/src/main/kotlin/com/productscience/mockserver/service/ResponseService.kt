@@ -30,6 +30,8 @@ sealed class ResponseConfig {
     ) : ResponseConfig()
 }
 
+data class PocResponseConfig(val weight: Long, val customDist: List<Double>? = null)
+
 @JvmInline
 value class ScenarioName(val name: String)
 
@@ -55,7 +57,7 @@ class ResponseService {
     private val inferenceResponses = ConcurrentHashMap<Triple<Endpoint, ModelName?, HostName?>, ResponseConfig>()
 
     // Store for POC responses
-    private val pocResponses = ConcurrentHashMap<Pair<HostName?, ScenarioName>, Long>()
+    private val pocResponses = ConcurrentHashMap<Pair<HostName?, ScenarioName>, PocResponseConfig>()
 
     // Store for the last inference request
     private val lastInferenceRequest = AtomicReference<String?>(null)
@@ -168,21 +170,26 @@ class ResponseService {
      * @param weight The number of nonces to generate
      * @param scenarioName The name of the scenario
      */
-    fun setPocResponse(weight: Long, host: HostName?, scenarioName: ScenarioName = ScenarioName("ModelState")) {
-        logger.info("Setting POC response weight for host: $host, scenario: $scenarioName, weight: $weight")
-        pocResponses[host to scenarioName] = weight
+    fun setPocResponse(
+        weight: Long,
+        host: HostName?,
+        scenarioName: ScenarioName = ScenarioName("ModelState"),
+        customDist: List<Double>? = null
+    ) {
+        logger.info("Setting POC response weight for host: $host, scenario: $scenarioName, weight: $weight, customDist: $customDist")
+        pocResponses[host to scenarioName] = PocResponseConfig(weight, customDist)
     }
 
     /**
-     * Gets the POC response weight for the specified scenario.
+     * Gets the POC response config for the specified scenario.
      *
      * @param scenarioName The name of the scenario
-     * @return The weight, or null if not found
+     * @return The config, or null if not found
      */
-    fun getPocResponseWeight(hostName: HostName, scenarioName: ScenarioName = ScenarioName("ModelState")): Long? {
-        val weight = pocResponses[hostName to scenarioName] ?: pocResponses[null to scenarioName]
-        logger.info("Found POC response weight for host: $hostName, scenario: $scenarioName, weight: $weight")
-        return weight
+    fun getPocResponseConfig(hostName: HostName, scenarioName: ScenarioName = ScenarioName("ModelState")): PocResponseConfig? {
+        val config = pocResponses[hostName to scenarioName] ?: pocResponses[null to scenarioName]
+        logger.info("Found POC response config for host: $hostName, scenario: $scenarioName, config: $config")
+        return config
     }
 
     /**
@@ -200,6 +207,7 @@ class ResponseService {
         blockHash: String,
         blockHeight: Int,
         nodeNumber: Int,
+        customDist: List<Double>? = null
     ): String {
         // Generate 'weight' number of nonces
         // nodeNumber makes sure nonces are unique in a multi-node setup
@@ -207,7 +215,17 @@ class ResponseService {
         val end = start + weight
         val nonces = (start until end).toList()
         // Generate distribution values evenly spaced from 0.0 to 1.0
-        val dist = (1..weight).map { it.toDouble() / weight }
+        // If customDist is provided, use it. It should match weight length ideally, but we handle it.
+        val dist = if (customDist != null) {
+            // Pad or truncate if necessary, though usually caller ensures match
+            val d = customDist.toMutableList()
+            while (d.size < weight) {
+                d.add(d.size.toDouble() / weight)
+            }
+            d.take(weight.toInt())
+        } else {
+            (1..weight).map { it.toDouble() / weight }
+        }
 
         return """
             {

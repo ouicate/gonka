@@ -57,7 +57,9 @@ data class SetPocResponseRequest(
     @JsonProperty("host_name")
     val hostName: String? = null,
     @JsonProperty("scenario_name")
-    val scenarioName: String = "ModelState"
+    val scenarioName: String = "ModelState",
+    @JsonProperty("custom_dist")
+    val customDist: List<Double>? = null
 )
 
 /**
@@ -148,7 +150,8 @@ fun Route.responseRoutes(responseService: ResponseService) {
             responseService.setPocResponse(
                 request.weight,
                 request.hostName?.let { HostName(it) },
-                ScenarioName(request.scenarioName)
+                ScenarioName(request.scenarioName),
+                request.customDist
             )
 
             call.respond(

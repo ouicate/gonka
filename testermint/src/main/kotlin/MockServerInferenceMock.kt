@@ -183,14 +183,21 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
      * @param weight The number of nonces to generate
      * @param scenarioName The name of the scenario
      */
-    override fun setPocResponse(weight: Long, hostName: String?, scenarioName: String) {
+    override fun setPocResponse(
+        weight: Long,
+        hostName: String?,
+        scenarioName: String,
+        customDist: List<Double>?
+    ) {
         data class SetPocResponseRequest(
             val weight: Long,
             val scenarioName: String,
-            val hostName: String?
+            val hostName: String?,
+            @JsonProperty("custom_dist")
+            val customDist: List<Double>?
         )
 
-        val request = SetPocResponseRequest(weight, scenarioName, hostName)
+        val request = SetPocResponseRequest(weight, scenarioName, hostName, customDist)
         try {
             val (_, response, _) = Fuel.post("$baseUrl/api/v1/responses/poc")
                 .jsonBody(cosmosJson.toJson(request))
@@ -216,7 +223,7 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
     override fun setPocValidationResponse(weight: Long, scenarioName: String) {
         // The mock server uses the same weight for both POC and POC validation responses,
         // so we can just call setPocResponse
-        setPocResponse(weight, scenarioName)
+        setPocResponse(weight, null, scenarioName, null)
     }
 
     override fun hasRequestsToVersionedEndpoint(segment: String): Boolean {

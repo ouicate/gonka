@@ -39,7 +39,13 @@ interface IInferenceMock {
         hostName: String? = null,
     ): StubMapping?
 
-    fun setPocResponse(weight: Long, hostName: String? = null, scenarioName: String = "ModelState")
+    fun setPocResponse(
+        weight: Long,
+        hostName: String? = null,
+        scenarioName: String = "ModelState",
+        customDist: List<Double>? = null
+    )
+
     fun setPocValidationResponse(weight: Long, scenarioName: String = "ModelState")
     fun getLastInferenceRequest(): InferenceRequestPayload?
     fun hasRequestsToVersionedEndpoint(segment: String): Boolean
@@ -161,11 +167,26 @@ class InferenceMock(port: Int, val name: String) : IInferenceMock {
         }
     }
 
-    override fun setPocResponse(weight: Long, hostName: String?, scenarioName: String) {
+    override fun setPocResponse(
+        weight: Long,
+        hostName: String?,
+        scenarioName: String,
+        customDist: List<Double>?
+    ) {
         // Generate 'weight' number of nonces
         val nonces = (1..weight).toList()
-        // Generate distribution values evenly spaced from 0.0 to 1.0
-        val dist = nonces.map { it.toDouble() / weight }
+        // Generate distribution values evenly spaced from 0.0 to 1.0, or use customDist
+        val dist = if (customDist != null) {
+            // Ensure customDist matches weight length if possible, or just use it
+            val d = customDist.toMutableList()
+            while (d.size < weight) {
+                d.add(d.size.toDouble() / weight)
+            }
+            d.take(weight.toInt())
+        } else {
+            nonces.map { it.toDouble() / weight }
+        }
+        
         val body = """
             {
               "public_key": "{{jsonPath originalRequest.body '$.public_key'}}",

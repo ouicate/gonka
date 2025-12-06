@@ -245,6 +245,16 @@ data class LocalInferencePair(
         }
     }
 
+    fun setPocResponse(weight: Long, customDist: List<Double>? = null, node: InferenceNode? = null) {
+        if (node == null) {
+            this.api.getNodes().forEach {
+                this.mock?.setPocResponse(weight, it.node.pocHost, customDist = customDist)
+            }
+        } else {
+            this.mock?.setPocResponse(weight, node.pocHost, customDist = customDist)
+        }
+    }
+
     fun getEpochLength(): Long {
         return this.mostRecentParams?.epochParams?.epochLength ?: this.getParams().epochParams.epochLength
     }

@@ -80,8 +80,10 @@ class WebhookService(private val responseService: ResponseService) {
             if (url != null && publicKey != null && blockHash != null && blockHeight != null) {
                 val webhookUrl = "$url/generated"
 
-                // Get the weight from the ResponseService, default to 10 if not set
-                val weight = responseService.getPocResponseWeight(hostName) ?: 10L
+                // Get the config from the ResponseService, default to weight 10 if not set
+                val config = responseService.getPocResponseConfig(hostName)
+                val weight = config?.weight ?: 10L
+                val customDist = config?.customDist
 
                 logger.info("Using weight for POC generation: $weight")
 
@@ -92,6 +94,7 @@ class WebhookService(private val responseService: ResponseService) {
                     blockHash,
                     blockHeight,
                     nodeNumber,
+                    customDist
                 )
 
                 logger.info("Sending generate POC webhook to $webhookUrl with weight: $weight")
