@@ -103,6 +103,7 @@ message PocParams {
   int32 default_difficulty = 1;
   int32 validation_sample_size = 2;
   uint64 poc_data_pruning_epoch_threshold = 3;
+  Decimal weight_scale_factor = 4;  // Scale factor for PoC weights (default: 1.0 if not set)
 }
 
 message Decimal {

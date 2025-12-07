@@ -75,7 +75,7 @@ class MultiModelTests : TestermintTest() {
         var newState: InferencePayload
         do {
             logSection("Trying to get invalid inference. Tries left: $tries")
-            genesis.waitForNextInferenceWindow(5)
+            genesis.waitForNextInferenceWindow(20)
             newState = getInferenceValidationState(genesis, oddPair, newModelName)
         } while (newState.statusEnum != InferenceStatus.INVALIDATED && tries-- > 0)
         logSection("Verifying invalidation")

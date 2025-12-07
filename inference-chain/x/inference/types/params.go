@@ -141,7 +141,8 @@ func DefaultPocParams() *PocParams {
 	return &PocParams{
 		DefaultDifficulty:            5,
 		ValidationSampleSize:         200,
-		PocDataPruningEpochThreshold: 1, // Number of epochs after which PoC data can be pruned
+		PocDataPruningEpochThreshold: 1,                       // Number of epochs after which PoC data can be pruned
+		WeightScaleFactor:            DecimalFromFloat(2.5),   // Scale factor for PoC weights (default: 2.5)
 	}
 }
 
@@ -818,4 +819,15 @@ func DecimalFromDecimal(d decimal.Decimal) *Decimal {
 func DecimalFromFloat32(f float32) *Decimal {
 	d := decimal.NewFromFloat32(f)
 	return &Decimal{Value: d.CoefficientInt64(), Exponent: d.Exponent()}
+}
+
+func (p *PocParams) GetWeightScaleFactorDec() math.LegacyDec {
+	if p.WeightScaleFactor == nil || (p.WeightScaleFactor.Value == 0 && p.WeightScaleFactor.Exponent == 0) {
+		return math.LegacyOneDec()
+	}
+	dec, err := p.WeightScaleFactor.ToLegacyDec()
+	if err != nil {
+		return math.LegacyOneDec()
+	}
+	return dec
 }

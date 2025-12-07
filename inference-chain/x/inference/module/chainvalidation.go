@@ -20,9 +20,8 @@ type WeightCalculator struct {
 	Seeds                   map[string]types.RandomSeed
 	EpochStartBlockHeight   int64
 	Logger                  types.InferenceLogger
+	WeightScaleFactor       mathsdk.LegacyDec
 }
-
-var WeightScaleFactor = mathsdk.LegacyNewDecWithPrec(25, 1) // 2.5
 
 // NewWeightCalculator creates a new WeightCalculator instance
 func NewWeightCalculator(
@@ -33,6 +32,7 @@ func NewWeightCalculator(
 	seeds map[string]types.RandomSeed,
 	epochStartBlockHeight int64,
 	logger types.InferenceLogger,
+	weightScaleFactor mathsdk.LegacyDec,
 ) *WeightCalculator {
 	return &WeightCalculator{
 		CurrentValidatorWeights: currentValidatorWeights,
@@ -42,6 +42,7 @@ func NewWeightCalculator(
 		Seeds:                   seeds,
 		EpochStartBlockHeight:   epochStartBlockHeight,
 		Logger:                  logger,
+		WeightScaleFactor:       weightScaleFactor,
 	}
 }
 
@@ -345,6 +346,8 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 	}
 
 	// STEP 4: Create WeightCalculator and calculate PoC mining participants (excluding inference-serving nodes)
+	params := am.keeper.GetParams(ctx)
+	weightScaleFactor := params.PocParams.GetWeightScaleFactorDec()
 	calculator := NewWeightCalculator(
 		currentValidatorWeights,
 		originalBatches,
@@ -353,6 +356,7 @@ func (am AppModule) ComputeNewWeights(ctx context.Context, upcomingEpoch types.E
 		seeds,
 		epochStartBlockHeight,
 		am,
+		weightScaleFactor,
 	)
 	pocMiningParticipants := calculator.Calculate()
 
@@ -531,7 +535,7 @@ func (wc *WeightCalculator) validatedParticipant(participantAddress string) *typ
 		return nil
 	}
 
-	nodeWeights, claimedWeight := calculateParticipantWeight(wc.OriginalBatches[participantAddress])
+	nodeWeights, claimedWeight := wc.calculateParticipantWeight(wc.OriginalBatches[participantAddress])
 	if claimedWeight < 1 {
 		wc.Logger.LogWarn("Calculate: Participant has non-positive claimedWeight.", types.PoC, "participant", participantAddress, "claimedWeight", claimedWeight)
 		return nil
@@ -665,7 +669,7 @@ type nodeWeight struct {
 	weight int64
 }
 
-func calculateParticipantWeight(batches []types.PoCBatch) ([]nodeWeight, int64) {
+func (wc *WeightCalculator) calculateParticipantWeight(batches []types.PoCBatch) ([]nodeWeight, int64) {
 	nodeWeights := make(map[string]int64)
 	totalWeight := int64(0)
 
@@ -679,8 +683,8 @@ func calculateParticipantWeight(batches []types.PoCBatch) ([]nodeWeight, int64) 
 			}
 		}
 
-		weight = mathsdk.LegacyNewDec(weight).Mul(WeightScaleFactor).TruncateInt64()
-		nodeId := batch.NodeId // Keep empty string for legacy batches without node_id
+		weight = mathsdk.LegacyNewDec(weight).Mul(wc.WeightScaleFactor).TruncateInt64()
+		nodeId := batch.NodeId
 		nodeWeights[nodeId] += weight
 		totalWeight += weight
 	}
