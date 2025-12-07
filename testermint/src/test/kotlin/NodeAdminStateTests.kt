@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Timeout
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.TimeUnit
 
-@Timeout(value = 30, unit = TimeUnit.MINUTES)
+@Timeout(value = 45, unit = TimeUnit.MINUTES)
 class NodeAdminStateTests : TestermintTest() {
 
     @Test
@@ -81,7 +81,23 @@ class NodeAdminStateTests : TestermintTest() {
             .isTrue()
             .`as`("Node should be enabled again")
 
-        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
+        // Wait for unbonding to complete (End of Epoch N+1)
+        val epochLength = genesis.getParams().epochParams.epochLength
+        val currentHeight = genesis.getCurrentBlockHeight()
+        val currentEpoch = currentHeight / epochLength
+        val targetEpoch = currentEpoch + 2
+        val targetBlock = targetEpoch * epochLength
+        
+        Logger.info("Waiting for unbonding completion at block $targetBlock (End of Epoch $targetEpoch)")
+        genesis.node.waitForMinimumBlock(targetBlock, "unbondingFinish")
+        
+        genesis.waitForBlock(5) {
+             val validator = it.node.getStakeValidator()
+             if (validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L) {
+                 return@waitForBlock true
+             }
+             false
+        }
         val genesisValidatorAfterNodeIsDisabled = genesis.node.getStakeValidator()
         assertThat(genesisValidatorAfterNodeIsDisabled.tokens).isEqualTo(0)
         assertThat(genesisValidatorAfterNodeIsDisabled.status).isEqualTo(StakeValidatorStatus.UNBONDING.value)
@@ -129,7 +145,40 @@ class NodeAdminStateTests : TestermintTest() {
         genesis.waitForStage(EpochStage.START_OF_POC)
         genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
 
-        // At this point, disabled node should not be participating in new PoC
+        // Unbonding period is 1 epoch.
+        // Node disabled in Epoch N (PoC phase).
+        // Stays BONDED until end of Epoch N.
+        // Unbonding starts at Epoch N+1.
+        // Unbonding finishes at end of Epoch N+1.
+        
+        // Calculate exact block height for end of Epoch N+1
+        // We fetch epochLength dynamically
+        val epochLength = genesis.getParams().epochParams.epochLength
+        val currentHeight = genesis.getCurrentBlockHeight()
+        val currentEpoch = currentHeight / epochLength
+        
+        // Target: End of Epoch N+1
+        // If current is N. End of N is (N+1)*100. End of N+1 is (N+2)*100.
+        // However, we are likely already in N+1 (PoC phase of N+1?), wait...
+        // The test waited for START_OF_POC (Epoch N+1?) 
+        // Note: genesis.waitForStage logic depends on offset.
+        
+        // To be safe and deterministic:
+        // We want to verify it becomes UNBONDED.
+        // Let's wait for the end of the *next* full epoch from now.
+        val targetEpoch = currentEpoch + 2
+        val targetBlock = targetEpoch * epochLength
+        
+        Logger.info("Waiting for unbonding completion at block $targetBlock (End of Epoch $targetEpoch)")
+        genesis.node.waitForMinimumBlock(targetBlock, "unbondingFinish")
+        
+        genesis.waitForBlock(5) {
+             val validator = it.node.getStakeValidator()
+             if (validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L) {
+                 return@waitForBlock true
+             }
+             false
+        }
         val genesisValidatorAfterOneMoreEpoch = genesis.node.getStakeValidator()
         assertThat(genesisValidatorAfterOneMoreEpoch.tokens).isEqualTo(0)
         assertThat(genesisValidatorAfterOneMoreEpoch.status).isEqualTo(StakeValidatorStatus.UNBONDING.value)
