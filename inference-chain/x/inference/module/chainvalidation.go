@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math"
 	"sort"
 	"strconv"
 
+	mathsdk "cosmossdk.io/math"
 	"github.com/productscience/inference/x/inference/types"
 )
 
@@ -22,7 +22,7 @@ type WeightCalculator struct {
 	Logger                  types.InferenceLogger
 }
 
-const WeightScaleFactor = 2.5
+var WeightScaleFactor = mathsdk.LegacyNewDecWithPrec(25, 1) // 2.5
 
 // NewWeightCalculator creates a new WeightCalculator instance
 func NewWeightCalculator(
@@ -679,7 +679,7 @@ func calculateParticipantWeight(batches []types.PoCBatch) ([]nodeWeight, int64) 
 			}
 		}
 
-		weight = int64(math.Round(WeightScaleFactor * float64(weight)))
+		weight = mathsdk.LegacyNewDec(weight).Mul(WeightScaleFactor).TruncateInt64()
 		nodeId := batch.NodeId // Keep empty string for legacy batches without node_id
 		nodeWeights[nodeId] += weight
 		totalWeight += weight
