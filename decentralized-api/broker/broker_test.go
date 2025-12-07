@@ -68,7 +68,7 @@ func NewTestBroker() *Broker {
 	phaseTracker := chainphase.NewChainPhaseTracker()
 	phaseTracker.Update(
 		chainphase.BlockInfo{Height: 1, Hash: "hash-1"},
-		&types.Epoch{Index: 0, PocStartBlockHeight: 0},
+		&types.Epoch{Index: 100, PocStartBlockHeight: 100},
 		&types.EpochParams{},
 		true,
 		nil,
@@ -104,6 +104,15 @@ func NewTestBroker() *Broker {
 	}
 
 	mockChainBridge.On("GetCurrentEpochGroupData").Return(parentEpochData, nil)
+	// Mock for parent group query (empty modelId) - returns SubGroupModels list
+	parentGroupResp := &types.QueryGetEpochGroupDataResponse{
+		EpochGroupData: types.EpochGroupData{
+			PocStartBlockHeight: 100,
+			EpochIndex:          100,
+			SubGroupModels:      []string{"model1"},
+		},
+	}
+	mockChainBridge.On("GetEpochGroupDataByModelId", uint64(100), "").Return(parentGroupResp, nil)
 	mockChainBridge.On("GetEpochGroupDataByModelId", uint64(100), "model1").Return(model1EpochData, nil)
 
 	mockConfigManager := &apiconfig.ConfigManager{}

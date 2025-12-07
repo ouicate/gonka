@@ -1410,6 +1410,10 @@ func (b *Broker) UpdateNodeEpochData(mlNodes []*types.MLNodeInfo, modelId string
 // If the node is found in current epoch data, it uses that data.
 // If not found (new node not yet assigned), it populates with governance model snapshots.
 func (b *Broker) PopulateSingleNodeEpochData(nodeId string) error {
+	if b.phaseTracker == nil {
+		logging.Warn("Cannot populate node epoch data: phase tracker not initialized", types.Nodes, "node_id", nodeId)
+		return fmt.Errorf("phase tracker not initialized")
+	}
 	epochState := b.phaseTracker.GetCurrentEpochState()
 	if epochState == nil || epochState.IsNilOrNotSynced() {
 		logging.Warn("Cannot populate node epoch data: epoch state not synced", types.Nodes, "node_id", nodeId)
