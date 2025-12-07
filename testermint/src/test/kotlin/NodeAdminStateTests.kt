@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Timeout
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.TimeUnit
 
-@Timeout(value = 45, unit = TimeUnit.MINUTES)
+@Timeout(value = 30, unit = TimeUnit.MINUTES)
 class NodeAdminStateTests : TestermintTest() {
 
     @Test
@@ -24,10 +24,6 @@ class NodeAdminStateTests : TestermintTest() {
         cluster.allPairs.forEach { it.waitForMlNodesToLoad() }
         genesis.waitForNextInferenceWindow()
 
-        val genesisValidatorBeforeDisabled = genesis.node.getStakeValidator()
-        assertThat(genesisValidatorBeforeDisabled.tokens).isEqualTo(10)
-        assertThat(genesisValidatorBeforeDisabled.status).isEqualTo(StakeValidatorStatus.BONDED.value)
-
         logSection("Getting initial nodes")
         val nodes = genesis.api.getNodes()
         assertThat(nodes).isNotEmpty()
@@ -35,13 +31,19 @@ class NodeAdminStateTests : TestermintTest() {
         val nodeToDisable = nodes.first()
         val nodeId = nodeToDisable.node.id
         Logger.info("Testing with node: $nodeId")
+
+        // Need to find the pair corresponding to this node to check its validator status
+        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
+        val validatorBeforeDisabled = disabledPair.node.getStakeValidator()
+        assertThat(validatorBeforeDisabled.tokens).isEqualTo(10)
+        assertThat(validatorBeforeDisabled.status).isEqualTo(StakeValidatorStatus.BONDED.value)
         
         // Verify node is initially enabled
         assertThat(nodeToDisable.state.adminState?.enabled ?: true)
             .isTrue()
             .`as`("Node should be enabled initially")
         
-        logSection("Disabling node during inference phase")
+        logSection("Disabling node during inference phase (Epoch ${genesis.getEpochData().latestEpoch.index})")
         val disableResponse = genesis.api.disableNode(nodeId)
         assertThat(disableResponse.nodeId).isEqualTo(nodeId)
         assertThat(disableResponse.message).contains("disabled successfully")
@@ -60,7 +62,7 @@ class NodeAdminStateTests : TestermintTest() {
         val inferenceResult = getInferenceResult(genesis)
         assertThat(inferenceResult).isNotNull
         
-        logSection("Waiting for PoC phase to verify node stops")
+        logSection("Waiting for PoC phase to verify node stops (Epoch ${genesis.getEpochData().latestEpoch.index})")
         genesis.waitForStage(EpochStage.START_OF_POC)
         
         // Give reconciliation some time to kick in
@@ -69,7 +71,7 @@ class NodeAdminStateTests : TestermintTest() {
         // At this point, the disabled node should not participate in PoC
         // We can verify this by checking node states or attempting operations
         
-        logSection("Re-enabling node")
+        logSection("Re-enabling node (Epoch ${genesis.getEpochData().latestEpoch.index})")
         val enableResponse = genesis.api.enableNode(nodeId)
         assertThat(enableResponse.nodeId).isEqualTo(nodeId)
         assertThat(enableResponse.message).contains("enabled successfully")
@@ -81,23 +83,7 @@ class NodeAdminStateTests : TestermintTest() {
             .isTrue()
             .`as`("Node should be enabled again")
 
-        // Wait for unbonding to complete (End of Epoch N+1)
-        val epochLength = genesis.getParams().epochParams.epochLength
-        val currentHeight = genesis.getCurrentBlockHeight()
-        val currentEpoch = currentHeight / epochLength
-        val targetEpoch = currentEpoch + 2
-        val targetBlock = targetEpoch * epochLength
-        
-        Logger.info("Waiting for unbonding completion at block $targetBlock (End of Epoch $targetEpoch)")
-        genesis.node.waitForMinimumBlock(targetBlock, "unbondingFinish")
-        
-        genesis.waitForBlock(5) {
-             val validator = it.node.getStakeValidator()
-             if (validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L) {
-                 return@waitForBlock true
-             }
-             false
-        }
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 3)
         val genesisValidatorAfterNodeIsDisabled = genesis.node.getStakeValidator()
         assertThat(genesisValidatorAfterNodeIsDisabled.tokens).isEqualTo(0)
         assertThat(genesisValidatorAfterNodeIsDisabled.status).isEqualTo(StakeValidatorStatus.UNBONDING.value)
@@ -118,13 +104,14 @@ class NodeAdminStateTests : TestermintTest() {
         
         logSection("Waiting for PoC phase")
         genesis.waitForStage(EpochStage.START_OF_POC)
+        // Epoch N is in PoC phase - Begin of Epoch N
         
         logSection("Getting nodes during PoC")
         val nodes = genesis.api.getNodes()
         val nodeToDisable = nodes.first()
         val nodeId = nodeToDisable.node.id
         
-        logSection("Disabling node during PoC phase")
+        logSection("Disabling node during PoC phase (Epoch ${genesis.getEpochData().latestEpoch.index})")
         val disableResponse = genesis.api.disableNode(nodeId)
         assertThat(disableResponse.nodeId).isEqualTo(nodeId)
         
@@ -134,54 +121,29 @@ class NodeAdminStateTests : TestermintTest() {
             .isFalse()
             .`as`("Node should be disabled")
 
-        logSection("Waiting for next epoch to verify node doesn't participate")
+        logSection("Waiting for next epoch to verify node doesn't participate (Epoch ${genesis.getEpochData().latestEpoch.index})")
         genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
 
         // It's too late to disable at PoC, so we expect the node to participate and keep its weight
-        val genesisStakeValidatorWhenDisabledAtPoc = genesis.node.getStakeValidator()
-        assertThat(genesisStakeValidatorWhenDisabledAtPoc.tokens).isEqualTo(10)
-        assertThat(genesisStakeValidatorWhenDisabledAtPoc.status).isEqualTo(StakeValidatorStatus.BONDED.value)
-
+        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
+        val validatorWhenDisabledAtPoc = disabledPair.node.getStakeValidator()
+        assertThat(validatorWhenDisabledAtPoc.tokens).isEqualTo(10)
+        assertThat(validatorWhenDisabledAtPoc.status).isEqualTo(StakeValidatorStatus.BONDED.value)
+        // End of Epoch N
         genesis.waitForStage(EpochStage.START_OF_POC)
         genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
-
-        // Unbonding period is 1 epoch.
-        // Node disabled in Epoch N (PoC phase).
-        // Stays BONDED until end of Epoch N.
-        // Unbonding starts at Epoch N+1.
-        // Unbonding finishes at end of Epoch N+1.
         
-        // Calculate exact block height for end of Epoch N+1
-        // We fetch epochLength dynamically
-        val epochLength = genesis.getParams().epochParams.epochLength
-        val currentHeight = genesis.getCurrentBlockHeight()
-        val currentEpoch = currentHeight / epochLength
+        // We are currently in Epoch N+1 (PoC Phase).
+        // The node should already be UNBONDING with 0 tokens.
         
-        // Target: End of Epoch N+1
-        // If current is N. End of N is (N+1)*100. End of N+1 is (N+2)*100.
-        // However, we are likely already in N+1 (PoC phase of N+1?), wait...
-        // The test waited for START_OF_POC (Epoch N+1?) 
-        // Note: genesis.waitForStage logic depends on offset.
-        
-        // To be safe and deterministic:
-        // We want to verify it becomes UNBONDED.
-        // Let's wait for the end of the *next* full epoch from now.
-        val targetEpoch = currentEpoch + 2
-        val targetBlock = targetEpoch * epochLength
-        
-        Logger.info("Waiting for unbonding completion at block $targetBlock (End of Epoch $targetEpoch)")
-        genesis.node.waitForMinimumBlock(targetBlock, "unbondingFinish")
-        
-        genesis.waitForBlock(5) {
+        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
+        disabledPair.waitForBlock(5) {
              val validator = it.node.getStakeValidator()
-             if (validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L) {
-                 return@waitForBlock true
-             }
-             false
+             validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L
         }
-        val genesisValidatorAfterOneMoreEpoch = genesis.node.getStakeValidator()
-        assertThat(genesisValidatorAfterOneMoreEpoch.tokens).isEqualTo(0)
-        assertThat(genesisValidatorAfterOneMoreEpoch.status).isEqualTo(StakeValidatorStatus.UNBONDING.value)
+        val validatorAfterUnbonding = disabledPair.node.getStakeValidator()
+        assertThat(validatorAfterUnbonding.tokens).isEqualTo(0)
+        assertThat(validatorAfterUnbonding.status).isEqualTo(StakeValidatorStatus.UNBONDING.value)
         
         logSection("Verifying disabled node state persists across epochs")
         val nodesInNewEpoch = genesis.api.getNodes()
