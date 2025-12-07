@@ -349,9 +349,6 @@ func (s *Server) getPromptTokenCount(text string, model string) (int, error) {
 		if postErr != nil {
 			return nil, broker.NewTransportActionError(postErr)
 		}
-		if postErr != nil {
-			return nil, broker.NewTransportActionError(postErr)
-		}
 		return resp, nil
 	})
 
@@ -420,9 +417,6 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 			return nil, broker.NewApplicationActionError(fmt.Errorf("failed to unmarshal request body: %w", err))
 		}
 		resp, postErr := utils.SendPostJsonRequestWithAuth(context.Background(), http.DefaultClient, completionsUrl, requestBody, node.AuthToken)
-		if postErr != nil {
-			return nil, broker.NewTransportActionError(postErr)
-		}
 		if postErr != nil {
 			return nil, broker.NewTransportActionError(postErr)
 		}

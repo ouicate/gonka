@@ -154,10 +154,14 @@ func (c RegisterNode) Execute(b *Broker) {
 		b.nodes[c.Node.Id] = nodeWithState
 
 		// Create and register a worker for this node
-		client := b.NewNodeClient(&node)
-		worker := NewNodeWorkerWithClient(c.Node.Id, nodeWithState, client, b)
+		worker := NewNodeWorker(c.Node.Id, nodeWithState, b)
 		b.nodeWorkGroup.AddWorker(c.Node.Id, worker)
 	}()
+
+	// Populate epoch data for the newly registered node
+	if err := b.PopulateSingleNodeEpochData(c.Node.Id); err != nil {
+		logging.Warn("RegisterNode. Failed to populate epoch data", types.Nodes, "node_id", c.Node.Id, "error", err)
+	}
 
 	// Trigger a status check for the newly added node.
 	b.TriggerStatusQuery(true)

@@ -68,12 +68,12 @@ services:
       - DAPI_API__ADMIN_SERVER_PORT=9200
     ports:
       - "9100:9100"
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     restart: always
   
   bridge:
     container_name: bridge
-    image: ghcr.io/product-science/bridge:0.2.5
+    image: ghcr.io/product-science/bridge:0.2.5-post1@sha256:efaafc4df19f9121cc7ef592bfe77a820ba638a2acd0fd7c41e85aac331c169e
     restart: unless-stopped
     environment:
       - GETH_DATA_DIR=/data/geth
