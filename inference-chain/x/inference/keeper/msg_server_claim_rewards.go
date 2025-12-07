@@ -113,7 +113,10 @@ func (ms msgServer) finishSettle(ctx sdk.Context, settleAmount *types.SettleAmou
 	perfSummary, found := ms.GetEpochPerformanceSummary(ctx, settleAmount.EpochIndex, settleAmount.Participant)
 	if found {
 		perfSummary.Claimed = true
-		ms.SetEpochPerformanceSummary(ctx, perfSummary)
+		err := ms.SetEpochPerformanceSummary(ctx, perfSummary)
+		if err != nil {
+			ms.LogError("Error setting epoch performance summary", types.Claims, "error", err)
+		}
 	}
 }
 
@@ -136,21 +139,21 @@ func (k msgServer) validateRequest(ctx sdk.Context, msg *types.MsgClaimRewards) 
 	}
 	settleAmount, found := k.GetSettleAmount(ctx, msg.Creator)
 	if !found {
-		k.LogDebug("SettleAmount not found for address", types.Claims, "address", msg.Creator)
+		k.LogInfo("SettleAmount not found for address", types.Claims, "address", msg.Creator)
 		return nil, &types.MsgClaimRewardsResponse{
 			Amount: 0,
 			Result: "No rewards for this address",
 		}
 	}
 	if settleAmount.EpochIndex != msg.EpochIndex {
-		k.LogDebug("SettleAmount does not match epoch index", types.Claims, "epoch", msg.EpochIndex, "settleEpoch", settleAmount.EpochIndex)
+		k.LogWarn("SettleAmount does not match epoch index", types.Claims, "epoch", msg.EpochIndex, "settleEpoch", settleAmount.EpochIndex)
 		return nil, &types.MsgClaimRewardsResponse{
 			Amount: 0,
 			Result: "No rewards for this block height",
 		}
 	}
 	if settleAmount.GetTotalCoins() == 0 {
-		k.LogDebug("SettleAmount had zero coins", types.Claims, "address", msg.Creator)
+		k.LogInfo("SettleAmount had zero coins", types.Claims, "address", msg.Creator)
 		return nil, &types.MsgClaimRewardsResponse{
 			Amount: 0,
 			Result: "No rewards for this address",

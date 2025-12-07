@@ -88,7 +88,17 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
         val apiContainer: Container = apis.find { it.names.any { it == "$name-api" } } ?: throw InvalidClusterException(
             "Unable to find API container for $name"
         )
+        // Find primary mock server
         val mockContainer: Container? = mocks.find { it.names.any { it == "$name-mock-server" } }
+        
+        // Find all mock servers for this participant (including numbered ones like mock-server-2, mock-server-3)
+        val allMockContainers: List<Container> = mocks.filter { container ->
+            container.names.any { containerName ->
+                containerName == "$name-mock-server" || 
+                containerName.matches(Regex("$name-mock-server-\\d+"))
+            }
+        }
+        
         val configWithName = config.copy(pairName = name)
         val nodeLogs = attachDockerLogs(dockerClient, name, "node", chainContainer.id)
         val dapiLogs = attachDockerLogs(dockerClient, name, "dapi", apiContainer.id)
@@ -106,6 +116,11 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
         Logger.info("  $SERVER_TYPE_PUBLIC: ${apiUrls[SERVER_TYPE_PUBLIC]}")
         Logger.info("  $SERVER_TYPE_ML: ${apiUrls[SERVER_TYPE_ML]}")
         Logger.info("  $SERVER_TYPE_ADMIN: ${apiUrls[SERVER_TYPE_ADMIN]}")
+        Logger.info("Found ${allMockContainers.size} mock servers for $name")
+        allMockContainers.forEach { mockContainer ->
+            Logger.info("  Mock: ${mockContainer.names.first()} on port ${mockContainer.getMappedPort(8080)}")
+        }
+        
         val executor = DockerExecutor(
             chainContainer.id,
             configWithName
@@ -114,6 +129,14 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
             apiContainer.id,
             configWithName
         )
+
+        // Create mock objects for all discovered mock servers
+        val mockObjects = allMockContainers.map { container ->
+            MockServerInferenceMock(
+                baseUrl = "http://localhost:${container.getMappedPort(8080)!!}", 
+                name = container.names.first()
+            )
+        }
 
         LocalInferencePair(
             node = ApplicationCLI(configWithName, nodeLogs, executor, listOf()),
@@ -124,7 +147,8 @@ fun getLocalInferencePairs(config: ApplicationConfig): List<LocalInferencePair> 
                 )
             },
             name = name,
-            config = configWithName
+            config = configWithName,
+            mocks = mockObjects
         )
     }
 }
@@ -202,11 +226,12 @@ fun attachDockerLogs(
 data class LocalInferencePair(
     val node: ApplicationCLI,
     val api: ApplicationAPI,
-    val mock: IInferenceMock?, // FIXME: technically it's a list
+    val mock: IInferenceMock?, // Primary mock for backward compatibility
     val name: String,
     override val config: ApplicationConfig,
     var mostRecentParams: InferenceParams? = null,
     var mostRecentEpochData: EpochResponse? = null,
+    val mocks: List<IInferenceMock> = emptyList(), // All mocks including primary
 ) : HasConfig {
     fun addSelfAsParticipant(models: List<String>) {
         val status = node.getStatus()
@@ -218,6 +243,22 @@ data class LocalInferencePair(
             validatorKey = pubKey.value
         )
         api.addInferenceParticipant(self)
+    }
+
+    /**
+     * Sets PoC response on all mock servers for this participant.
+     * This is useful for participants with multiple MLNodes (mock servers).
+     */
+    fun setPocResponseOnAllMocks(weight: Long, scenarioName: String = "ModelState") {
+        mocks.forEach { it.setPocResponse(weight, scenarioName) }
+    }
+
+    /**
+     * Sets PoC validation response on all mock servers for this participant.
+     * This is useful for participants with multiple MLNodes (mock servers).
+     */
+    fun setPocValidationResponseOnAllMocks(weight: Long, scenarioName: String = "ModelState") {
+        mocks.forEach { it.setPocValidationResponse(weight, scenarioName) }
     }
 
     fun getEpochLength(): Long {
@@ -331,6 +372,15 @@ data class LocalInferencePair(
         val currentBlock: Long,
         val waitDuration: Duration,
     )
+
+    fun waitForNextEpoch() {
+        val epochData = getEpochData()
+        logSection("Waiting for next epoch after epoch ${epochData.latestEpoch.index}")
+        this.waitForStage(EpochStage.START_OF_POC)
+        this.waitForStage(EpochStage.CLAIM_REWARDS)
+        val newEpochData = getEpochData()
+        logSection("Epoch is now ${newEpochData.latestEpoch.index}")
+    }
 
     fun waitForNextInferenceWindow(windowSizeInBlocks: Int = 5): WaitForStageResult? {
         val epochData = getEpochData()
@@ -486,7 +536,7 @@ data class LocalInferencePair(
                 throw e
             }
         }
-        return if (waitForProcessed) {
+        return if (waitForProcessed && submittedTransaction.code == 0) {
             this.node.waitForTxProcessed(submittedTransaction.txhash)
         } else {
             submittedTransaction
@@ -519,9 +569,13 @@ data class LocalInferencePair(
 
     fun submitGovernanceProposal(proposal: GovernanceProposal): TxResponse =
         wrapLog("submitGovProposal", infoLevel = false) {
+            val govAccount = this.node.getModuleAccount("gov")
+            val govValue = govAccount.account.value as? AccountValue 
+                ?: throw IllegalStateException("Gov module account value is not AccountValue")
+            
             val finalProposal = proposal.copy(
                 messages = proposal.messages.map {
-                    it.withAuthority(this.node.getModuleAccount("gov").account.value.address)
+                    it.withAuthority(govValue.address)
                 },
             )
             val governanceJson = gsonCamelCase.toJson(finalProposal)
@@ -611,11 +665,21 @@ data class LocalInferencePair(
                 if (it.code != 0)
                     throw RuntimeException("Transaction failed: code=${it.code}, txhash=${it.txhash}, rawLog=${it.rawLog}")
             }.getProposalId()!!
-            this.makeGovernanceDeposit(proposalId, minDeposit)
+            val response = this.makeGovernanceDeposit(proposalId, minDeposit)
+            require(response.code == 0) { "Deposit failed: ${response.rawLog}" }
+            val votingPeriodEnd = Instant.now().plus(govParams.votingPeriod)
             logSection("Voting on proposal, no voters: ${noVoters.joinToString(", ")}")
             cluster.allPairs.forEach {
-                it.voteOnProposal(proposalId, if (noVoters.contains(it.name)) "no" else "yes")
+                val voteResponse = it.voteOnProposal(proposalId, if (noVoters.contains(it.name)) "no" else "yes")
+                require(voteResponse.code == 0) { "Vote failed: ${voteResponse.rawLog}" }
             }
+
+            logSection("Waiting for voting period to end")
+            while (Instant.now().isBefore(votingPeriodEnd)) {
+                Thread.sleep(1000)
+            }
+            cluster.allPairs.first().node.waitForNextBlock(2)
+
             proposalId
         }
 

@@ -92,12 +92,24 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Short:          "Query pocBatchesForStage",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "block_height"}},
 				},
+				{
+					RpcMethod:      "PocValidationsForStage",
+					Use:            "poc-validations-for-stage [block-height]",
+					Short:          "Query pocValidationsForStage",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "block_height"}},
+				},
 
 				{
 					RpcMethod:      "GetCurrentEpoch",
 					Use:            "get-current-epoch",
 					Short:          "Query getCurrentEpoch",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{},
+				},
+				{
+					RpcMethod:      "TrainingAllowList",
+					Use:            "training-allow-list [role]",
+					Short:          "Query the current training allow list",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "role"}},
 				},
 				{
 					RpcMethod: "TokenomicsData",
@@ -301,7 +313,6 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Short:          "Get cached capacity for a specific model",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "model_id"}},
 				},
-
 				// this line is used by ignite scaffolding # autocli/query
 			},
 		},
@@ -311,6 +322,18 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
 				{
 					RpcMethod: "UpdateParams",
+					Skip:      true, // skipped because authority gated
+				},
+				{
+					RpcMethod: "RegisterTokenMetadata",
+					Skip:      true, // skipped because authority gated
+				},
+				{
+					RpcMethod: "ApproveBridgeTokenForTrading",
+					Skip:      true, // skipped because authority gated
+				},
+				{
+					RpcMethod: "RegisterLiquidityPool",
 					Skip:      true, // skipped because authority gated
 				},
 				{
@@ -420,6 +443,30 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Use:            "set-barrier",
 					Short:          "Send a set-barrier tx",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{},
+				},
+				{
+					RpcMethod:      "AddUserToTrainingAllowList",
+					Use:            "add-user-to-training-allow-list [authority] [address]",
+					Short:          "Send a addUserToTrainingAllowList tx",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "authority"}, {ProtoField: "address"}},
+				},
+				{
+					RpcMethod:      "RemoveUserFromTrainingAllowList",
+					Use:            "remove-user-from-training-allow-list [authority] [address]",
+					Short:          "Send a removeUserFromTrainingAllowList tx",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "authority"}, {ProtoField: "address"}},
+				},
+				{
+					RpcMethod:      "SetTrainingAllowList",
+					Use:            "set-training-allow-list [authority] [addresses]",
+					Short:          "Send a setTrainingAllowList tx",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "authority"}, {ProtoField: "addresses"}},
+				},
+				{
+					RpcMethod:      "RequestBridgeMint",
+					Use:            "request-bridge-mint [amount] [destination-address] [target-chain-id]",
+					Short:          "Request minting of WGNK tokens on Ethereum by bridging native Gonka",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "amount"}, {ProtoField: "destination_address"}, {ProtoField: "chain_id"}},
 				},
 				// this line is used by ignite scaffolding # autocli/tx
 			},

@@ -104,7 +104,8 @@ func TestComputeNewWeightsWithStakingValidators(t *testing.T) {
 		ValidatorKey: "validatorKey1",
 		InferenceUrl: "http://www.yahoo.com/",
 	}
-	k.SetParticipant(ctx, participant)
+	err = k.SetParticipant(ctx, participant)
+	require.NoError(t, err)
 
 	// Set up random seed
 	seed := types.RandomSeed{
@@ -623,11 +624,11 @@ func TestComputeNewWeights(t *testing.T) {
 				PocStartBlockHeight: 100,
 			})
 
-			// Call the function
-			result := am.ComputeNewWeights(ctx, upcomingEpoch)
+		// Call the function
+		result := am.ComputeNewWeights(ctx, upcomingEpoch)
 
-			// Verify the result
-			require.Equal(t, tt.expectedParticipants, len(result))
+		// Verify the result
+		require.Equal(t, tt.expectedParticipants, len(result))
 		})
 	}
 }

@@ -1,11 +1,11 @@
-.PHONY: release decentralized-api-release inference-chain-release tmkms-release proxy-release check-docker build-testermint run-blockchain-tests test-blockchain local-build api-local-build node-local-build api-test node-test mock-server-build-docker proxy-build-docker run-bls-tests
+.PHONY: release decentralized-api-release inference-chain-release tmkms-release proxy-release proxy-ssl-release bridge-release check-docker build-testermint run-blockchain-tests test-blockchain local-build api-local-build node-local-build api-test node-test mock-server-build-docker proxy-build-docker proxy-ssl-build-docker bridge-build-docker run-bls-tests
 
 VERSION ?= $(shell git describe --always)
 TAG_NAME := "release/v$(VERSION)"
 
 all: build-docker
 
-build-docker: api-build-docker node-build-docker mock-server-build-docker proxy-build-docker
+build-docker: api-build-docker node-build-docker mock-server-build-docker proxy-build-docker proxy-ssl-build-docker bridge-build-docker
 
 api-build-docker:
 	@make -C decentralized-api build-docker SET_LATEST=1
@@ -22,7 +22,13 @@ mock-server-build-docker:
 proxy-build-docker:
 	@make -C proxy build-docker SET_LATEST=1
 
-release: decentralized-api-release inference-chain-release tmkms-release proxy-release
+proxy-ssl-build-docker:
+	@make -C proxy-ssl build-docker SET_LATEST=1
+
+bridge-build-docker:
+	@make -C bridge build-docker SET_LATEST=1
+
+release: decentralized-api-release inference-chain-release tmkms-release proxy-release proxy-ssl-release bridge-release
 	@git tag $(TAG_NAME)
 	@git push origin $(TAG_NAME)
 
@@ -44,12 +50,15 @@ tmkms-release:
 proxy-release:
 	@echo "Releasing proxy..."
 	@make -C proxy release
-	@make -C proxy docker-push
 
 proxy-ssl-release:
 	@echo "Releasing proxy-ssl..."
 	@make -C proxy-ssl release
-	@make -C proxy-ssl docker-push
+
+bridge-release:
+	@echo "Releasing bridge..."
+	@make -C bridge release
+	@make -C bridge docker-push
 
 check-docker:
 	@docker info > /dev/null 2>&1 || (echo "Docker Desktop is not running. Please start Docker Desktop." && exit 1)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/group"
@@ -43,7 +44,25 @@ func InferenceKeeper(t testing.TB) (keeper.Keeper, sdk.Context) {
 	collateralMock := NewMockCollateralKeeper(ctrl)
 	streamvestingMock := NewMockStreamVestingKeeper(ctrl)
 	authzKeeper := NewMockAuthzKeeper(ctrl)
-	mock, context := InferenceKeeperWithMock(t, bankKeeper, accountKeeperMock, validatorSetMock, groupMock, stakingMock, collateralMock, streamvestingMock, bankViewKeeper, authzKeeper)
+	upgradeKeeper := NewMockUpgradeKeeper(ctrl)
+	mock, context := InferenceKeeperWithMock(t, bankKeeper, accountKeeperMock, validatorSetMock, groupMock, stakingMock, collateralMock, streamvestingMock, bankViewKeeper, authzKeeper, upgradeKeeper)
+	bankKeeper.ExpectAny(context)
+	return mock, context
+}
+
+// InferenceKeeperWithUpgradeKeeper creates a test keeper with a specific UpgradeKeeper mock
+func InferenceKeeperWithUpgradeKeeper(t testing.TB, upgradeKeeper types.UpgradeKeeper) (keeper.Keeper, sdk.Context) {
+	ctrl := gomock.NewController(t)
+	bankKeeper := NewMockBookkeepingBankKeeper(ctrl)
+	bankViewKeeper := NewMockBankKeeper(ctrl)
+	accountKeeperMock := NewMockAccountKeeper(ctrl)
+	validatorSetMock := NewMockValidatorSet(ctrl)
+	groupMock := NewMockGroupMessageKeeper(ctrl)
+	stakingMock := NewMockStakingKeeper(ctrl)
+	collateralMock := NewMockCollateralKeeper(ctrl)
+	streamvestingMock := NewMockStreamVestingKeeper(ctrl)
+	authzKeeper := NewMockAuthzKeeper(ctrl)
+	mock, context := InferenceKeeperWithMock(t, bankKeeper, accountKeeperMock, validatorSetMock, groupMock, stakingMock, collateralMock, streamvestingMock, bankViewKeeper, authzKeeper, upgradeKeeper)
 	bankKeeper.ExpectAny(context)
 	return mock, context
 }
@@ -68,6 +87,7 @@ func (mocks *InferenceMocks) StubForInitGenesis(ctx context.Context) {
 func (mocks *InferenceMocks) StubForInitGenesisWithValidators(ctx context.Context, validators []stakingtypes.Validator) {
 	mocks.AccountKeeper.EXPECT().GetModuleAccount(ctx, types.TopRewardPoolAccName)
 	mocks.AccountKeeper.EXPECT().GetModuleAccount(ctx, types.PreProgrammedSaleAccName)
+	mocks.AccountKeeper.EXPECT().GetModuleAccount(ctx, types.BridgeEscrowAccName)
 	// Kind of pointless to test the exact amount of coins minted, it'd just be a repeat of the code
 	mocks.BankKeeper.EXPECT().MintCoins(ctx, types.TopRewardPoolAccName, gomock.Any(), gomock.Any())
 	mocks.BankKeeper.EXPECT().MintCoins(ctx, types.PreProgrammedSaleAccName, gomock.Any(), gomock.Any())
@@ -130,7 +150,8 @@ func InferenceKeeperReturningMocks(t testing.TB) (keeper.Keeper, sdk.Context, In
 	collateralMock := NewMockCollateralKeeper(ctrl)
 	streamvestingMock := NewMockStreamVestingKeeper(ctrl)
 	authzKeeper := NewMockAuthzKeeper(ctrl)
-	keep, context := InferenceKeeperWithMock(t, bankKeeper, accountKeeperMock, validatorSet, groupMock, stakingMock, collateralMock, streamvestingMock, bankViewKeeper, authzKeeper)
+	upgradeKeeper := NewMockUpgradeKeeper(ctrl)
+	keep, context := InferenceKeeperWithMock(t, bankKeeper, accountKeeperMock, validatorSet, groupMock, stakingMock, collateralMock, streamvestingMock, bankViewKeeper, authzKeeper, upgradeKeeper)
 	keep.SetTokenomicsData(context, types.TokenomicsData{})
 	genesisParams := types.DefaultGenesisOnlyParams()
 	keep.SetGenesisOnlyParams(context, &genesisParams)
@@ -158,6 +179,7 @@ func InferenceKeeperWithMock(
 	streamvestingKeeper types.StreamVestingKeeper,
 	bankViewMock *MockBankKeeper,
 	authzKeeper types.AuthzKeeper,
+	upgradeKeeper types.UpgradeKeeper,
 ) (keeper.Keeper, sdk.Context) {
 	sdk.GetConfig().SetBech32PrefixForAccount("gonka", "gonka")
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
@@ -197,9 +219,10 @@ func InferenceKeeperWithMock(
 		streamvestingKeeper,
 		authzKeeper,
 		nil,
+		upgradeKeeper,
 	)
 
-	ctx := sdk.NewContext(stateStore, cmtproto.Header{}, false, log.NewNopLogger())
+	ctx := sdk.NewContext(stateStore, cmtproto.Header{}, false, log.NewNopLogger()).WithBlockTime(time.Now())
 
 	// Initialize params
 	if err := k.SetParams(ctx, types.DefaultParams()); err != nil {

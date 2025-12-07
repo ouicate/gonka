@@ -72,7 +72,12 @@ func (k Keeper) createFilterFn(goCtx context.Context, modelId string) (func(memb
 		return nil, status.Error(codes.NotFound, "GetRandomExecutor: epoch params are nill")
 	}
 
-	epochContext := types.NewEpochContextFromEffectiveEpoch(*effectiveEpoch, *epochParams.EpochParams, sdkCtx.BlockHeight())
+	epochContext, err := types.NewEpochContextFromEffectiveEpoch(*effectiveEpoch, *epochParams.EpochParams, sdkCtx.BlockHeight())
+	if err != nil {
+		k.Logger().Error("GetRandomExecutor: createFilterFn: failed to create epoch context",
+			"model_id", modelId, "epoch_index", effectiveEpoch.Index, "error", err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	currentPhase := epochContext.GetCurrentPhase(sdkCtx.BlockHeight())
 
 	k.Logger().Info("GetRandomExecutor: createFilterFn: Determined current phase",
@@ -80,20 +85,24 @@ func (k Keeper) createFilterFn(goCtx context.Context, modelId string) (func(memb
 		"epoch_index", effectiveEpoch.Index, "latest_epoch_index", epochContext.EpochIndex,
 		"block_height", sdkCtx.BlockHeight(), "set_new_validators_block_height", epochContext.SetNewValidators())
 
-	if currentPhase == types.InferencePhase && sdkCtx.BlockHeight() > epochContext.SetNewValidators() {
-		// Everyone is expected to be available during the inference phase
-		k.Logger().Info("GetRandomExecutor: createFilterFn: Using inference phase filter (all members available)",
-			"model_id", modelId)
-		return func(members []*group.GroupMember) []*group.GroupMember {
-			k.Logger().Debug("GetRandomExecutor: InferencePhase filter: returning all members",
-				"model_id", modelId, "member_count", len(members))
-			return members
-		}, nil
-	} else {
-		k.Logger().Info("GetRandomExecutor: createFilterFn: Using PoC phase filter (checking POC_SLOT allocations)",
-			"model_id", modelId, "current_phase", string(currentPhase))
+	_, isActive, err := k.GetActiveConfirmationPoCEvent(goCtx)
+	if err != nil {
+		k.Logger().Error("GetRandomExecutor: createFilterFn: failed to check confirmation PoC",
+			"model_id", modelId, "error", err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if isActive {
 		return k.createIsAvailableDuringPoCFilterFn(goCtx, effectiveEpoch.Index, modelId)
 	}
+
+	if currentPhase == types.InferencePhase && sdkCtx.BlockHeight() > epochContext.SetNewValidators() {
+		return func(members []*group.GroupMember) []*group.GroupMember {
+			return members
+		}, nil
+	}
+
+	return k.createIsAvailableDuringPoCFilterFn(goCtx, effectiveEpoch.Index, modelId)
 }
 
 func (k Keeper) createIsAvailableDuringPoCFilterFn(ctx context.Context, epochId uint64, modelId string) (func(members []*group.GroupMember) []*group.GroupMember, error) {

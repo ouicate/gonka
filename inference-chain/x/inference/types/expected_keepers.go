@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cosmossdk.io/math"
+	upgradetypes "cosmossdk.io/x/upgrade/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authztypes "github.com/cosmos/cosmos-sdk/x/authz"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -38,6 +39,7 @@ type GroupMessageKeeper interface {
 	Vote(goCtx context.Context, msg *group.MsgVote) (*group.MsgVoteResponse, error)
 	GroupInfo(goCtx context.Context, request *group.QueryGroupInfoRequest) (*group.QueryGroupInfoResponse, error)
 	GroupMembers(goCtx context.Context, request *group.QueryGroupMembersRequest) (*group.QueryGroupMembersResponse, error)
+	ProposalsByGroupPolicy(goCtx context.Context, request *group.QueryProposalsByGroupPolicyRequest) (*group.QueryProposalsByGroupPolicyResponse, error)
 }
 
 // ParamSubspace defines the expected Subspace interface for parameters.
@@ -76,7 +78,7 @@ type StakingKeeper interface {
 type CollateralKeeper interface {
 	AdvanceEpoch(ctx context.Context, completedEpoch uint64)
 	GetCollateral(ctx context.Context, participant sdk.AccAddress) (collateral sdk.Coin, found bool)
-	Slash(ctx context.Context, participant sdk.AccAddress, slashFraction math.LegacyDec) (sdk.Coin, error)
+	Slash(ctx context.Context, participant sdk.AccAddress, slashFraction math.LegacyDec, reason string) (sdk.Coin, error)
 }
 
 // StreamVestingKeeper defines the expected interface for the StreamVesting module.
@@ -87,8 +89,7 @@ type StreamVestingKeeper interface {
 
 type ParticipantKeeper interface {
 	GetParticipant(ctx context.Context, index string) (val Participant, found bool)
-	GetParticipants(ctx context.Context, ids []string) ([]Participant, bool)
-	SetParticipant(ctx context.Context, participant Participant)
+	SetParticipant(ctx context.Context, participant Participant) error
 	RemoveParticipant(ctx context.Context, index string)
 	GetAllParticipant(ctx context.Context) []Participant
 	ParticipantAll(ctx context.Context, req *QueryAllParticipantRequest) (*QueryAllParticipantResponse, error)
@@ -136,4 +137,9 @@ type BlsKeeper interface {
 	RequestThresholdSignature(ctx sdk.Context, signingData blstypes.SigningData) error
 	GetSigningStatus(ctx sdk.Context, requestID []byte) (*blstypes.ThresholdSigningRequest, error)
 	ListActiveSigningRequests(ctx sdk.Context, currentEpochID uint64) ([]*blstypes.ThresholdSigningRequest, error)
+}
+
+// UpgradeKeeper defines the expected interface for the upgrade module.
+type UpgradeKeeper interface {
+	GetUpgradePlan(ctx context.Context) (plan upgradetypes.Plan, err error)
 }

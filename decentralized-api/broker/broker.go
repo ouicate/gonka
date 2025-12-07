@@ -115,7 +115,7 @@ type Broker struct {
 	reconcileTrigger     chan struct{}
 	lastEpochIndex       uint64
 	lastEpochPhase       types.EpochPhase
-	statusQueryTrigger   chan struct{}
+	statusQueryTrigger   chan statusQuerySignal
 	configManager        *apiconfig.ConfigManager
 }
 
@@ -308,7 +308,7 @@ func NewBroker(chainBridge BrokerChainBridge, phaseTracker *chainphase.ChainPhas
 		callbackUrl:          callbackUrl,
 		mlNodeClientFactory:  clientFactory,
 		reconcileTrigger:     make(chan struct{}, 1),
-		statusQueryTrigger:   make(chan struct{}, 1),
+		statusQueryTrigger:   make(chan statusQuerySignal, 1),
 		configManager:        configManager,
 	}
 
@@ -324,9 +324,13 @@ func NewBroker(chainBridge BrokerChainBridge, phaseTracker *chainphase.ChainPhas
 	return broker
 }
 
-func (b *Broker) TriggerStatusQuery() {
+type statusQuerySignal struct {
+	BypassDebounce bool
+}
+
+func (b *Broker) TriggerStatusQuery(bypassDebounce bool) {
 	select {
-	case b.statusQueryTrigger <- struct{}{}:
+	case b.statusQueryTrigger <- statusQuerySignal{BypassDebounce: bypassDebounce}:
 	default: // Non-blocking send
 	}
 }
@@ -335,22 +339,19 @@ func (b *Broker) GetChainBridge() BrokerChainBridge {
 	return b.chainBridge
 }
 
-func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan *apiconfig.InferenceNodeConfig {
+func (b *Broker) LoadNodeToBroker(node *apiconfig.InferenceNodeConfig) chan NodeCommandResponse {
 	if node == nil {
 		return nil
 	}
 
-	responseChan := make(chan *apiconfig.InferenceNodeConfig, 2)
-	err := b.QueueMessage(RegisterNode{
-		Node:     *node,
-		Response: responseChan,
-	})
+	cmd := NewRegisterNodeCommand(*node)
+	err := b.QueueMessage(cmd)
 	if err != nil {
 		logging.Error("Error loading node to broker", types.Nodes, "error", err)
 		panic(err)
 		// return nil
 	}
-	return responseChan
+	return cmd.Response
 }
 
 func nodeSyncWorker(broker *Broker) {
@@ -391,6 +392,8 @@ func (b *Broker) executeCommand(command Command) {
 		command.Execute(b)
 	case RemoveNode:
 		command.Execute(b)
+	case UpdateNode:
+		command.Execute(b)
 	case GetNodesCommand:
 		command.Execute(b)
 	case SyncNodesCommand:
@@ -402,6 +405,8 @@ func (b *Broker) executeCommand(command Command) {
 	case SetNodesActualStatusCommand:
 		command.Execute(b)
 	case SetNodeAdminStateCommand:
+		command.Execute(b)
+	case UpdateNodeHardwareCommand:
 		command.Execute(b)
 	case InferenceUpAllCommand:
 		command.Execute(b)
@@ -446,7 +451,9 @@ func (b *Broker) lockAvailableNode(command LockAvailableNode) {
 	leastBusyNode := b.getLeastBusyNode(command)
 
 	if leastBusyNode != nil {
+		b.mu.RLock()
 		leastBusyNode.State.LockCount++
+		b.mu.RUnlock()
 	}
 	logging.Debug("Locked node", types.Nodes, "node", leastBusyNode)
 	if leastBusyNode == nil {
@@ -465,8 +472,20 @@ func (b *Broker) getLeastBusyNode(command LockAvailableNode) *NodeWithState {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
+	// Build skip set
+	skip := make(map[string]struct{}, len(command.SkipNodeIDs))
+	for _, id := range command.SkipNodeIDs {
+		if id != "" {
+			skip[id] = struct{}{}
+		}
+	}
+
 	var leastBusyNode *NodeWithState = nil
 	for _, node := range b.nodes {
+		if _, shouldSkip := skip[node.Node.Id]; shouldSkip {
+			logging.Info("Node skipped by LockAvailableNode skip list", types.Nodes, "node_id", node.Node.Id)
+			continue
+		}
 		// TODO: log some kind of a reason as to why the node is not available
 		if available, reason := b.nodeAvailable(node, command.Model, epochState.LatestEpoch.EpochIndex, epochState.CurrentPhase); available {
 			if leastBusyNode == nil || node.State.LockCount < leastBusyNode.State.LockCount {
@@ -509,7 +528,7 @@ func (b *Broker) nodeAvailable(node *NodeWithState, neededModel string, currentE
 	}
 	logging.Info("nodeAvailable. Node is not administratively enabled", types.Nodes, "nodeId", node.Node.Id, "adminState", node.State.AdminState)
 
-	_, found := node.Node.Models[neededModel]
+	_, found := node.State.EpochModels[neededModel]
 	if !found {
 		logging.Info("Node does not have neededModel", types.Nodes, "node_id", node.Node.Id, "neededModel", neededModel)
 		return false, fmt.Sprintf("Node does not have model %s", neededModel)
@@ -528,7 +547,9 @@ func (b *Broker) releaseNode(command ReleaseNode) {
 		command.Response <- false
 		return
 	} else {
+		b.mu.RLock()
 		node.State.LockCount--
+		b.mu.RUnlock()
 		if !command.Outcome.IsSuccess() {
 			logging.Error("Node failed", types.Nodes, "node_id", command.NodeId, "reason", command.Outcome.GetMessage())
 			// FIXME: need a write lock here?
@@ -564,10 +585,8 @@ func LockNode[T any](
 
 	defer func() {
 		queueError := b.QueueMessage(ReleaseNode{
-			NodeId: node.Id,
-			Outcome: InferenceSuccess{
-				Response: nil,
-			},
+			NodeId:   node.Id,
+			Outcome:  InferenceSuccess{},
 			Response: make(chan bool, 2),
 		})
 
@@ -634,7 +653,7 @@ func (b *Broker) syncNodes() {
 
 	logging.Info("[sync nodes] Hardware diff computed", types.Nodes, "diff", diff)
 
-	if (diff.Removed == nil || len(diff.Removed) == 0) && (diff.NewOrModified == nil || len(diff.NewOrModified) == 0) {
+	if len(diff.Removed) == 0 && len(diff.NewOrModified) == 0 {
 		logging.Info("[sync nodes] No diff to submit", types.Nodes)
 	} else {
 		logging.Info("[sync nodes] Submitting diff", types.Nodes)
@@ -774,6 +793,15 @@ type pocParams struct {
 }
 
 const reconciliationInterval = 30 * time.Second
+
+// Timeouts for node health checks used in queryNodeStatus
+const (
+	nodeStatusRequestTimeout      = 5 * time.Second
+	inferenceHealthRequestTimeout = 5 * time.Second
+	// statusScanMinInterval enforces a minimal delay between consecutive full scans
+	// in nodeStatusQueryWorker, covering both manual and timer triggers.
+	statusScanMinInterval = 2 * time.Second
+)
 
 func (b *Broker) TriggerReconciliation() {
 	select {
@@ -1035,6 +1063,16 @@ func (b *Broker) prefetchPocParams(epochState chainphase.EpochState, nodesToDisp
 	}
 
 	if needsPocParams {
+		// CONFIRMATION PoC - use hash from event (populated by chain at generation_start_height)
+		if epochState.CurrentPhase == types.InferencePhase && epochState.ActiveConfirmationPoCEvent != nil {
+			event := epochState.ActiveConfirmationPoCEvent
+			return &pocParams{
+				startPoCBlockHeight: event.TriggerHeight,
+				startPoCBlockHash:   event.PocSeedBlockHash,
+			}, nil
+		}
+
+		// REGULAR PoC - query hash as usual
 		currentPoCParams, pocParamsErr := b.queryCurrentPoCParams(epochState.LatestEpoch.PocStartBlockHeight)
 		if pocParamsErr != nil {
 			logging.Error("Failed to query PoC Generation parameters, skipping PoC reconciliation", types.Nodes, "error", pocParamsErr, "blockHeight", blockHeight)
@@ -1113,16 +1151,31 @@ func (b *Broker) queryCurrentPoCParams(epochPoCStartHeight int64) (*pocParams, e
 
 func nodeStatusQueryWorker(broker *Broker) {
 	checkInterval := 60 * time.Second
+	// Track when an actual scan starts to enforce a minimal interval between scans
+	var lastScanStart time.Time
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
 
 	for {
+		bypassDebounce := false
 		select {
 		case <-ticker.C:
 			logging.Debug("nodeStatusQueryWorker triggered by ticker", types.Nodes)
-		case <-broker.statusQueryTrigger:
+		case sig := <-broker.statusQueryTrigger:
 			logging.Debug("nodeStatusQueryWorker triggered manually", types.Nodes)
+			bypassDebounce = sig.BypassDebounce
 		}
+
+		// Enforce minimal interval between scans unless bypass requested
+		if !bypassDebounce && !lastScanStart.IsZero() {
+			elapsed := time.Since(lastScanStart)
+			if elapsed < statusScanMinInterval {
+				logging.Debug("nodeStatusQueryWorker skipping scan due to min interval", types.Nodes, "elapsed", elapsed)
+				continue
+			}
+		}
+		// Mark the start of an actual scan
+		lastScanStart = time.Now()
 
 		nodes, err := broker.GetNodes()
 		if err != nil {
@@ -1187,21 +1240,27 @@ type statusQueryResult struct {
 func (b *Broker) queryNodeStatus(node Node, state NodeState) (*statusQueryResult, error) {
 	client := b.NewNodeClient(&node)
 
-	status, err := client.NodeState(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), nodeStatusRequestTimeout)
+	defer cancel()
+	status, err := client.NodeState(ctx)
 
 	nodeId := node.Id
+	prevStatus := state.CurrentStatus
+	var currentStatus types.HardwareNodeStatus
 	if err != nil {
-		logging.Error("queryNodeStatus. Failed to query node status", types.Nodes,
+		logging.Error("queryNodeStatus. Failed to query node status. Assuming currentStatus = FAILED", types.Nodes,
 			"nodeId", nodeId, "error", err)
-		return nil, err
+		currentStatus = types.HardwareNodeStatus_FAILED
+	} else {
+		currentStatus = toStatus(*status)
 	}
 
-	prevStatus := state.CurrentStatus
-	currentStatus := toStatus(*status)
 	logging.Info("queryNodeStatus. Queried node status", types.Nodes, "nodeId", nodeId, "currentStatus", currentStatus.String(), "prevStatus", prevStatus.String())
 
 	if currentStatus == types.HardwareNodeStatus_INFERENCE {
-		ok, err := client.InferenceHealth(context.Background())
+		hctx, hcancel := context.WithTimeout(context.Background(), inferenceHealthRequestTimeout)
+		defer hcancel()
+		ok, err := client.InferenceHealth(hctx)
 		if !ok || err != nil {
 			currentStatus = types.HardwareNodeStatus_FAILED
 			logging.Info("queryNodeStatus. Node inference health check failed", types.Nodes, "nodeId", nodeId, "currentStatus", currentStatus.String(), "prevStatus", prevStatus.String(), "err", err)
@@ -1260,7 +1319,7 @@ func (b *Broker) UpdateNodeWithEpochData(epochState *chainphase.EpochState) erro
 		logging.Error("Parent epoch group data is nil", types.Nodes, "epoch_index", epochState.LatestEpoch.EpochIndex, "epoch_poc_start_block_height", epochState.LatestEpoch.PocStartBlockHeight, "epoch_group_data_poc_start_block_height")
 		return nil
 	}
-	if parentGroupResp.EpochGroupData.SubGroupModels == nil || len(parentGroupResp.EpochGroupData.SubGroupModels) == 0 {
+	if len(parentGroupResp.EpochGroupData.SubGroupModels) == 0 {
 		logging.Warn("Parent epoch group SubGroupModels are empty", types.Nodes, "epoch_index", epochState.LatestEpoch.EpochIndex, "epoch_poc_start_block_height", epochState.LatestEpoch.PocStartBlockHeight, "epoch_group_data_poc_start_block_height", parentGroupResp.EpochGroupData.PocStartBlockHeight)
 		return nil
 	}

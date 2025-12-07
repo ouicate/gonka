@@ -163,7 +163,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.Raw
 
 // ConsensusVersion is a sequence number for state-breaking change of the module.
 // It should be incremented on each consensus-breaking change introduced by the module.
-func (AppModule) ConsensusVersion() uint64 { return 6 }
+func (AppModule) ConsensusVersion() uint64 { return 8 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 func (am AppModule) BeginBlock(ctx context.Context) error {
@@ -204,9 +204,15 @@ func (am AppModule) handleExpiredInference(ctx context.Context, inference types.
 	if err != nil {
 		am.LogError("Error issuing refund", types.Inferences, "error", err)
 	}
-	am.keeper.SetInference(ctx, inference)
+	err = am.keeper.SetInference(ctx, inference)
+	if err != nil {
+		am.LogError("Error updating inference", types.Inferences, "error", err)
+	}
 	executor.CurrentEpochStats.MissedRequests++
-	am.keeper.SetParticipant(ctx, executor)
+	err = am.keeper.SetParticipant(ctx, executor)
+	if err != nil {
+		am.LogError("Error updating participant for expired inference", types.Participants, "error", err)
+	}
 }
 
 // EndBlock contains the logic that is automatically triggered at the end of each block.
@@ -214,13 +220,30 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	blockHeight := sdkCtx.BlockHeight()
 	blockTime := sdkCtx.BlockTime().Unix()
-	epochParams := am.keeper.GetParams(ctx).EpochParams
+
+	// Handle confirmation PoC trigger decisions and phase transitions
+	err := am.handleConfirmationPoC(ctx, blockHeight)
+	if err != nil {
+		am.LogError("Failed to handle confirmation PoC", types.PoC, "error", err)
+		// Don't return error - allow block processing to continue
+	}
+
+	params, err := am.keeper.GetParamsSafe(ctx)
+	if err != nil {
+		am.LogError("Unable to get parameters", types.Settle, "error", err.Error())
+		return err
+	}
+	epochParams := params.EpochParams
 	currentEpoch, found := am.keeper.GetEffectiveEpoch(ctx)
 	if !found || currentEpoch == nil {
 		am.LogError("Unable to get effective epoch", types.EpochGroup, "blockHeight", blockHeight)
 		return nil
 	}
-	epochContext := types.NewEpochContextFromEffectiveEpoch(*currentEpoch, *epochParams, blockHeight)
+	epochContext, err := types.NewEpochContextFromEffectiveEpoch(*currentEpoch, *epochParams, blockHeight)
+	if err != nil {
+		am.LogError("Unable to create epoch context", types.EpochGroup, "error", err.Error())
+		return nil
+	}
 
 	currentEpochGroup, err := am.keeper.GetEpochGroupForEpoch(ctx, *currentEpoch)
 	if err != nil {
@@ -237,6 +260,22 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		am.keeper.RemoveInferenceTimeout(ctx, t.ExpirationHeight, t.InferenceId)
 	}
 
+	err = am.keeper.Prune(ctx, int64(currentEpoch.Index))
+	if err != nil {
+		am.LogError("Error during pruning", types.Pruning, "error", err.Error())
+	}
+
+	// Track full chain upgrades from UpgradeKeeper
+	upgradePlan, err := am.keeper.GetUpgradePlan(ctx)
+	if err == nil && upgradePlan.Height > 0 && upgradePlan.Height == blockHeight {
+		am.LogInfo("FullUpgradeActive - tracking height", types.Upgrades,
+			"upgradeHeight", upgradePlan.Height, "blockHeight", blockHeight, "name", upgradePlan.Name)
+		err = am.keeper.SetLastUpgradeHeight(ctx, blockHeight)
+		if err != nil {
+			am.LogError("Failed to set last upgrade height for full upgrade", types.Upgrades, "error", err)
+		}
+	}
+
 	partialUpgrades := am.keeper.GetAllPartialUpgrade(ctx)
 	for _, pu := range partialUpgrades {
 		if pu.Height == uint64(blockHeight) {
@@ -246,6 +285,12 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 				am.keeper.SetMLNodeVersion(ctx, types.MLNodeVersion{
 					CurrentVersion: pu.NodeVersion,
 				})
+			}
+
+			// Track last upgrade height
+			err = am.keeper.SetLastUpgradeHeight(ctx, blockHeight)
+			if err != nil {
+				am.LogError("Failed to set last upgrade height", types.Upgrades, "error", err)
 			}
 		} else if pu.Height < uint64(blockHeight) {
 			am.LogInfo("PartialUpgradeExpired", types.Upgrades, "partialUpgradeHeight", pu.Height, "blockHeight", blockHeight)
@@ -272,7 +317,11 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 
 	if epochContext.IsStartOfPocStage(blockHeight) {
 		upcomingEpoch := createNewEpoch(*currentEpoch, blockHeight)
-		am.keeper.SetEpoch(ctx, upcomingEpoch)
+		err = am.keeper.SetEpoch(ctx, upcomingEpoch)
+		if err != nil {
+			am.LogError("Unable to set upcoming epoch", types.EpochGroup, "error", err.Error())
+			return err
+		}
 
 		am.LogInfo("StartStage:PocStart", types.Stages, "blockHeight", blockHeight)
 		newGroup, err := am.keeper.CreateEpochGroup(ctx, uint64(blockHeight), upcomingEpoch.Index)
@@ -284,28 +333,6 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 		if err != nil {
 			am.LogError("Unable to create epoch group", types.EpochGroup, "error", err.Error())
 			return err
-		}
-
-		// Prune old inferences
-		inferencePruningThreshold := am.keeper.GetParams(ctx).EpochParams.InferencePruningEpochThreshold
-		if inferencePruningThreshold == 0 {
-			am.LogInfo("Inference pruning threshold is 0, using default", types.Inferences, "threshold", defaultInferencePruningThreshold)
-			inferencePruningThreshold = defaultInferencePruningThreshold
-		}
-		pruneErr := am.keeper.PruneInferences(ctx, upcomingEpoch.Index, inferencePruningThreshold)
-		if pruneErr != nil {
-			am.LogError("Error pruning inferences", types.Inferences, "error", pruneErr)
-		}
-
-		// Prune old PoC data
-		pocPruningThreshold := am.keeper.GetParams(ctx).PocParams.PocDataPruningEpochThreshold
-		if pocPruningThreshold == 0 {
-			am.LogInfo("PoC pruning threshold is 0, using default", types.PoC, "threshold", defaultPocPruningThreshold)
-			pocPruningThreshold = defaultPocPruningThreshold
-		}
-		pocErr := am.keeper.PrunePoCData(ctx, upcomingEpoch.Index, pocPruningThreshold)
-		if pocErr != nil {
-			am.LogError("Error pruning PoC data", types.PoC, "error", pocErr)
 		}
 	}
 
@@ -413,6 +440,9 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 	// Apply universal power capping to epoch powers
 	activeParticipants = am.applyEpochPowerCapping(ctx, activeParticipants)
 
+	modelAssigner.AllocateMLNodesForPoC(ctx, *upcomingEpoch, activeParticipants)
+	am.LogInfo("Finished PoC allocation for all participants", types.EpochGroup, "step", "poc_allocation_complete")
+
 	err = am.RegisterTopMiners(ctx, activeParticipants, blockTime)
 	if err != nil {
 		am.LogError("onEndOfPoCValidationStage: Unable to register top miners", types.Tokenomics, "error", err.Error())
@@ -424,7 +454,7 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		"PocStartBlockHeight", upcomingEpoch.PocStartBlockHeight,
 		"len(activeParticipants)", len(activeParticipants))
 
-	am.keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
+	err = am.keeper.SetActiveParticipants(ctx, types.ActiveParticipants{
 		Participants:        activeParticipants,
 		EpochGroupId:        upcomingEpoch.Index,
 		EpochId:             upcomingEpoch.Index,
@@ -433,6 +463,10 @@ func (am AppModule) onEndOfPoCValidationStage(ctx context.Context, blockHeight i
 		EffectiveBlockHeight: blockHeight + 2, // FIXME: verify it's +2, I'm not sure
 		CreatedAtBlockHeight: blockHeight,
 	})
+	if err != nil {
+		am.LogError("onEndOfPoCValidationStage: Unable to set active participants", types.EpochGroup, "error", err.Error())
+		return
+	}
 
 	upcomingEg, err := am.keeper.GetEpochGroupForEpoch(ctx, *upcomingEpoch)
 	if err != nil {
@@ -504,7 +538,8 @@ func (am AppModule) addEpochMembers(ctx context.Context, upcomingEg *epochgroup.
 				"participantIndex", p.Index)
 			continue
 		}
-		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation)
+
+		member := epochgroup.NewEpochMemberFromActiveParticipant(p, reputation, 0)
 		err = upcomingEg.AddMember(ctx, member)
 		if err != nil {
 			am.LogError("onSetNewValidatorsStage: Unable to add member", types.EpochGroup, "error", err.Error())
@@ -616,16 +651,22 @@ func (am AppModule) moveUpcomingToEffectiveGroup(ctx context.Context, blockHeigh
 	for i, participant := range activeParticipants.Participants {
 		ids[i] = participant.Index
 	}
-	participants, ok := am.keeper.GetParticipants(ctx, ids)
-	if !ok {
-		am.LogError("Unable to get participants", types.EpochGroup, "ids", ids)
-		return
-	}
+	participants := am.keeper.GetParticipants(ctx, ids)
 
 	am.LogInfo("Setting participants to active", types.EpochGroup, "len(participants)", len(participants))
 	for _, participant := range participants {
 		participant.Status = types.ParticipantStatus_ACTIVE
-		am.keeper.SetParticipant(ctx, participant)
+		err := am.keeper.SetParticipant(ctx, participant)
+		if err != nil {
+			am.LogError("Unable to set participant to active", types.EpochGroup, "participantIndex", participant.Index, "error", err.Error())
+			continue
+		}
+	}
+
+	// At this point, clear all active invalidations in case of any hanging invalidations
+	err := am.keeper.ActiveInvalidations.Clear(ctx, nil)
+	if err != nil {
+		am.LogError("Unable to clear active invalidations", types.EpochGroup, "error", err.Error())
 	}
 }
 
@@ -756,6 +797,7 @@ type ModuleInputs struct {
 	StreamVestingKeeper types.StreamVestingKeeper
 	AuthzKeeper         authzkeeper.Keeper
 	GetWasmKeeper       func() wasmkeeper.Keeper `optional:"true"`
+	UpgradeKeeper       types.UpgradeKeeper
 }
 
 type ModuleOutputs struct {
@@ -789,6 +831,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.StreamVestingKeeper,
 		in.AuthzKeeper,
 		in.GetWasmKeeper,
+		in.UpgradeKeeper,
 	)
 
 	m := NewAppModule(
@@ -837,7 +880,7 @@ func (am AppModule) InitiateBLSKeyGeneration(ctx context.Context, epochID uint64
 	// Convert ActiveParticipants to ParticipantWithWeightAndKey format expected by BLS module
 	finalizedParticipants := make([]blstypes.ParticipantWithWeightAndKey, 0, len(activeParticipants))
 
-	// Calculate total weight to convert to percentages
+	// Calculate total weight
 	totalWeight := int64(0)
 	for _, p := range activeParticipants {
 		totalWeight += p.Weight
@@ -847,6 +890,9 @@ func (am AppModule) InitiateBLSKeyGeneration(ctx context.Context, epochID uint64
 		am.LogError("Total weight is zero, cannot initiate BLS key generation", types.EpochGroup, "epochID", epochID)
 		return
 	}
+
+	// Compute adjusted percentages if genesis guardian reservation applies
+	adjustedPercentages := ApplyBLSGuardianSlotReservation(ctx, am.keeper, activeParticipants)
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	for _, ap := range activeParticipants {
@@ -879,12 +925,22 @@ func (am AppModule) InitiateBLSKeyGeneration(ctx context.Context, epochID uint64
 			continue
 		}
 
-		// Use ap.Weight (from ActiveParticipant) as it's the computed weight for this epoch's DKG.
-		weightPercentage := math.LegacyNewDec(ap.Weight).Quo(math.LegacyNewDec(totalWeight)).Mul(math.LegacyNewDec(100))
+		// Determine percentage weight: use adjusted reservation if present, else raw share
+		var percentage math.LegacyDec
+		if adjustedPercentages != nil {
+			if p, ok := adjustedPercentages[ap.Index]; ok {
+				percentage = p
+			} else {
+				// Participant not present in adjusted map, compute from raw weight
+				percentage = math.LegacyNewDec(ap.Weight).Quo(math.LegacyNewDec(totalWeight)).Mul(math.LegacyNewDec(100))
+			}
+		} else {
+			percentage = math.LegacyNewDec(ap.Weight).Quo(math.LegacyNewDec(totalWeight)).Mul(math.LegacyNewDec(100))
+		}
 
 		blsParticipant := blstypes.ParticipantWithWeightAndKey{
 			Address:            ap.Index,
-			PercentageWeight:   weightPercentage,
+			PercentageWeight:   percentage,
 			Secp256k1PublicKey: pubKeyBytes,
 		}
 		finalizedParticipants = append(finalizedParticipants, blsParticipant)
@@ -892,7 +948,7 @@ func (am AppModule) InitiateBLSKeyGeneration(ctx context.Context, epochID uint64
 		am.LogInfo("Prepared participant for BLS key generation using AccountKeeper PubKey", types.EpochGroup,
 			"participant", ap.Index,
 			"weight", ap.Weight,
-			"percentage", weightPercentage.String(),
+			"percentage", percentage.String(),
 			"epochID", epochID,
 			"keyLength", len(pubKeyBytes))
 	}

@@ -39,6 +39,23 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Check initial disk space
+        run: |
+          echo "=== Disk Space Before Cleanup ==="
+          df -h
+
+      - name: Free up disk space on runner
+        run: |
+          echo "Removing large pre-installed tools..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          echo "Cleaning up apt and docker..."
+          sudo docker system prune -af --volumes
+          sudo apt-get clean
+          echo "=== Disk Space After Cleanup ==="
+          df -h
       - name: Checkout code
         uses: actions/checkout@v3
         with:
@@ -83,6 +100,24 @@ jobs:
   build-images:
     runs-on: ubuntu-latest
     steps:
+      - name: Check initial disk space
+        run: |
+          echo "=== Disk Space Before Cleanup ==="
+          df -h
+
+      - name: Free up disk space on runner
+        run: |
+          echo "Removing large pre-installed tools..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          echo "Cleaning up apt and docker..."
+          sudo docker system prune -af --volumes
+          sudo apt-get clean
+          echo "=== Disk Space After Cleanup ==="
+          df -h
+
       - name: Checkout code
         uses: actions/checkout@v3
         with:
@@ -173,7 +208,7 @@ jobs:
       - name: Set up Docker (Latest Version)
         uses: docker/setup-docker-action@v4
         with:
-          version: 'latest'
+          version: '28.5.2'
 
       - name: Download Docker Images
         uses: actions/download-artifact@v4

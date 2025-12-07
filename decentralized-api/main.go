@@ -8,6 +8,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/bls"
 	"decentralized-api/internal/event_listener"
+	"decentralized-api/internal/modelmanager"
 	"decentralized-api/internal/nats/server"
 	"decentralized-api/internal/poc"
 	adminserver "decentralized-api/internal/server/admin"
@@ -100,7 +101,17 @@ func main() {
 
 	nodes := config.GetNodes()
 	for _, node := range nodes {
-		nodeBroker.LoadNodeToBroker(&node)
+		responseChan := nodeBroker.LoadNodeToBroker(&node)
+		if responseChan != nil {
+			response := <-responseChan
+			if response.Error != nil {
+				logging.Error("Failed to load node to broker. Skipping", types.Nodes, "node_id", node.Id, "error", response.Error)
+			} else if response.Node == nil {
+				logging.Error("Failed to load node to broker, response.Node == nil and response.Error == nil. Skipping", types.Nodes, "node_id", node.Id)
+			} else {
+				logging.Info("Successfully loaded node to broker", types.Nodes, "node_id", response.Node.Id)
+			}
+		}
 	}
 
 	if err := participant.RegisterParticipantIfNeeded(recorder, config); err != nil {
@@ -130,6 +141,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Ensure resources are cleaned up
 
+	// Start periodic config auto-flush of dynamic data to DB
+	config.StartAutoFlush(ctx, 60*time.Second)
+
 	training.NewAssigner(recorder, &tendermintClient, ctx)
 	trainingExecutor := training.NewExecutor(ctx, nodeBroker, recorder)
 
@@ -138,6 +152,15 @@ func main() {
 	listener := event_listener.NewEventListener(config, nodePocOrchestrator, nodeBroker, validator, *recorder, trainingExecutor, chainPhaseTracker, cancel, blsManager)
 	// TODO: propagate trainingExecutor
 	go listener.Start(ctx)
+
+	mlnodeBackgroundManager := modelmanager.NewMLNodeBackgroundManager(
+		config,
+		chainPhaseTracker,
+		nodeBroker,
+		&mlnodeclient.HttpClientFactory{},
+		30*time.Minute,
+	)
+	go mlnodeBackgroundManager.Start(ctx)
 
 	addr := fmt.Sprintf(":%v", config.GetApiConfig().PublicServerPort)
 	logging.Info("start public server on addr", types.Server, "addr", addr)
@@ -155,7 +178,7 @@ func main() {
 
 	addr = fmt.Sprintf(":%v", config.GetApiConfig().AdminServerPort)
 	logging.Info("start admin server on addr", types.Server, "addr", addr)
-	adminServer := adminserver.NewServer(recorder, nodeBroker, config, validator)
+	adminServer := adminserver.NewServer(recorder, nodeBroker, config, validator, blockQueue)
 	adminServer.Start(addr)
 
 	mlGrpcServerPort := config.GetApiConfig().MlGrpcServerPort
@@ -182,6 +205,17 @@ func main() {
 	logging.Info("Servers started", types.Server, "addr", addr)
 
 	<-ctx.Done()
+
+	ctxFlush, cancelFlush := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelFlush()
+	logging.Info("Flushing config to the DB on app exit", types.Config)
+	_ = config.FlushNow(ctxFlush)
+
+	// Close DB gracefully
+	if db := config.SqlDb().GetDb(); db != nil {
+		_ = db.Close()
+	}
+
 	os.Exit(1) // Exit with an error for cosmovisor to restart the process
 }
 

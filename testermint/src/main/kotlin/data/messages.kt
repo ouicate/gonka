@@ -7,6 +7,14 @@ interface TxMessage {
     val type: String
 }
 
+data class MsgSubmitNewParticipant(
+    override val type: String = "/inference.inference.MsgSubmitNewParticipant",
+    val creator: String = "",
+    val url: String = "",
+    val validatorKey: String = "",
+    val workerKey: String = "",
+) : TxMessage
+
 interface GovernanceMessage : TxMessage {
     override val type: String
     fun withAuthority(authority: String): GovernanceMessage
@@ -48,6 +56,42 @@ data class UpdateRestrictionsParams(
     val params: RestrictionsParams,
 ) : GovernanceMessage {
     override val type: String = "/inference.restrictions.MsgUpdateParams"
+    override fun withAuthority(authority: String): GovernanceMessage {
+        return this.copy(authority = authority)
+    }
+}
+
+data class MsgAddUserToTrainingAllowList(
+    val authority: String = "",
+    val address: String,
+    val role: Int
+) : GovernanceMessage {
+    override val type: String = "/inference.inference.MsgAddUserToTrainingAllowList"
+    override fun withAuthority(authority: String): GovernanceMessage {
+        return this.copy(authority = authority)
+    }
+}
+
+data class MsgRemoveUserFromTrainingAllowList(
+    val authority: String = "",
+    val address: String,
+    val role: Int
+) : GovernanceMessage {
+    override val type: String = "/inference.inference.MsgRemoveUserFromTrainingAllowList"
+    override fun withAuthority(authority: String): GovernanceMessage {
+        return this.copy(authority = authority)
+    }
+}
+
+const val ROLE_EXEC = 0;
+const val ROLE_START = 1;
+
+data class MsgSetTrainingAllowList(
+    val authority: String = "",
+    val addresses: List<String>,
+    val role: Int
+) : GovernanceMessage {
+    override val type: String = "/inference.inference.MsgSetTrainingAllowList"
     override fun withAuthority(authority: String): GovernanceMessage {
         return this.copy(authority = authority)
     }
@@ -114,4 +158,3 @@ data class TransactionBody(
     val memo: String,
     val timeoutHeight: Long,
 )
-

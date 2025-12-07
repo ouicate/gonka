@@ -31,6 +31,10 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) 
 
 	// Init empty TokenomicsData
 	k.SetTokenomicsData(ctx, types.TokenomicsData{})
+	err := k.PruningState.Set(ctx, types.PruningState{})
+	if err != nil {
+		panic(err)
+	}
 
 	// Set MLNode version with default if not defined
 	if genState.MlnodeVersion != nil {
@@ -39,8 +43,6 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) 
 		// Set default MLNode version
 		k.SetMLNodeVersion(ctx, types.MLNodeVersion{CurrentVersion: "v3.0.8"})
 	}
-
-	k.SetContractsParams(ctx, genState.CosmWasmParams)
 
 	// Set genesis only params from configuration
 	genesisOnlyParams := genState.GenesisOnlyParams
@@ -54,7 +56,10 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) 
 
 	// Import participants provided in genesis
 	for _, p := range genState.ParticipantList {
-		k.SetParticipant(ctx, p)
+		err := k.SetParticipant(ctx, p)
+		if err != nil {
+			k.LogWarn("Error importing participant", types.System, "error", err, "participant", p)
+		}
 	}
 
 	// this line is used by starport scaffolding # genesis/module/init
@@ -68,6 +73,27 @@ func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) 
 
 		elem.ProposedBy = k.GetAuthority()
 		k.SetModel(ctx, &elem)
+	}
+
+	// Set all bridge contract addresses from genesis
+	if genState.Bridge != nil {
+		for _, elem := range genState.Bridge.ContractAddresses {
+			k.SetBridgeContractAddress(ctx, *elem)
+		}
+
+		// Set all bridge token metadata from genesis
+		for _, elem := range genState.Bridge.TokenMetadata {
+			k.SetTokenMetadata(ctx, elem.ChainId, elem.ContractAddress, keeper.TokenMetadata{
+				Name:     elem.Name,
+				Symbol:   elem.Symbol,
+				Decimals: uint8(elem.Decimals),
+			})
+		}
+
+		// Set all bridge trade approved tokens from genesis
+		for _, elem := range genState.Bridge.TradeApprovedTokens {
+			k.SetBridgeTradeApprovedToken(ctx, *elem)
+		}
 	}
 
 	// Observability: end of InitGenesis
@@ -165,6 +191,7 @@ func InitHoldingAccounts(ctx sdk.Context, k keeper.Keeper, state types.GenesisSt
 	// Ensures creation if not already existing
 	k.AccountKeeper.GetModuleAccount(ctx, types.TopRewardPoolAccName)
 	k.AccountKeeper.GetModuleAccount(ctx, types.PreProgrammedSaleAccName)
+	k.AccountKeeper.GetModuleAccount(ctx, types.BridgeEscrowAccName)
 
 	topRewardCoin := sdk.NormalizeCoin(sdk.NewInt64Coin(supplyDenom, state.GenesisOnlyParams.TopRewardAmount))
 	preProgrammedCoin := sdk.NormalizeCoin(sdk.NewInt64Coin(supplyDenom, state.GenesisOnlyParams.PreProgrammedSaleAmount))
@@ -218,10 +245,7 @@ func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *types.GenesisState {
 	if found {
 		genesis.GenesisOnlyParams = genesisOnlyParams
 	}
-	contractsParams, found := k.GetContractsParams(ctx)
-	if found {
-		genesis.CosmWasmParams = contractsParams
-	}
+
 	mlnodeVersion, found := k.GetMLNodeVersion(ctx)
 	if found {
 		genesis.MlnodeVersion = &mlnodeVersion
@@ -230,6 +254,31 @@ func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *types.GenesisState {
 	// Export participants
 	participants := k.GetAllParticipant(ctx)
 	genesis.ParticipantList = participants
+
+	// Export bridge data
+	contractAddresses := k.GetAllBridgeContractAddresses(ctx)
+	contractAddressPtrs := make([]*types.BridgeContractAddress, len(contractAddresses))
+	for i := range contractAddresses {
+		contractAddressPtrs[i] = &contractAddresses[i]
+	}
+
+	tokenMetadata := k.GetAllBridgeTokenMetadata(ctx)
+	tokenMetadataPtrs := make([]*types.BridgeTokenMetadata, len(tokenMetadata))
+	for i := range tokenMetadata {
+		tokenMetadataPtrs[i] = &tokenMetadata[i]
+	}
+
+	tradeApprovedTokens := k.GetAllBridgeTradeApprovedTokens(ctx)
+	tradeApprovedTokenPtrs := make([]*types.BridgeTokenReference, len(tradeApprovedTokens))
+	for i := range tradeApprovedTokens {
+		tradeApprovedTokenPtrs[i] = &tradeApprovedTokens[i]
+	}
+
+	genesis.Bridge = &types.Bridge{
+		ContractAddresses:   contractAddressPtrs,
+		TokenMetadata:       tokenMetadataPtrs,
+		TradeApprovedTokens: tradeApprovedTokenPtrs,
+	}
 	// this line is used by starport scaffolding # genesis/module/export
 
 	return genesis
