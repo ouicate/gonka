@@ -28,6 +28,7 @@ const (
 	BLS
 	ValidationRecovery
 	Allocation
+	ConfirmationPoC
 	Testing = 255
 )
 
@@ -83,6 +84,8 @@ func (s SubSystem) String() string {
 		return "ValidationRecovery"
 	case Allocation:
 		return "Allocation"
+	case ConfirmationPoC:
+		return "ConfirmationPoC"
 	default:
 		return "Unknown"
 	}

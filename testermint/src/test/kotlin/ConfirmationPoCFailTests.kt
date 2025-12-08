@@ -24,13 +24,10 @@ class ConfirmationPoCFailTests : TestermintTest() {
         )
 
         logSection("✅ Cluster Initialized Successfully!")
-
-        val join1 = cluster.joinPairs[0]
-        val join2 = cluster.joinPairs[1]
-
-        logSection("Verifying cluster initialized with 3 participants")
-        val allPairs = listOf(genesis, join1, join2)
-        assertThat(allPairs).hasSize(3)
+        // order is not guaranteed, and it's very hard to debug if the names don't match
+        val join1 = cluster.joinPairs.first{it.name.contains("join1") }
+        val join2 = cluster.joinPairs.first{it.name.contains("join2") }
+        assertThat(cluster.allPairs).hasSize(3)
 
         logSection("Waiting for first PoC cycle to establish regular weights")
         genesis.waitForStage(EpochStage.START_OF_POC)
