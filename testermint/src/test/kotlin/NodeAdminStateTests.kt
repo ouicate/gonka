@@ -33,7 +33,7 @@ class NodeAdminStateTests : TestermintTest() {
         Logger.info("Testing with node: $nodeId")
 
         // Need to find the pair corresponding to this node to check its validator status
-        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
+        val disabledPair = cluster.allPairs.first { it.node.getStatus().nodeInfo.id == nodeId }
         val validatorBeforeDisabled = disabledPair.node.getStakeValidator()
         assertThat(validatorBeforeDisabled.tokens).isEqualTo(10)
         assertThat(validatorBeforeDisabled.status).isEqualTo(StakeValidatorStatus.BONDED.value)
@@ -125,7 +125,7 @@ class NodeAdminStateTests : TestermintTest() {
         genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
 
         // It's too late to disable at PoC, so we expect the node to participate and keep its weight
-        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
+        val disabledPair = cluster.allPairs.first { it.node.getStatus().nodeInfo.id == nodeId }
         val validatorWhenDisabledAtPoc = disabledPair.node.getStakeValidator()
         assertThat(validatorWhenDisabledAtPoc.tokens).isEqualTo(10)
         assertThat(validatorWhenDisabledAtPoc.status).isEqualTo(StakeValidatorStatus.BONDED.value)
@@ -136,7 +136,6 @@ class NodeAdminStateTests : TestermintTest() {
         // We are currently in Epoch N+1 (PoC Phase).
         // The node should already be UNBONDING with 0 tokens.
         
-        val disabledPair = cluster.allPairs.first { it.node.id == nodeId }
         disabledPair.waitForBlock(5) {
              val validator = it.node.getStakeValidator()
              validator.status == StakeValidatorStatus.UNBONDING.value && validator.tokens == 0L
