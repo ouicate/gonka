@@ -66,8 +66,6 @@ func NewServer(
 
 	g.POST("chat/completions", s.postChat)
 	g.GET("chat/completions/:id", s.getChatById)
-
-	// Phase 4: Validator payload retrieval
 	g.GET("inference/:inferenceId/payloads", s.getInferencePayloads)
 
 	g.GET("participants/:address", s.getInferenceParticipantByAddress)

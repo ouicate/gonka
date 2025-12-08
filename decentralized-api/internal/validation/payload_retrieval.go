@@ -49,7 +49,6 @@ func RetrievePayloadsFromExecutor(
 	epochId uint64,
 	recorder cosmosclient.CosmosMessageClient,
 ) (promptPayload, responsePayload string, err error) {
-	// 1. Get executor's InferenceUrl from chain
 	queryClient := recorder.NewInferenceQueryClient()
 	participantResp, err := queryClient.Participant(ctx, &types.QueryGetParticipantRequest{
 		Index: executorAddress,
@@ -63,14 +62,12 @@ func RetrievePayloadsFromExecutor(
 		return "", "", fmt.Errorf("executor has no inference URL")
 	}
 
-	// 2. Build request using url.JoinPath (handles trailing slashes safely)
-	// URL-encode inferenceId since it's base64 and may contain '/' characters
+	// URL-encode inferenceId since it's base64 and may contain '/'
 	requestUrl, err := url.JoinPath(executorUrl, "v1/inference", url.PathEscape(inferenceId), "payloads")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build request URL: %w", err)
 	}
 
-	// 3. Create signed request
 	timestamp := time.Now().UnixNano()
 	validatorAddress := recorder.GetAccountAddress()
 
@@ -79,7 +76,6 @@ func RetrievePayloadsFromExecutor(
 		return "", "", fmt.Errorf("failed to sign request: %w", err)
 	}
 
-	// 4. Make HTTP request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestUrl, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create request: %w", err)
@@ -104,15 +100,12 @@ func RetrievePayloadsFromExecutor(
 		return "", "", fmt.Errorf("executor returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// 5. Parse response
 	var payloadResp PayloadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payloadResp); err != nil {
 		return "", "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// 6. FIRST: Verify executor signature
-	// If signature is invalid, return error to trigger retry (could be network issue, corrupted data)
-	// Get executor pubkeys (granter + grantees/warm keys)
+	// Verify executor signature - invalid signature triggers retry (could be network issue)
 	grantees, err := queryClient.GranteesByMessageType(ctx, &types.QueryGranteesByMessageTypeRequest{
 		GranterAddress: executorAddress,
 		MessageTypeUrl: "/inference.inference.MsgStartInference",
@@ -149,9 +142,7 @@ func RetrievePayloadsFromExecutor(
 	logging.Debug("Executor signature verified successfully", types.Validation,
 		"inferenceId", inferenceId, "executorAddress", executorAddress)
 
-	// 7. SECOND: Verify hashes match on-chain commitment
-	// Signature is valid, so executor definitively signed this payload.
-	// If hash mismatch, executor served wrong data - immediately invalidate (no retry)
+	// Verify hashes match on-chain commitment - hash mismatch = immediate invalidation (no retry)
 	inference, err := queryClient.Inference(ctx, &types.QueryGetInferenceRequest{Index: inferenceId})
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get inference from chain: %w", err)

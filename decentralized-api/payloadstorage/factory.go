@@ -15,17 +15,16 @@ import (
 func NewPayloadStorage(ctx context.Context, fileBasePath string) PayloadStorage {
 	fileStorage := NewFileStorage(fileBasePath)
 
-	// Check if PostgreSQL is configured
 	pgHost := os.Getenv("PGHOST")
 	if pgHost == "" {
 		logging.Info("PGHOST not set, using file storage only", types.PayloadStorage)
 		return fileStorage
 	}
 
-	// Try to connect to PostgreSQL
 	pgStorage, err := NewPostgresStorage(ctx)
 	if err != nil {
-		logging.Warn("PostgreSQL unavailable, using file storage only", types.PayloadStorage, "error", err)
+		logging.Error("PostgreSQL configured but connection failed, falling back to file storage", types.PayloadStorage,
+			"host", pgHost, "error", err)
 		return fileStorage
 	}
 

@@ -96,7 +96,10 @@ func (k msgServer) FinishInference(goCtx context.Context, msg *types.MsgFinishIn
 }
 
 func (k msgServer) verifyFinishKeys(ctx sdk.Context, msg *types.MsgFinishInference, transferAgent *types.Participant, requestor *types.Participant, executor *types.Participant) error {
-	// Phase 3: Dev signs original_prompt_hash, TA/Executor sign prompt_hash
+	// Hash-based signature verification (post-upgrade flow)
+	// Dev signs: original_prompt_hash + timestamp + ta_address
+	// TA signs: prompt_hash + timestamp + ta_address + executor_address
+	// Executor signs: prompt_hash + timestamp + ta_address + executor_address
 	devComponents := getFinishDevSignatureComponents(msg)
 	taComponents := getFinishTASignatureComponents(msg)
 
@@ -113,29 +116,9 @@ func (k msgServer) verifyFinishKeys(ctx sdk.Context, msg *types.MsgFinishInferen
 		return err
 	}
 
-	// Verify TA signature
-	// Transfer flow: TA signs prompt_hash (modified body)
-	// Direct executor: TA signs original_prompt_hash (client acts as TA)
-	// Try prompt_hash first (transfer flow), fallback to original_prompt_hash (direct executor)
-	taErr := calculations.VerifyKeys(ctx, taComponents, calculations.SignatureData{
-		TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
-	}, k)
-	if taErr != nil {
-		// Fallback: try original_prompt_hash with executor address for direct executor flow
-		directExecutorComponents := calculations.SignatureComponents{
-			Payload:         msg.OriginalPromptHash,
-			Timestamp:       msg.RequestTimestamp,
-			TransferAddress: msg.TransferredBy,
-			ExecutorAddress: msg.ExecutedBy, // Include executor (unlike dev signature)
-		}
-		if devErr := calculations.VerifyKeys(ctx, directExecutorComponents, calculations.SignatureData{
-			TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
-		}, k); devErr != nil {
-			k.LogError("FinishInference: TA signature failed", types.Inferences, "promptHashErr", taErr, "originalHashErr", devErr)
-			return taErr
-		}
-		// Fallback succeeded - using direct executor flow
-		k.LogWarn("FinishInference: Using direct executor signature fallback", types.Inferences, "inferenceId", msg.InferenceId)
+	// Verify TA signature (prompt_hash)
+	if err := k.verifyTASignature(ctx, msg, taComponents, transferAgent); err != nil {
+		return err
 	}
 
 	// Verify Executor signature (prompt_hash)
@@ -146,6 +129,35 @@ func (k msgServer) verifyFinishKeys(ctx sdk.Context, msg *types.MsgFinishInferen
 		return err
 	}
 
+	return nil
+}
+
+// verifyTASignature verifies TA signature using prompt_hash.
+// Includes upgrade-epoch fallback for inferences started before hash-based signing.
+func (k msgServer) verifyTASignature(ctx sdk.Context, msg *types.MsgFinishInference, taComponents calculations.SignatureComponents, transferAgent *types.Participant) error {
+	err := calculations.VerifyKeys(ctx, taComponents, calculations.SignatureData{
+		TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
+	}, k)
+	if err == nil {
+		return nil
+	}
+
+	// Upgrade-epoch fallback: inferences started before hash-based signing use original_prompt_hash
+	// This path will be removed after upgrade epoch completes
+	directComponents := calculations.SignatureComponents{
+		Payload:         msg.OriginalPromptHash,
+		Timestamp:       msg.RequestTimestamp,
+		TransferAddress: msg.TransferredBy,
+		ExecutorAddress: msg.ExecutedBy,
+	}
+	if fallbackErr := calculations.VerifyKeys(ctx, directComponents, calculations.SignatureData{
+		TransferSignature: msg.TransferSignature, TransferAgent: transferAgent,
+	}, k); fallbackErr != nil {
+		k.LogError("FinishInference: TA signature failed", types.Inferences, "promptHashErr", err, "fallbackErr", fallbackErr)
+		return err
+	}
+
+	k.LogDebug("FinishInference: Using upgrade-epoch fallback for TA signature", types.Inferences, "inferenceId", msg.InferenceId)
 	return nil
 }
 

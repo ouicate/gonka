@@ -508,11 +508,10 @@ func logInferencesToValidate(toValidate []string) {
 }
 
 func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
-	// Phase 4: Retrieve payloads with retry
 	promptPayload, responsePayload, err := s.retrievePayloadsWithRetry(inf)
 	if err != nil {
 		if errors.Is(err, ErrPayloadUnavailable) {
-			// Post-upgrade inference: executor unavailable after 1 hour of retries
+			// Post-upgrade inference: executor unavailable after 20 min of retries
 			s.checkAndInvalidateUnavailable(inf, transactionRecorder, revalidation)
 			return
 		}
@@ -533,7 +532,7 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	}
 
 	// Check for duplicate AFTER payload retrieval - catches race conditions
-	// where we already validated during the wait (up to 1 hour)
+	// where we already validated during the wait (up to 20 min)
 	if !revalidation && s.isAlreadyValidated(inf.InferenceId, inf.EpochId, transactionRecorder) {
 		logging.Info("Inference already validated by us, skipping", types.Validation,
 			"inferenceId", inf.InferenceId)
@@ -630,8 +629,8 @@ func (s *InferenceValidator) isAlreadyValidated(inferenceId string, epochId uint
 // Returns ErrHashMismatch immediately (no retry) when executor serves wrong payload with valid signature.
 // Returns ErrEpochStale if inference epoch becomes too old during retries.
 func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (string, string, error) {
-	const maxRetries = 30
-	const retryInterval = 2 * time.Minute // 30 * 2 min = 1 hour total
+	const maxRetries = 10
+	const retryInterval = 2 * time.Minute // 10 * 2 min = 20 min total
 
 	ctx := s.recorder.GetContext()
 	var lastErr error
@@ -777,7 +776,6 @@ func (s *InferenceValidator) submitHashMismatchInvalidation(inf types.Inference,
 }
 
 // validateWithPayloads validates inference using provided payloads.
-// Phase 4: Payloads are retrieved from executor instead of chain.
 func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, promptPayload, responsePayload string) (ValidationResult, error) {
 	logging.Debug("Validating inference", types.Validation, "id", inference.InferenceId)
 
@@ -858,7 +856,6 @@ func unmarshalResponse(inference *types.Inference) (completionapi.CompletionResp
 }
 
 // unmarshalResponsePayload parses response payload string into CompletionResponse.
-// Phase 4: Used by validateWithPayloads to work with retrieved payloads.
 func unmarshalResponsePayload(responsePayload string) (completionapi.CompletionResponse, error) {
 	resp, err := completionapi.NewCompletionResponseFromLinesFromResponsePayload(responsePayload)
 

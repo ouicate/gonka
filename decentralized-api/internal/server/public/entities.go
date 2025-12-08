@@ -19,7 +19,7 @@ type ChatRequest struct {
 	TransferAddress   string
 	Timestamp         int64  // timestamp of the request
 	TransferSignature string // signature of the transfer address
-	PromptHash        string // Phase 3: hash of prompt_payload for executor validation
+	PromptHash        string
 }
 
 type OpenAiRequest struct {

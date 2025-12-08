@@ -63,7 +63,7 @@ Move validation payloads offchain while preserving validation integrity and sign
 1. Validator requests both payloads from executor's REST API endpoint
 2. Validator verifies both hashes match on-chain commitments
 3. Validator re-runs inference with `prompt_payload` and enforced tokens for validation
-4. On hash mismatch, validator submits invalidation transaction with executor's signed payload as proof (no voting required)
+4. On hash mismatch, validator detects cheating (planned: submit executor's signed payload as proof for fast invalidation without voting - not yet implemented)
 5. On payload unavailability (timeout/refusal), validator retries for defined period (e.g. 20m). If still unavailable, initiates voting for invalidation
 
 **User impact:** Client SDK must compute `prompt_hash` and sign hash instead of full payload. REST API endpoint unchanged. Users using SDK will see no behavioral change, just updated SDK version required.
@@ -86,7 +86,7 @@ Move validation payloads offchain while preserving validation integrity and sign
 Executor commits hash but fails to serve payload (timeout or refusal). Validator attempts retrieval for a defined window (e.g., 20 minutes) to rule out temporary network issues. If still unavailable, validator initiates voting for invalidation. Unavailability is treated as a validity failure since validators cannot verify work.
 
 **2. Wrong Payload Attack:**
-Executor serves payload mismatching committed hash. Validator detects hash mismatch and submits executor's signed payload as cryptographic proof for immediate invalidation without voting. Warm keys must remain stable during epoch for accountability.
+Executor serves payload mismatching committed hash. Validator detects hash mismatch. Current behavior: logs error, triggers invalidation via existing voting mechanism. Planned (Phase 7): submit executor's signed payload as cryptographic proof for immediate invalidation without voting. Warm keys must remain stable during epoch for accountability.
 
 **3. Hash Collision Attack:**
 SHA256 collision resistance makes finding alternate payload with same hash cryptographically infeasible. Negligible risk.
@@ -94,7 +94,7 @@ SHA256 collision resistance makes finding alternate payload with same hash crypt
 **4. Replay Attack:**
 Request signature includes timestamp. Executor rejects requests with timestamps >60s old using existing validation logic. Prevents unauthorized repeated access.
 
-**Non-repudiation:** Executor's warm key signature on served payload provides cryptographic proof for fast invalidation without voting when executor serves wrong data.
+**Non-repudiation:** Executor's warm key signature on served payload provides cryptographic proof. Planned (Phase 7): use this proof for fast invalidation without voting when executor serves wrong data.
 
 ## Implementation
 
@@ -130,7 +130,7 @@ Hash computation and verification in application layer.
 4. **Validator Retrieval** - Implement payload serving endpoints for validators, fallback to on-chain for old inferences
 5. **Validation Migration** - Validators use REST API primary, on-chain fallback for old inferences, vote for invalidation if executor unavailable after retry window (~20m)
 6. **Chain Migration** - Remove all payload fields from transactions, state, and `Inference` proto
-7. **Invalidation Proof Endpoint** - Endpoint for validators to submit executor's signed payload as proof when hash mismatch detected (fast invalidation without voting)
+7. **Invalidation Proof Endpoint** (not yet implemented) - Endpoint for validators to submit executor's signed payload as proof when hash mismatch detected (fast invalidation without voting)
 
 Each phase independently testable with rollback capability.
 

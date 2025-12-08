@@ -62,7 +62,6 @@ func (f *FileStorage) Store(ctx context.Context, inferenceId string, epochId uin
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	// Convert inferenceId to filesystem-safe hex-encoded filename
 	filename := inferenceIdToFilename(inferenceId)
 	targetPath := filepath.Join(epochDir, filename+".json")
 	tempPath := targetPath + ".tmp"

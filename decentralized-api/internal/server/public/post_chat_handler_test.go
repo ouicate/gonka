@@ -6,7 +6,6 @@ import (
 
 	"decentralized-api/chainphase"
 	"decentralized-api/payloadstorage"
-	"decentralized-api/utils"
 
 	"github.com/productscience/inference/x/inference/types"
 	"github.com/stretchr/testify/require"
@@ -77,12 +76,9 @@ func TestStorePayloadsToStorage_Success(t *testing.T) {
 
 	promptPayload := `{"model":"test","seed":123,"messages":[{"role":"user","content":"hello"}]}`
 	responsePayload := `{"id":"inf-1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}]}`
-	responseHash, err := payloadstorage.ComputeResponseHash(responsePayload)
-	require.NoError(t, err)
 
-	s.storePayloadsToStorage(context.Background(), "inf-1", promptPayload, responsePayload, responseHash)
+	s.storePayloadsToStorage(context.Background(), "inf-1", promptPayload, responsePayload)
 
-	// Verify storage was called
 	require.Len(t, storage.stored, 1)
 	stored := storage.stored["inf-1"]
 	require.Equal(t, promptPayload, stored.prompt)
@@ -96,7 +92,7 @@ func TestStorePayloadsToStorage_NilStorage(t *testing.T) {
 	}
 
 	// Should not panic with nil storage
-	s.storePayloadsToStorage(context.Background(), "inf-1", "prompt", "response", "hash")
+	s.storePayloadsToStorage(context.Background(), "inf-1", "prompt", "response")
 }
 
 func TestStorePayloadsToStorage_NilPhaseTracker(t *testing.T) {
@@ -107,11 +103,11 @@ func TestStorePayloadsToStorage_NilPhaseTracker(t *testing.T) {
 	}
 
 	// Should not panic with nil phase tracker
-	s.storePayloadsToStorage(context.Background(), "inf-1", "prompt", "response", "hash")
+	s.storePayloadsToStorage(context.Background(), "inf-1", "prompt", "response")
 	require.Len(t, storage.stored, 0)
 }
 
-func TestVerifyStoredPayloads_HashMatch(t *testing.T) {
+func TestStorePayloadsToStorage_Retrieval(t *testing.T) {
 	storage := newMockPayloadStorage()
 	tracker := newTestPhaseTracker(5)
 
@@ -123,42 +119,16 @@ func TestVerifyStoredPayloads_HashMatch(t *testing.T) {
 	promptPayload := `{"model":"test","seed":123}`
 	responsePayload := `{"id":"inf-1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"}}]}`
 
-	// Store the payload
-	err := storage.Store(context.Background(), "inf-1", 5, promptPayload, responsePayload)
-	require.NoError(t, err)
+	s.storePayloadsToStorage(context.Background(), "inf-1", promptPayload, responsePayload)
 
-	// Compute expected hashes
-	expectedPromptHash := utils.GenerateSHA256Hash(promptPayload)
-	expectedResponseHash, err := payloadstorage.ComputeResponseHash(responsePayload)
+	// Verify the stored payload can be retrieved
+	storedPrompt, storedResponse, err := storage.Retrieve(context.Background(), "inf-1", 5)
 	require.NoError(t, err)
-
-	// Verify - should not log warnings (hashes match)
-	s.verifyStoredPayloads(context.Background(), "inf-1", 5, promptPayload, expectedResponseHash)
-	require.True(t, storage.retrieveCalled)
-
-	// Verify the stored prompt hash matches
-	storedPrompt, _, err := storage.Retrieve(context.Background(), "inf-1", 5)
-	require.NoError(t, err)
-	storedPromptHash := utils.GenerateSHA256Hash(storedPrompt)
-	require.Equal(t, expectedPromptHash, storedPromptHash)
+	require.Equal(t, promptPayload, storedPrompt)
+	require.Equal(t, responsePayload, storedResponse)
 }
 
-func TestVerifyStoredPayloads_RetrieveError(t *testing.T) {
-	storage := newMockPayloadStorage()
-	storage.retrieveErr = payloadstorage.ErrNotFound
-	tracker := newTestPhaseTracker(5)
-
-	s := &Server{
-		payloadStorage: storage,
-		phaseTracker:   tracker,
-	}
-
-	// Should handle retrieve error gracefully (just log warning)
-	s.verifyStoredPayloads(context.Background(), "inf-1", 5, "prompt", "hash")
-	require.True(t, storage.retrieveCalled)
-}
-
-func TestDualWriteIntegration(t *testing.T) {
+func TestFileStorageIntegration(t *testing.T) {
 	dir := t.TempDir()
 	storage := payloadstorage.NewFileStorage(dir)
 	tracker := newTestPhaseTracker(5)
@@ -170,21 +140,12 @@ func TestDualWriteIntegration(t *testing.T) {
 
 	promptPayload := `{"model":"test","seed":42,"messages":[{"role":"user","content":"test"}]}`
 	responsePayload := `{"id":"inf-123","choices":[{"index":0,"message":{"role":"assistant","content":"response"}}]}`
-	responseHash, err := payloadstorage.ComputeResponseHash(responsePayload)
-	require.NoError(t, err)
 
-	// Execute dual write
-	s.storePayloadsToStorage(context.Background(), "inf-123", promptPayload, responsePayload, responseHash)
+	s.storePayloadsToStorage(context.Background(), "inf-123", promptPayload, responsePayload)
 
-	// Verify file was created and can be retrieved
 	storedPrompt, storedResponse, err := storage.Retrieve(context.Background(), "inf-123", 5)
 	require.NoError(t, err)
 	require.Equal(t, promptPayload, storedPrompt)
 	require.Equal(t, responsePayload, storedResponse)
-
-	// Verify hashes match
-	storedResponseHash, err := payloadstorage.ComputeResponseHash(storedResponse)
-	require.NoError(t, err)
-	require.Equal(t, responseHash, storedResponseHash)
 }
 

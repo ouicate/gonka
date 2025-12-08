@@ -41,7 +41,6 @@ func NewPostgresStorage(ctx context.Context) (*PostgresStorage, error) {
 		return nil, fmt.Errorf("connect to postgres: %w", err)
 	}
 
-	// Verify connection
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
@@ -49,7 +48,6 @@ func NewPostgresStorage(ctx context.Context) (*PostgresStorage, error) {
 
 	s := &PostgresStorage{pool: pool}
 
-	// Create parent table if not exists
 	if err := s.ensureSchema(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ensure schema: %w", err)
@@ -68,12 +66,10 @@ func (s *PostgresStorage) ensureSchema(ctx context.Context) error {
 }
 
 func (s *PostgresStorage) ensurePartition(ctx context.Context, epochId uint64) error {
-	// Fast path: check in-memory cache
 	if _, ok := s.knownEpochs.Load(epochId); ok {
 		return nil
 	}
 
-	// Slow path: create partition table
 	tableName := fmt.Sprintf("inferences_epoch_%d", epochId)
 	query := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s 

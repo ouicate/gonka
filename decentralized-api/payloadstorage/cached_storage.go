@@ -12,7 +12,6 @@ type cachedEntry struct {
 	promptPayload   string
 	responsePayload string
 	expiresAt       time.Time
-	accessedAt      time.Time
 }
 
 // CachedStorage wraps PayloadStorage with in-memory caching for Retrieve operations.
@@ -52,7 +51,6 @@ func (c *CachedStorage) Store(ctx context.Context, inferenceId string, epochId u
 		promptPayload:   promptPayload,
 		responsePayload: responsePayload,
 		expiresAt:       time.Now().Add(c.ttl),
-		accessedAt:      time.Now(),
 	}
 	c.mu.Unlock()
 
@@ -62,7 +60,6 @@ func (c *CachedStorage) Store(ctx context.Context, inferenceId string, epochId u
 func (c *CachedStorage) Retrieve(ctx context.Context, inferenceId string, epochId uint64) (string, string, error) {
 	c.mu.RLock()
 	if cached, ok := c.entries[inferenceId]; ok && time.Now().Before(cached.expiresAt) {
-		cached.accessedAt = time.Now()
 		c.mu.RUnlock()
 		return cached.promptPayload, cached.responsePayload, nil
 	}
@@ -79,7 +76,6 @@ func (c *CachedStorage) Retrieve(ctx context.Context, inferenceId string, epochI
 		promptPayload:   prompt,
 		responsePayload: response,
 		expiresAt:       time.Now().Add(c.ttl),
-		accessedAt:      time.Now(),
 	}
 	c.mu.Unlock()
 
@@ -90,22 +86,21 @@ func (c *CachedStorage) PruneEpoch(ctx context.Context, epochId uint64) error {
 	return c.storage.PruneEpoch(ctx, epochId)
 }
 
-// evictIfNeeded removes oldest entry if cache is at capacity.
+// evictIfNeeded removes entry closest to expiration if cache is at capacity.
 // Must be called with write lock held.
 func (c *CachedStorage) evictIfNeeded() {
 	if len(c.entries) < c.maxSize {
 		return
 	}
 
-	// Find and remove oldest accessed entry
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
 
 	for key, entry := range c.entries {
-		if first || entry.accessedAt.Before(oldestTime) {
+		if first || entry.expiresAt.Before(oldestTime) {
 			oldestKey = key
-			oldestTime = entry.accessedAt
+			oldestTime = entry.expiresAt
 			first = false
 		}
 	}

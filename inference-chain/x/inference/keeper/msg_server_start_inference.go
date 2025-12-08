@@ -81,7 +81,6 @@ func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInfe
 }
 
 func (k msgServer) verifyKeys(ctx sdk.Context, msg *types.MsgStartInference, agent types.Participant, dev types.Participant) error {
-	// Phase 3: Dev signs original_prompt_hash, TA signs prompt_hash
 	devComponents := getDevSignatureComponents(msg)
 
 	if err := k.validateTimestamp(ctx, devComponents, msg.InferenceId, 60); err != nil {
@@ -254,4 +253,3 @@ func (k msgServer) GetAccountPubKeysWithGrantees(ctx context.Context, granterAdd
 	pubKeys[len(pubKeys)-1] = granterPubKey
 	return pubKeys, nil
 }
-

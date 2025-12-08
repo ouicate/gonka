@@ -26,7 +26,6 @@ type PayloadResponse struct {
 }
 
 // getInferencePayloads serves payloads to validators for validation
-// Phase 4: Validator retrieves payloads from executor REST API
 func (s *Server) getInferencePayloads(ctx echo.Context) error {
 	inferenceIdEncoded := ctx.Param("inferenceId")
 	validatorAddress := ctx.Request().Header.Get(utils.XValidatorAddressHeader)
@@ -66,7 +65,6 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid epoch_id format")
 	}
 
-	// Validate timestamp (reject >60s old)
 	if err := s.validatePayloadRequestTimestamp(timestamp); err != nil {
 		logging.Warn("Payload request timestamp validation failed", types.Validation,
 			"inferenceId", inferenceId, "validatorAddress", validatorAddress, "error", err)
@@ -81,7 +79,6 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 	}
 
 	// Get validator's pubkeys (including grantees/warm keys) for signature verification
-	// Phase 3 pattern: validators sign with warm key, check against all authorized keys
 	validatorPubkeys, err := s.getAllowedPubKeys(ctx, validatorAddress)
 	if err != nil {
 		logging.Error("Failed to get validator pubkeys", types.Validation,
@@ -96,7 +93,6 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid signature")
 	}
 
-	// Verify epochId from header matches inference's actual epoch
 	queryClient := s.recorder.NewInferenceQueryClient()
 	inferenceResp, err := queryClient.Inference(ctx.Request().Context(), &types.QueryGetInferenceRequest{Index: inferenceId})
 	if err != nil {
@@ -109,12 +105,9 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 			"inferenceId", inferenceId,
 			"headerEpochId", epochId,
 			"inferenceEpochId", inferenceResp.Inference.EpochId)
-		// Use the correct epochId from inference
 		epochId = inferenceResp.Inference.EpochId
 	}
 
-	// Retrieve payloads from storage (with caching handled by storage layer)
-	// Try primary epochId first, then adjacent epochs to handle epoch boundary race conditions
 	promptPayload, responsePayload, actualEpochId, err := s.retrievePayloadsWithAdjacentEpochs(ctx.Request().Context(), inferenceId, epochId)
 	if err != nil {
 		if err == payloadstorage.ErrNotFound {
@@ -186,8 +179,7 @@ func (s *Server) verifyActiveParticipant(ctx echo.Context, address string, epoch
 	return nil
 }
 
-// validatePayloadRequestSignature verifies validator's signature on the request
-// Phase 3 pattern: check against all pubkeys (granter + grantees)
+// validatePayloadRequestSignature verifies validator's signature on the request.
 // Validator signs: inferenceId + timestamp + validatorAddress
 func validatePayloadRequestSignature(inferenceId string, timestamp int64, validatorAddress string, pubkeys []string, signature string) error {
 	components := calculations.SignatureComponents{

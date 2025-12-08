@@ -7,7 +7,6 @@ import (
 	"decentralized-api/broker"
 	"decentralized-api/completionapi"
 	"decentralized-api/logging"
-	"decentralized-api/payloadstorage"
 	"decentralized-api/utils"
 	"encoding/json"
 	"fmt"
@@ -39,8 +38,6 @@ const (
 	// BothContexts indicates the AuthKey was used for both transfer and executor requests
 	BothContexts = TransferContext | ExecutorContext
 )
-
-// (unused) sentinel was replaced by broker.ActionError classification
 
 // Package-level variables for AuthKey reuse prevention
 var (
@@ -277,7 +274,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	req.Header.Set(utils.XTransferAddressHeader, request.TransferAddress)
 	req.Header.Set(utils.XRequesterAddressHeader, request.RequesterAddress)
 	req.Header.Set(utils.XTASignatureHeader, inferenceRequest.TransferSignature)
-	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash) // Phase 3: for executor validation
+	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash)
 	req.Header.Set("Content-Type", request.Request.Header.Get("Content-Type"))
 
 	resp, err := http.DefaultClient.Do(req)
@@ -413,7 +410,6 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return err
 	}
 
-	// Phase 3: Executor validates prompt_hash matches computed hash
 	if request.PromptHash != "" {
 		computedHash, _, err := getPromptHash(modifiedRequestBody.NewBody)
 		if err != nil {
@@ -689,21 +685,18 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	}
 
 	if s.recorder != nil {
-		// Phase 3: Compute hashes for signature verification
 		promptHash := utils.GenerateSHA256Hash(promptPayload)
 		originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
 
-		// Phase 3: Executor signs prompt_hash (not original_prompt)
 		executorSignature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
 		if err != nil {
 			return err
 		}
 
 		message := &inference.MsgFinishInference{
-			Creator:      executorAddress,
-			InferenceId:  inferenceId,
-			ResponseHash: responseHash,
-			// Phase 6: ResponsePayload no longer sent on-chain
+			Creator:              executorAddress,
+			InferenceId:          inferenceId,
+			ResponseHash:         responseHash,
 			PromptTokenCount:     usage.PromptTokens,
 			CompletionTokenCount: usage.CompletionTokens,
 			ExecutedBy:           executorAddress,
@@ -712,16 +705,14 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			ExecutorSignature:    executorSignature,
 			RequestTimestamp:     request.Timestamp,
 			RequestedBy:          request.RequesterAddress,
-			// Phase 6: OriginalPrompt no longer sent on-chain
-			Model:              model,
-			PromptHash:         promptHash,
-			OriginalPromptHash: originalPromptHash,
+			Model:                model,
+			PromptHash:           promptHash,
+			OriginalPromptHash:   originalPromptHash,
 		}
 
-		// Store payloads FIRST before broadcasting transaction
+		// Store payloads before broadcasting transaction
 		// If storage fails, we still proceed with broadcast (but log error)
-		// If tx fails after storage succeeds, that's a separate issue (downtime)
-		s.storePayloadsToStorage(context.Background(), inferenceId, promptPayload, string(bodyBytes), responseHash)
+		s.storePayloadsToStorage(request.Request.Context(), inferenceId, promptPayload, string(bodyBytes))
 
 		logging.Info("Submitting MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
 		err = s.recorder.FinishInference(message)
@@ -734,7 +725,7 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	return nil
 }
 
-func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, promptPayload, responsePayload, expectedResponseHash string) {
+func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, promptPayload, responsePayload string) {
 	if s.payloadStorage == nil {
 		logging.Warn("Cannot store payload: payloadStorage is nil", types.Inferences, "inferenceId", inferenceId)
 		return
@@ -757,43 +748,6 @@ func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, prompt
 		return
 	}
 	logging.Debug("Stored payloads locally", types.Inferences, "inferenceId", inferenceId, "epochId", epochId)
-
-	// TODO: delete before merge
-	s.verifyStoredPayloads(ctx, inferenceId, epochId, promptPayload, expectedResponseHash)
-}
-
-// TODO: delete before merge
-func (s *Server) verifyStoredPayloads(ctx context.Context, inferenceId string, epochId uint64, expectedPromptPayload, expectedResponseHash string) {
-	storedPrompt, storedResponse, err := s.payloadStorage.Retrieve(ctx, inferenceId, epochId)
-	if err != nil {
-		logging.Warn("Consistency check: failed to retrieve stored payloads", types.Inferences, "inferenceId", inferenceId, "error", err)
-		return
-	}
-
-	// Verify prompt hash
-	expectedPromptHash := utils.GenerateSHA256Hash(expectedPromptPayload)
-	storedPromptHash := utils.GenerateSHA256Hash(storedPrompt)
-	if expectedPromptHash != storedPromptHash {
-		logging.Warn("Consistency check: prompt hash mismatch", types.Inferences,
-			"inferenceId", inferenceId,
-			"expected", expectedPromptHash,
-			"stored", storedPromptHash)
-	}
-
-	// Verify response hash
-	storedResponseHash, err := payloadstorage.ComputeResponseHash(storedResponse)
-	if err != nil {
-		logging.Warn("Consistency check: failed to compute stored response hash", types.Inferences, "inferenceId", inferenceId, "error", err)
-		return
-	}
-	if expectedResponseHash != storedResponseHash {
-		logging.Warn("Consistency check: response hash mismatch", types.Inferences,
-			"inferenceId", inferenceId,
-			"expected", expectedResponseHash,
-			"stored", storedResponseHash)
-	}
-
-	logging.Debug("Consistency check passed", types.Inferences, "inferenceId", inferenceId)
 }
 
 func getPromptHash(requestBytes []byte) (string, string, error) {
@@ -822,25 +776,21 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 		maxTokens = int(request.OpenAiRequest.MaxTokens)
 	}
 
-	// Phase 3: Compute original_prompt_hash for dev signature verification
 	originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
 
 	transaction := &inference.MsgStartInference{
-		InferenceId: inferenceId,
-		PromptHash:  promptHash,
-		// Phase 6: PromptPayload no longer sent on-chain
-		RequestedBy:      request.RequesterAddress,
-		Model:            request.OpenAiRequest.Model,
-		AssignedTo:       executor.Address,
-		NodeVersion:      nodeVersion,
-		MaxTokens:        uint64(maxTokens),
-		PromptTokenCount: uint64(promptTokenCount),
-		RequestTimestamp: request.Timestamp,
-		// Phase 6: OriginalPrompt no longer sent on-chain
+		InferenceId:        inferenceId,
+		PromptHash:         promptHash,
+		RequestedBy:        request.RequesterAddress,
+		Model:              request.OpenAiRequest.Model,
+		AssignedTo:         executor.Address,
+		NodeVersion:        nodeVersion,
+		MaxTokens:          uint64(maxTokens),
+		PromptTokenCount:   uint64(promptTokenCount),
+		RequestTimestamp:   request.Timestamp,
 		OriginalPromptHash: originalPromptHash,
 	}
 
-	// Phase 3: TA signs prompt_hash (not original_prompt)
 	signature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
 	if err != nil {
 		return nil, err
