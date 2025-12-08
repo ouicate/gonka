@@ -146,7 +146,7 @@ func (cm *ConfigManager) GetTxBatchingConfig() TxBatchingConfig {
 		cfg.FlushSize = 50
 	}
 	if cfg.FlushTimeoutSeconds == 0 {
-		cfg.FlushTimeoutSeconds = 15
+		cfg.FlushTimeoutSeconds = 5
 	}
 	return cfg
 }
