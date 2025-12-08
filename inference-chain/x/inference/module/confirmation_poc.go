@@ -389,7 +389,11 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 	}
 
 	// Create WeightCalculator (reuse regular PoC logic)
-	params := am.keeper.GetParams(ctx)
+	params, err := am.keeper.GetParams(ctx)
+	if err != nil {
+		return err
+	}
+
 	weightScaleFactor := params.PocParams.GetWeightScaleFactorDec()
 	calculator := NewWeightCalculator(
 		currentValidatorWeights,
