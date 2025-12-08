@@ -86,16 +86,17 @@ func (c *BatchConsumer) handleStartMsg(msg *nats.Msg) {
 		return
 	}
 
+	var shouldFlush bool
 	c.startMu.Lock()
-	defer c.startMu.Unlock()
-
 	if len(c.startBatch) == 0 {
 		c.startCreatedAt = time.Now()
 	}
 	c.startBatch = append(c.startBatch, pendingMsg{msg: sdkMsg, natsMsg: msg})
+	shouldFlush = len(c.startBatch) >= c.config.FlushSize
+	c.startMu.Unlock()
 
-	if len(c.startBatch) >= c.config.FlushSize {
-		c.flushStartLocked()
+	if shouldFlush {
+		c.flushStart()
 	}
 }
 
@@ -107,16 +108,17 @@ func (c *BatchConsumer) handleFinishMsg(msg *nats.Msg) {
 		return
 	}
 
+	var shouldFlush bool
 	c.finishMu.Lock()
-	defer c.finishMu.Unlock()
-
 	if len(c.finishBatch) == 0 {
 		c.finishCreatedAt = time.Now()
 	}
 	c.finishBatch = append(c.finishBatch, pendingMsg{msg: sdkMsg, natsMsg: msg})
+	shouldFlush = len(c.finishBatch) >= c.config.FlushSize
+	c.finishMu.Unlock()
 
-	if len(c.finishBatch) >= c.config.FlushSize {
-		c.flushFinishLocked()
+	if shouldFlush {
+		c.flushFinish()
 	}
 }
 
@@ -132,42 +134,50 @@ func (c *BatchConsumer) flushLoop() {
 
 func (c *BatchConsumer) checkAndFlushStart() {
 	c.startMu.Lock()
-	defer c.startMu.Unlock()
+	shouldFlush := len(c.startBatch) > 0 && time.Since(c.startCreatedAt) >= c.config.FlushTimeout
+	c.startMu.Unlock()
 
-	if len(c.startBatch) > 0 && time.Since(c.startCreatedAt) >= c.config.FlushTimeout {
-		c.flushStartLocked()
+	if shouldFlush {
+		c.flushStart()
 	}
 }
 
 func (c *BatchConsumer) checkAndFlushFinish() {
 	c.finishMu.Lock()
-	defer c.finishMu.Unlock()
+	shouldFlush := len(c.finishBatch) > 0 && time.Since(c.finishCreatedAt) >= c.config.FlushTimeout
+	c.finishMu.Unlock()
 
-	if len(c.finishBatch) > 0 && time.Since(c.finishCreatedAt) >= c.config.FlushTimeout {
-		c.flushFinishLocked()
+	if shouldFlush {
+		c.flushFinish()
 	}
 }
 
-func (c *BatchConsumer) flushStartLocked() {
-	if len(c.startBatch) == 0 {
-		return
-	}
-
+func (c *BatchConsumer) flushStart() {
+	c.startMu.Lock()
 	batch := c.startBatch
-	c.startBatch = make([]pendingMsg, 0, c.config.FlushSize)
-
-	go c.broadcastBatch("start", batch)
-}
-
-func (c *BatchConsumer) flushFinishLocked() {
-	if len(c.finishBatch) == 0 {
+	if len(batch) == 0 {
+		c.startMu.Unlock()
 		return
 	}
+	c.startBatch = make([]pendingMsg, 0, c.config.FlushSize)
+	c.startCreatedAt = time.Time{} // reset timer
+	c.startMu.Unlock()
 
+	c.broadcastBatch("start", batch)
+}
+
+func (c *BatchConsumer) flushFinish() {
+	c.finishMu.Lock()
 	batch := c.finishBatch
+	if len(batch) == 0 {
+		c.finishMu.Unlock()
+		return
+	}
 	c.finishBatch = make([]pendingMsg, 0, c.config.FlushSize)
+	c.finishCreatedAt = time.Time{} // reset timer
+	c.finishMu.Unlock()
 
-	go c.broadcastBatch("finish", batch)
+	c.broadcastBatch("finish", batch)
 }
 
 func (c *BatchConsumer) broadcastBatch(batchType string, batch []pendingMsg) {
