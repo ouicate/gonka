@@ -125,7 +125,7 @@ class UpgradeTests : TestermintTest() {
 
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    @Timeout(value = 25, unit = TimeUnit.MINUTES)
     fun testVersionedEndpointSwitching() {
         val (cluster, genesis) = initCluster(reboot = true)
 

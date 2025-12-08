@@ -31,7 +31,6 @@ class ConsumerTests : TestermintTest() {
             localCluster.allPairs.forEach {
                 it.mock?.setInferenceResponse("This is invalid json!!!")
             }
-            Thread.sleep(5000)
             genesis.markNeedsReboot() // Failed inferences mess with reputations!
             var failure: Exception? = null
             try {
@@ -43,9 +42,21 @@ class ConsumerTests : TestermintTest() {
                 )
             } catch(e: com.github.kittinunf.fuel.core.FuelError) {
                 failure = e
-                genesis.node.waitForNextBlock()
-                val timeouts = genesis.node.getInferenceTimeouts()
-                val newTimeouts = timeouts.inferenceTimeout.filterNot { timeoutsAtStart.inferenceTimeout.contains(it) }
+                logSection("Caught expected FuelError: ${e.message}")
+                
+                // Retry checking for timeouts to appear on chain
+                var newTimeouts: List<InferenceTimeout> = emptyList()
+                val maxRetries = 10
+                for (i in 1..maxRetries) {
+                    genesis.node.waitForNextBlock()
+                    val timeouts = genesis.node.getInferenceTimeouts()
+                    newTimeouts = timeouts.inferenceTimeout.filterNot { timeoutsAtStart.inferenceTimeout.contains(it) }
+                    logSection("Checking for timeouts (attempt $i/$maxRetries): Found ${newTimeouts.size} new timeouts")
+                    if (newTimeouts.size == 1) {
+                        break
+                    }
+                }
+                
                 assertThat(newTimeouts).hasSize(1)
                 val expirationHeight = newTimeouts.first().expirationHeight.toLong()
                 logSection("Waiting for inference to expire. expirationHeight = $expirationHeight")

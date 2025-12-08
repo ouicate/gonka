@@ -363,19 +363,12 @@ fun createConfirmationPoCSpec(
     alphaThreshold: Double = 0.70,
     pocSlotAllocation: Double = 0.33  // Default to 33% to ensure some nodes remain POC_SLOT=false
 ): Spec<AppState> {
-    // Configure epoch params and confirmation PoC params
-    // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
-    // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
     // pocSlotAllocation controls what fraction of nodes get POC_SLOT=true (serve inference during PoC)
     // Setting lower values (e.g., 0.33) ensures nodes remain POC_SLOT=false for confirmation validation
     return spec {
         this[AppState::inference] = spec<InferenceState> {
             this[InferenceState::params] = spec<InferenceParams> {
                 this[InferenceParams::epochParams] = spec<EpochParams> {
-                    this[EpochParams::epochLength] = 40L
-                    this[EpochParams::pocStageDuration] = 5L
-                    this[EpochParams::pocValidationDuration] = 4L
-                    this[EpochParams::pocExchangeDuration] = 2L
                     this[EpochParams::pocSlotAllocation] = Decimal.fromDouble(pocSlotAllocation)
                 }
                 this[InferenceParams::confirmationPocParams] = spec<ConfirmationPoCParams> {
