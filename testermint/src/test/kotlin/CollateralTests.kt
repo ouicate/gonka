@@ -18,6 +18,9 @@ class CollateralTests : TestermintTest() {
         val participant = cluster.genesis
         val participantAddress = participant.node.getColdAddress()
 
+        // Ensure we are past genesis and well inside an active epoch before withdrawing
+        genesis.waitForStage(EpochStage.CLAIM_REWARDS) // completes epoch 0 → enters epoch 1
+
         logSection("Despositing collateral")
 
         logHighlight("Query initial collateral for ${participant.name}")
@@ -43,13 +46,12 @@ class CollateralTests : TestermintTest() {
         assertThat(balanceAfterDeposit).isEqualTo(initialBalance - depositAmount)
 
         logSection("Withdrawing $depositAmount nicoin from ${participant.name}")
-        val epochBeforeWithdraw = participant.api.getLatestEpoch().latestEpoch.index-1
+        val epochBeforeWithdraw = participant.api.getLatestEpoch().latestEpoch.index
         val startLastRewardedEpoch = getRewardCalculationEpochIndex(participant)
         val params = participant.node.queryCollateralParams()
         val unbondingPeriod = params.params.unbondingPeriodEpochs.toLong()
         val expectedCompletionEpoch = epochBeforeWithdraw + unbondingPeriod
         logHighlight("Expected completion epoch: $expectedCompletionEpoch (epoch $epochBeforeWithdraw + $unbondingPeriod)")
-        Thread.sleep(10000)
 
         participant.withdrawCollateral(depositAmount)
         participant.node.waitForNextBlock()
@@ -151,8 +153,10 @@ class CollateralTests : TestermintTest() {
         logSection("Getting bad inferences")
         genesis.mock!!.setInferenceResponse("This is invalid json!!!")
 
-        logSection("Running inferences until genesis is INVALID")
-        repeat(15) {
+        val currentEpochParams = genesis.node.getInferenceParams().params.epochParams
+        val calculatedRequests = (currentEpochParams.epochLength * 0.75).toInt()
+        logHighlight("Running $calculatedRequests inferences (75% of epoch length ${currentEpochParams.epochLength}) to ensure slashing")
+        repeat(calculatedRequests) {
             runCatching { genesis.makeInferenceRequest(inferenceRequest) }
         }
         genesis.node.waitForNextBlock(1)

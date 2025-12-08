@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 
-@Timeout(value = 15, unit = TimeUnit.MINUTES)
+@Timeout(value = 25, unit = TimeUnit.MINUTES)
 class SchedulingTests : TestermintTest() {
     @Test
     fun basicSchedulingTest() {

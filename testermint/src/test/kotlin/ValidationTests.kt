@@ -14,7 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertNotNull
 
-@Timeout(value = 15, unit = TimeUnit.MINUTES)
+@Timeout(value = 25, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class ValidationTests : TestermintTest() {
     @Test
@@ -174,22 +174,16 @@ data class InferenceTestHelper(
     val request: String = inferenceRequest,
     val model: String = defaultModel,
     val promptHash: String = "not_verified",
-    val timestamp: Long = Instant.now().toEpochNanos(),
     val responsePayload: String = defaultInferenceResponse,
 ) {
     val genesisAddress = genesis.node.getColdAddress()
-    val devSignature = genesis.node.signPayload(
-        inferenceRequest,
-        accountAddress = null,
-        timestamp = timestamp,
-        endpointAccount = genesisAddress
-    )
 
     fun runFullInference(): InferencePayload {
-        val startMessage = getStartInference()
+        val timestamp = Instant.now().toEpochNanos()
+        val startMessage = getStartInference(timestamp)
         val response = genesis.submitMessage(startMessage)
         assertThat(response).isSuccess()
-        val finishMessage = getFinishInference()
+        val finishMessage = getFinishInference(timestamp)
         val response2 = genesis.submitMessage(finishMessage)
         assertThat(response2).isSuccess()
         val inference = genesis.node.getInference(finishMessage.inferenceId)?.inference
@@ -197,7 +191,13 @@ data class InferenceTestHelper(
         return inference
     }
 
-    fun getStartInference(): MsgStartInference {
+    fun getStartInference(timestamp: Long): MsgStartInference {
+        val devSignature = genesis.node.signPayload(
+            inferenceRequest,
+            accountAddress = null,
+            timestamp = timestamp,
+            endpointAccount = genesisAddress
+        )
         val taSignature =
             genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgStartInference(
@@ -216,7 +216,13 @@ data class InferenceTestHelper(
         )
     }
 
-    fun getFinishInference(): MsgFinishInference {
+    fun getFinishInference(timestamp: Long): MsgFinishInference {
+        val devSignature = genesis.node.signPayload(
+            inferenceRequest,
+            accountAddress = null,
+            timestamp = timestamp,
+            endpointAccount = genesisAddress
+        )
         val finishTaSignature =
             genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgFinishInference(

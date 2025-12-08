@@ -436,7 +436,7 @@ val inferenceConfig = ApplicationConfig(
     genesisSpec = createSpec()
 )
 
-fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = spec {
+fun createSpec(epochLength: Long = 40L, epochShift: Int = 0): Spec<AppState> = spec {
     this[AppState::gov] = spec<GovState> {
         this[GovState::params] = spec<GovParams> {
             this[GovParams::votingPeriod] = Duration.ofSeconds(30)
@@ -445,12 +445,15 @@ fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = s
     }
     this[AppState::inference] = spec<InferenceState> {
         this[InferenceState::params] = spec<InferenceParams> {
+            // Configure epoch params and confirmation PoC params
+            // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
+            // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
             this[InferenceParams::epochParams] = spec<EpochParams> {
                 this[EpochParams::epochLength] = epochLength
-                this[EpochParams::pocStageDuration] = 2L
-                this[EpochParams::pocExchangeDuration] = 1L
+                this[EpochParams::pocStageDuration] = 5L
+                this[EpochParams::pocExchangeDuration] = 2L
                 this[EpochParams::pocValidationDelay] = 1L
-                this[EpochParams::pocValidationDuration] = 2L
+                this[EpochParams::pocValidationDuration] = 4L
                 this[EpochParams::setNewValidatorsDelay] = 1L
                 this[EpochParams::epochShift] = epochShift
             }

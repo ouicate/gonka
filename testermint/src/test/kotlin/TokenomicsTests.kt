@@ -12,6 +12,8 @@ import com.productscience.logSection
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
+import org.tinylog.kotlin.Logger
+import java.time.Instant
 
 class TokenomicsTests : TestermintTest() {
     @Test
@@ -53,8 +55,9 @@ class TokenomicsTests : TestermintTest() {
         assertThat(topMiner2.firstQualifiedStarted).isEqualTo(startTime)
         assertThat(topMiner2.lastQualifiedStarted).isEqualTo(startTime)
         val epochLength = genesis.getParams().epochParams.epochLength
-        // FIXME: try to use block timestamps to get a more precise expected time estimation
-        assertThat(topMiner2.qualifiedTime).isCloseTo(epochLength * 5, Offset.offset(5))
+        val latestBlockTime = Instant.parse(genesis.node.getStatus().syncInfo.latestBlockTime).epochSecond
+        val expectedQualifiedTime = latestBlockTime - startTime
+        assertThat(topMiner2.qualifiedTime).isCloseTo(expectedQualifiedTime, Offset.offset(20))
         assertThat(topMiner2.lastUpdatedTime).isEqualTo(startTime + topMiner2.qualifiedTime!!)
     }
 
