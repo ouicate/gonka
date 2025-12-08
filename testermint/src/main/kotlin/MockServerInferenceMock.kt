@@ -190,6 +190,8 @@ class MockServerInferenceMock(private val baseUrl: String, val name: String) : I
             val hostName: String?
         )
 
+        Logger.info("Setting POC response for $weight nonces in scenario $scenarioName for host $hostName")
+
         val request = SetPocResponseRequest(weight, scenarioName, hostName)
         try {
             val (_, response, _) = Fuel.post("$baseUrl/api/v1/responses/poc")

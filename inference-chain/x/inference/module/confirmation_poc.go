@@ -25,6 +25,7 @@ func (am AppModule) handleConfirmationPoC(ctx context.Context, blockHeight int64
 	}
 
 	confirmationParams := params.ConfirmationPocParams
+	am.LogDebug("handleConfirmationPoC: Confirmation PoC params", types.ConfirmationPoC, confirmationParams)
 	if confirmationParams == nil {
 		// Confirmation PoC not configured, skip
 		return nil
@@ -55,7 +56,7 @@ func (am AppModule) handleConfirmationPoC(ctx context.Context, blockHeight int64
 	// Handle phase transitions for active event
 	err = am.handleConfirmationPoCPhaseTransitions(ctx, blockHeight, epochContext, epochParams)
 	if err != nil {
-		am.LogError("Error handling confirmation PoC phase transitions", types.PoC, "error", err)
+		am.LogError("Error handling confirmation PoC phase transitions", types.ConfirmationPoC, "error", err)
 		// Continue to check for new triggers
 	}
 
@@ -94,6 +95,7 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		return fmt.Errorf("failed to get active confirmation PoC event: %w", err)
 	}
 	if isActive {
+		am.LogDebug("Skipping confirmation PoC trigger due to active event", types.ConfirmationPoC)
 		// Already have an active event, don't trigger another
 		return nil
 	}
@@ -108,7 +110,7 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		return fmt.Errorf("failed to check upgrade window: %w", err)
 	}
 	if hasUpgrade {
-		am.LogDebug("Skipping confirmation PoC trigger due to upgrade protection", types.PoC,
+		am.LogDebug("Skipping confirmation PoC trigger due to upgrade protection", types.ConfirmationPoC,
 			"blockHeight", blockHeight,
 			"upgradeProtectionWindow", upgradeProtectionWindow,
 			"reason", reason)
@@ -128,13 +130,22 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		epochParams.PocValidationDuration
 	triggerWindowEnd := nextPoCStart - epochParams.InferenceValidationCutoff - confirmationWindowDuration
 
+	am.LogDebug("Checking confirmation PoC trigger", types.ConfirmationPoC, "blockHeight", blockHeight,
+		"setNewValidatorsHeight", setNewValidatorsHeight,
+		"nextPoCStart", nextPoCStart,
+		"confirmationWindowDuration", confirmationWindowDuration,
+		"triggerWindowEnd", triggerWindowEnd,
+	)
 	if blockHeight < setNewValidatorsHeight || blockHeight > triggerWindowEnd {
+		am.LogDebug("Skipping confirmation PoC trigger due to block height", types.ConfirmationPoC)
 		// Outside valid trigger window
 		return nil
 	}
 
 	triggerWindowLength := triggerWindowEnd - setNewValidatorsHeight + 1
 	if triggerWindowLength <= 0 {
+		am.LogDebug("Skipping confirmation PoC trigger due to trigger window length", types.ConfirmationPoC,
+			"triggerWindowLength", triggerWindowLength)
 		// Invalid window
 		return nil
 	}
@@ -156,11 +167,14 @@ func (am AppModule) checkConfirmationPoCTrigger(
 	shouldTrigger := randFloat.LessThan(triggerProbability)
 
 	if !shouldTrigger {
+		am.LogDebug("Skipping confirmation PoC trigger due to random number", types.ConfirmationPoC,
+			"triggerProbability", triggerProbability.String(),
+			"randomValue", randFloat.String())
 		return nil
 	}
 
 	// Trigger a new confirmation PoC event
-	am.LogInfo("Triggering confirmation PoC event", types.PoC,
+	am.LogInfo("Triggering confirmation PoC event", types.ConfirmationPoC,
 		"blockHeight", blockHeight,
 		"epochIndex", epochContext.EpochIndex,
 		"triggerProbability", triggerProbability.String(),
@@ -202,7 +216,7 @@ func (am AppModule) checkConfirmationPoCTrigger(
 		return fmt.Errorf("failed to set active confirmation PoC event: %w", err)
 	}
 
-	am.LogInfo("Created confirmation PoC event", types.PoC,
+	am.LogInfo("Created confirmation PoC event", types.ConfirmationPoC,
 		"epochIndex", event.EpochIndex,
 		"eventSequence", event.EventSequence,
 		"triggerHeight", event.TriggerHeight,
@@ -230,6 +244,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		return fmt.Errorf("failed to get active confirmation PoC event: %w", err)
 	}
 	if !isActive || activeEvent == nil {
+		am.LogDebug("No active confirmation PoC event to handle transitions", types.ConfirmationPoC)
 		// No active event
 		return nil
 	}
@@ -250,7 +265,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		transitionCount++
 		transitions = append(transitions, "GRACE_PERIOD->GENERATION")
 
-		am.LogInfo("Confirmation PoC: GRACE_PERIOD -> GENERATION", types.PoC,
+		am.LogInfo("Confirmation PoC: GRACE_PERIOD -> GENERATION", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
@@ -265,7 +280,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 		transitionCount++
 		transitions = append(transitions, "GENERATION->VALIDATION")
 
-		am.LogInfo("Confirmation PoC: GENERATION -> VALIDATION", types.PoC,
+		am.LogInfo("Confirmation PoC: GENERATION -> VALIDATION", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
@@ -281,13 +296,13 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 
 		err := am.updateConfirmationWeights(ctx, &event)
 		if err != nil {
-			am.LogError("Confirmation PoC: Failed to update confirmation weights", types.PoC,
+			am.LogError("Confirmation PoC: Failed to update confirmation weights", types.ConfirmationPoC,
 				"epochIndex", event.EpochIndex,
 				"eventSequence", event.EventSequence,
 				"error", err)
 		}
 
-		am.LogInfo("Confirmation PoC: VALIDATION -> COMPLETED", types.PoC,
+		am.LogInfo("Confirmation PoC: VALIDATION -> COMPLETED", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
@@ -303,7 +318,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 				return fmt.Errorf("failed to clear active confirmation PoC event: %w", err)
 			}
 			updated = false
-			am.LogInfo("Confirmation PoC: Cleared active event", types.PoC,
+			am.LogInfo("Confirmation PoC: Cleared active event", types.ConfirmationPoC,
 				"epochIndex", event.EpochIndex,
 				"eventSequence", event.EventSequence,
 				"blockHeight", blockHeight)
@@ -312,7 +327,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 
 	// Warn if multiple transitions occurred (catch-up scenario)
 	if transitionCount > 1 {
-		am.LogWarn("Confirmation PoC: Multiple phase transitions in single block (catch-up)", types.PoC,
+		am.LogWarn("Confirmation PoC: Multiple phase transitions in single block (catch-up)", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex,
 			"eventSequence", event.EventSequence,
 			"blockHeight", blockHeight,
@@ -341,7 +356,7 @@ func (am AppModule) handleConfirmationPoCPhaseTransitions(
 // updateConfirmationWeights calculates confirmation weights from PoC batches/validations
 // and updates EpochGroupData.ValidationWeights with minimum values
 func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.ConfirmationPoCEvent) error {
-	am.LogInfo("updateConfirmationWeights: Updating confirmation weights", types.PoC,
+	am.LogInfo("updateConfirmationWeights: Updating confirmation weights", types.ConfirmationPoC,
 		"epochIndex", event.EpochIndex,
 		"eventSequence", event.EventSequence,
 		"triggerHeight", event.TriggerHeight)
@@ -376,7 +391,7 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 	for participantAddress := range allBatches {
 		participant, ok := am.keeper.GetParticipant(ctx, participantAddress)
 		if !ok {
-			am.LogWarn("updateConfirmationWeights: Participant not found", types.PoC,
+			am.LogWarn("updateConfirmationWeights: Participant not found", types.ConfirmationPoC,
 				"address", participantAddress)
 			continue
 		}
@@ -408,7 +423,7 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 		confirmationWeights[cp.Index] = cp.Weight
 	}
 
-	am.LogInfo("updateConfirmationWeights: Confirmation weights", types.PoC,
+	am.LogInfo("updateConfirmationWeights: Confirmation weights", types.ConfirmationPoC,
 		"confirmationWeights", confirmationWeights)
 
 	// Update ValidationWeights: confirmation_weight = min(current, calculated)
@@ -420,12 +435,12 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 				previousWeight := vw.ConfirmationWeight
 				epochGroupData.ValidationWeights[i].ConfirmationWeight = calculatedWeight
 				updated = true
-				am.LogInfo("updateConfirmationWeights: Updated confirmation weight", types.PoC,
+				am.LogInfo("updateConfirmationWeights: Updated confirmation weight", types.ConfirmationPoC,
 					"participant", vw.MemberAddress,
 					"previousConfirmationWeight", previousWeight,
 					"newConfirmationWeight", calculatedWeight)
 			} else {
-				am.LogInfo("updateConfirmationWeights: Keeping current confirmation weight (minimum)", types.PoC,
+				am.LogInfo("updateConfirmationWeights: Keeping current confirmation weight (minimum)", types.ConfirmationPoC,
 					"participant", vw.MemberAddress,
 					"currentConfirmationWeight", vw.ConfirmationWeight,
 					"calculatedWeight", calculatedWeight)
@@ -435,10 +450,10 @@ func (am AppModule) updateConfirmationWeights(ctx context.Context, event *types.
 
 	if updated {
 		am.keeper.SetEpochGroupData(ctx, epochGroupData)
-		am.LogInfo("updateConfirmationWeights: Saved updated EpochGroupData", types.PoC,
+		am.LogInfo("updateConfirmationWeights: Saved updated EpochGroupData", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex)
 	} else {
-		am.LogInfo("updateConfirmationWeights: No update needed", types.PoC,
+		am.LogInfo("updateConfirmationWeights: No update needed", types.ConfirmationPoC,
 			"epochIndex", event.EpochIndex)
 	}
 
@@ -462,14 +477,14 @@ func (am AppModule) checkConfirmationSlashing(
 		address := vw.MemberAddress
 		notPreservedTotalWeightValue, found := notPreservedTotalWeight[address]
 		if !found {
-			am.LogWarn("checkConfirmationSlashing: Not preserved total weight not found for participant", types.PoC,
+			am.LogWarn("checkConfirmationSlashing: Not preserved total weight not found for participant", types.ConfirmationPoC,
 				"address", address)
 			continue
 		}
 		confirmationWeight := vw.ConfirmationWeight
 		participant, found := am.keeper.GetParticipant(ctx, address)
 		if !found {
-			am.LogWarn("checkConfirmationSlashing: Participant not found", types.PoC,
+			am.LogWarn("checkConfirmationSlashing: Participant not found", types.ConfirmationPoC,
 				"address", address)
 			continue
 		}
@@ -486,14 +501,14 @@ func (am AppModule) checkConfirmationSlashing(
 func (am AppModule) GetNotPreservedTotalWeightByParticipant(ctx context.Context, epochId uint64) (map[string]int64, error) {
 	participants, found := am.keeper.GetActiveParticipants(ctx, epochId)
 	if !found {
-		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Active participants not found", types.PoC, "epochId", epochId)
+		am.LogError("GetPreviousEpochMLNodesWithInferenceAllocation: Active participants not found", types.ConfirmationPoC, "epochId", epochId)
 		return nil, errors.New("GetPreviousEpochMLNodesWithInferenceAllocation: active participant not found. epochId: " + strconv.FormatUint(epochId, 10))
 	}
 
 	result := make(map[string]int64)
 
 	for _, p := range participants.Participants {
-		am.LogInfo("GetPreviousEpochMLNodesWithInferenceAllocation. GetPreservedNodesByParticipant: Processing participant", types.PoC,
+		am.LogInfo("GetPreviousEpochMLNodesWithInferenceAllocation. GetPreservedNodesByParticipant: Processing participant", types.ConfirmationPoC,
 			"participantAddress", p.Index, "len(p.MlNodes)", len(p.MlNodes))
 
 		totalWeight := int64(0)
