@@ -6,6 +6,7 @@ import (
 	"decentralized-api/utils"
 	"encoding/binary"
 	"fmt"
+	"github.com/productscience/inference/x/inference/calculations"
 	"math/rand"
 	"net/url"
 
@@ -17,10 +18,6 @@ const (
 	InitGeneratePath  = "/api/v1/pow/init/generate"
 	InitValidatePath  = "/api/v1/pow/init/validate"
 	ValidateBatchPath = "/api/v1/pow/validate"
-
-	DefaultRTarget        = 1.398077
-	DefaultBatchSize      = 100
-	DefaultFraudThreshold = 1e-7
 )
 
 type InitDto struct {
@@ -65,14 +62,6 @@ func convertChainParams(chainParams *types.PoCModelParams) *Params {
 	}
 }
 
-// getRTarget extracts RTarget from chain params or returns default.
-func getRTarget(chainParams *types.PoCModelParams) float64 {
-	if chainParams != nil && chainParams.RTarget != nil {
-		return chainParams.RTarget.ToFloat()
-	}
-	return DefaultRTarget
-}
-
 func BuildInitDto(blockHeight int64, pubKey string, totalNodes int64, nodeNum uint64, blockHash, callbackUrl string, chainModelParams *types.PoCModelParams) InitDto {
 	var params *Params
 	if testenv.IsTestNet() {
@@ -88,9 +77,9 @@ func BuildInitDto(blockHeight int64, pubKey string, totalNodes int64, nodeNum ui
 		BlockHeight:    blockHeight,
 		BlockHash:      blockHash,
 		PublicKey:      pubKey,
-		BatchSize:      DefaultBatchSize,
-		RTarget:        getRTarget(chainModelParams),
-		FraudThreshold: DefaultFraudThreshold,
+		BatchSize:      calculations.PoCDefaultBatchSize,
+		RTarget:        calculations.GetRTarget(chainModelParams),
+		FraudThreshold: calculations.PoCDefaultFraudThreshold,
 		Params:         params,
 		URL:            callbackUrl,
 		TotalNodes:     totalNodes,

@@ -3,13 +3,12 @@ package keeper
 import (
 	"context"
 	"fmt"
+	"github.com/productscience/inference/x/inference/calculations"
 
 	sdkerrors "cosmossdk.io/errors"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/productscience/inference/x/inference/types"
 )
-
-const nonceDistCutoff = 999.0
 
 func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPocBatch) (*types.MsgSubmitPocBatchResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -23,6 +22,9 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 
 	currentBlockHeight := ctx.BlockHeight()
 	startBlockHeight := msg.PocStageStartBlockHeight
+
+	params := k.Keeper.GetParams(goCtx)
+	currentRTarget := calculations.GetRTarget(params.PocParams.ModelParams)
 
 	// Check for active confirmation PoC event first
 	activeEvent, isActive, err := k.Keeper.GetActiveConfirmationPoCEvent(ctx)
@@ -68,7 +70,7 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 			NodeId:                   msg.NodeId,
 		}
 
-		storedBatch, err = filterPocBatch(storedBatch)
+		storedBatch, err = filterPocBatch(storedBatch, currentRTarget)
 		if err != nil {
 			k.LogError(PocFailureTag+"[SubmitPocBatch] Confirmation PoC: error filtering PoC batch", types.PoC,
 				"participant", msg.Creator,
@@ -86,7 +88,7 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 	}
 
 	// Regular PoC logic
-	epochParams := k.Keeper.GetParams(goCtx).EpochParams
+	epochParams := params.EpochParams
 	upcomingEpoch, found := k.Keeper.GetUpcomingEpoch(ctx)
 	if !found {
 		k.LogError(PocFailureTag+"[SubmitPocBatch] Failed to get upcoming epoch", types.PoC,
@@ -130,7 +132,7 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 		NodeId:                   msg.NodeId,
 	}
 
-	storedBatch, err = filterPocBatch(storedBatch)
+	storedBatch, err = filterPocBatch(storedBatch, currentRTarget)
 	if err != nil {
 		k.LogError(PocFailureTag+"[SubmitPocBatch] Regular PoC: error filtering PoC batch", types.PoC,
 			"participant", msg.Creator,
@@ -147,12 +149,12 @@ func (k msgServer) SubmitPocBatch(goCtx context.Context, msg *types.MsgSubmitPoc
 	return &types.MsgSubmitPocBatchResponse{}, nil
 }
 
-func filterPocBatch(batch types.PoCBatch) (types.PoCBatch, error) {
+func filterPocBatch(batch types.PoCBatch, rTarget float64) (types.PoCBatch, error) {
 	filteredDist := make([]float64, 0, len(batch.Dist))
 	filteredNonce := make([]int64, 0, len(batch.Nonces))
 	for i, nonce := range batch.Nonces {
 		dist := batch.Dist[i]
-		if dist > nonceDistCutoff {
+		if dist > rTarget {
 			continue
 		}
 
