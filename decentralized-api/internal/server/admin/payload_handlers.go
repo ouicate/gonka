@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"decentralized-api/utils"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -28,11 +27,7 @@ type StorePayloadResponse struct {
 // This endpoint is used by testermint to store payloads when using InferenceTestHelper
 // which bypasses the normal REST API flow.
 func (s *Server) storePayload(c echo.Context) error {
-	inferenceIdEncoded := c.Param("inferenceId")
-
-	// Convert base64url (RFC 4648) back to standard base64
-	inferenceId := utils.Base64URLToBase64(inferenceIdEncoded)
-
+	inferenceId := c.QueryParam("inference_id")
 	if inferenceId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "inference_id required"})
 	}

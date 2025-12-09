@@ -2,7 +2,6 @@ package public
 
 import (
 	"decentralized-api/logging"
-	"decentralized-api/utils"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -13,13 +12,10 @@ import (
 
 func (s *Server) getChatById(ctx echo.Context) error {
 	logging.Debug("GetCompletion received", types.Inferences)
-	encodedId := ctx.Param("id")
-	if encodedId == "" {
+	id := ctx.QueryParam("id")
+	if id == "" {
 		return ErrIdRequired
 	}
-
-	// Convert base64url (RFC 4648) back to standard base64
-	id := utils.Base64URLToBase64(encodedId)
 
 	logging.Debug("GET inference", types.Inferences, "id", id)
 
