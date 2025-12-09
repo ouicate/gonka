@@ -82,7 +82,7 @@ data class ApplicationAPI(
     fun getInference(inferenceId: String): InferencePayload = wrapLog("getInference", true) {
         val url = urlFor(SERVER_TYPE_PUBLIC)
         val encodedInferenceId = URLEncoder.encode(inferenceId, "UTF-8")
-        val response = Fuel.get("$url/v1/chat/completions/$encodedInferenceId")
+        val response = Fuel.get("$url/v1/chat/completions?id=$encodedInferenceId")
             .responseObject<InferencePayload>(gsonDeserializer(cosmosJson))
         logResponse(response)
         response.third.get()
@@ -364,7 +364,7 @@ data class ApplicationAPI(
             responsePayload = responsePayload,
             epochId = epochId
         )
-        val response = Fuel.post("$url/admin/v1/payloads/$encodedInferenceId")
+        val response = Fuel.post("$url/admin/v1/payloads?inference_id=$encodedInferenceId")
             .jsonBody(request, cosmosJson)
             .responseObject<StorePayloadResponse>(gsonDeserializer(cosmosJson))
         logResponse(response)

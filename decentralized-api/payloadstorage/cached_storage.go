@@ -41,20 +41,7 @@ func NewCachedStorageWithSize(storage PayloadStorage, ttl time.Duration, maxSize
 }
 
 func (c *CachedStorage) Store(ctx context.Context, inferenceId string, epochId uint64, promptPayload, responsePayload string) error {
-	if err := c.storage.Store(ctx, inferenceId, epochId, promptPayload, responsePayload); err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	c.evictIfNeeded()
-	c.entries[inferenceId] = &cachedEntry{
-		promptPayload:   promptPayload,
-		responsePayload: responsePayload,
-		expiresAt:       time.Now().Add(c.ttl),
-	}
-	c.mu.Unlock()
-
-	return nil
+	return c.storage.Store(ctx, inferenceId, epochId, promptPayload, responsePayload)
 }
 
 func (c *CachedStorage) Retrieve(ctx context.Context, inferenceId string, epochId uint64) (string, string, error) {
@@ -71,7 +58,6 @@ func (c *CachedStorage) Retrieve(ctx context.Context, inferenceId string, epochI
 	}
 
 	c.mu.Lock()
-	c.evictIfNeeded()
 	c.entries[inferenceId] = &cachedEntry{
 		promptPayload:   prompt,
 		responsePayload: response,
@@ -84,30 +70,6 @@ func (c *CachedStorage) Retrieve(ctx context.Context, inferenceId string, epochI
 
 func (c *CachedStorage) PruneEpoch(ctx context.Context, epochId uint64) error {
 	return c.storage.PruneEpoch(ctx, epochId)
-}
-
-// evictIfNeeded removes entry closest to expiration if cache is at capacity.
-// Must be called with write lock held.
-func (c *CachedStorage) evictIfNeeded() {
-	if len(c.entries) < c.maxSize {
-		return
-	}
-
-	var oldestKey string
-	var oldestTime time.Time
-	first := true
-
-	for key, entry := range c.entries {
-		if first || entry.expiresAt.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = entry.expiresAt
-			first = false
-		}
-	}
-
-	if oldestKey != "" {
-		delete(c.entries, oldestKey)
-	}
 }
 
 func (c *CachedStorage) cleanupLoop() {
@@ -127,6 +89,14 @@ func (c *CachedStorage) cleanup() {
 	for id, cached := range c.entries {
 		if now.After(cached.expiresAt) {
 			delete(c.entries, id)
+		}
+	}
+
+	// Remove random entries to maintain cache size (map iteration order is random)
+	for len(c.entries) > c.maxSize {
+		for key := range c.entries {
+			delete(c.entries, key)
+			break
 		}
 	}
 }

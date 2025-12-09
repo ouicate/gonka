@@ -6,7 +6,6 @@ import (
 	"decentralized-api/payloadstorage"
 	"decentralized-api/utils"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -27,21 +26,16 @@ type PayloadResponse struct {
 
 // getInferencePayloads serves payloads to validators for validation
 func (s *Server) getInferencePayloads(ctx echo.Context) error {
-	inferenceIdEncoded := ctx.Param("inferenceId")
+	inferenceId := ctx.QueryParam("inference_id")
 	validatorAddress := ctx.Request().Header.Get(utils.XValidatorAddressHeader)
 	timestampStr := ctx.Request().Header.Get(utils.XTimestampHeader)
 	epochIdStr := ctx.Request().Header.Get(utils.XEpochIdHeader)
 	signature := ctx.Request().Header.Get(utils.AuthorizationHeader)
 
-	if inferenceIdEncoded == "" {
+	if inferenceId == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "inference_id required")
 	}
 
-	// URL-decode inferenceId (base64 IDs may contain '/' which gets escaped)
-	inferenceId, err := url.PathUnescape(inferenceIdEncoded)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid inference_id encoding")
-	}
 	if validatorAddress == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "X-Validator-Address header required")
 	}

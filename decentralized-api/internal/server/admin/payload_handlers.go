@@ -3,7 +3,6 @@ package admin
 import (
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -28,15 +27,7 @@ type StorePayloadResponse struct {
 // This endpoint is used by testermint to store payloads when using InferenceTestHelper
 // which bypasses the normal REST API flow.
 func (s *Server) storePayload(c echo.Context) error {
-	inferenceIdEncoded := c.Param("inferenceId")
-
-	// URL-decode inferenceId (base64 IDs may contain '/' which gets escaped)
-	inferenceId, err := url.PathUnescape(inferenceIdEncoded)
-	if err != nil {
-		slog.Error("Failed to decode inferenceId", "error", err)
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid inference_id encoding"})
-	}
-
+	inferenceId := c.QueryParam("inference_id")
 	if inferenceId == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "inference_id required"})
 	}

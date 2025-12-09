@@ -46,6 +46,14 @@ Response:
   }
 ```
 
+### URL Encoding
+
+InferenceId uses base64url encoding (RFC 4648) in the URL path:
+- `+` replaced with `-`
+- `/` replaced with `_`
+
+Standard base64 contains `/` which breaks HTTP path routing. Conversion happens at the HTTP layer only - chain storage remains standard base64.
+
 ### Authentication Protocol
 
 **Request (Validator -> Executor):**
