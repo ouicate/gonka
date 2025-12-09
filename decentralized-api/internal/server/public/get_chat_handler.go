@@ -2,12 +2,13 @@ package public
 
 import (
 	"decentralized-api/logging"
+	"decentralized-api/utils"
+	"net/http"
+
 	"github.com/labstack/echo/v4"
 	"github.com/productscience/inference/x/inference/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"net/http"
-	"net/url"
 )
 
 func (s *Server) getChatById(ctx echo.Context) error {
@@ -17,12 +18,8 @@ func (s *Server) getChatById(ctx echo.Context) error {
 		return ErrIdRequired
 	}
 
-	// URL decode the inference ID
-	id, err := url.QueryUnescape(encodedId)
-	if err != nil {
-		logging.Error("Failed to decode inference ID", types.Inferences, "encodedId", encodedId, "error", err)
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid inference ID")
-	}
+	// Convert base64url (RFC 4648) back to standard base64
+	id := utils.Base64URLToBase64(encodedId)
 
 	logging.Debug("GET inference", types.Inferences, "id", id)
 

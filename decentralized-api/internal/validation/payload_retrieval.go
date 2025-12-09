@@ -62,8 +62,9 @@ func RetrievePayloadsFromExecutor(
 		return "", "", fmt.Errorf("executor has no inference URL")
 	}
 
-	// URL-encode inferenceId since it's base64 and may contain '/'
-	requestUrl, err := url.JoinPath(executorUrl, "v1/inference", url.PathEscape(inferenceId), "payloads")
+	// Convert to base64url (RFC 4648) to avoid routing issues with '/' in base64
+	safeInferenceId := apiutils.Base64ToBase64URL(inferenceId)
+	requestUrl, err := url.JoinPath(executorUrl, "v1/inference", safeInferenceId, "payloads")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build request URL: %w", err)
 	}
