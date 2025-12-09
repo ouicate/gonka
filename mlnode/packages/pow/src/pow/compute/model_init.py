@@ -63,25 +63,17 @@ class ModelWrapper(torch.nn.Module):
                 **(params.__dict__),
             )
 
-            logger.info("Creating model...")
+            logger.info(f"Creating model in {dtype}...")
+            original_dtype = torch.get_default_dtype()
+            torch.set_default_dtype(dtype)
             with torch.device("meta"):
                 model = Transformer(model_args)
             model.to_empty(device="cpu")
+            torch.set_default_dtype(original_dtype)
             logger.info(f"Loaded in {time.time() - start_time:.2f} seconds")
 
             model.eval()
             model.requires_grad_(False)
-            
-            # Convert model to specified dtype before moving to GPUs
-            if dtype == torch.float16:
-                model = model.half()
-                logger.info("Model converted to float16")
-            elif dtype == torch.bfloat16:
-                model = model.bfloat16()
-                logger.info("Model converted to bfloat16")
-            elif dtype == torch.float32:
-                model = model.float()
-                logger.info("Model converted to float32")
 
             initialize_model_with_pool(model, str(hash_), dtype=dtype, pool_fraction=0.05)
             # Recompute freqs_cis after model is on CPU and properly initialized

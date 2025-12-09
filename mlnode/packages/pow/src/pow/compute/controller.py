@@ -121,7 +121,7 @@ class Controller:
     def start(self):
         if not self.process.is_alive():
             self.process.start()
-            time.sleep(1)
+            time.sleep(0.5)
 
     def stop(self):
         if not self.process.is_alive():
