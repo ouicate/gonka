@@ -26,18 +26,15 @@ type PayloadResponse struct {
 
 // getInferencePayloads serves payloads to validators for validation
 func (s *Server) getInferencePayloads(ctx echo.Context) error {
-	inferenceIdEncoded := ctx.Param("inferenceId")
+	inferenceId := ctx.QueryParam("inference_id")
 	validatorAddress := ctx.Request().Header.Get(utils.XValidatorAddressHeader)
 	timestampStr := ctx.Request().Header.Get(utils.XTimestampHeader)
 	epochIdStr := ctx.Request().Header.Get(utils.XEpochIdHeader)
 	signature := ctx.Request().Header.Get(utils.AuthorizationHeader)
 
-	if inferenceIdEncoded == "" {
+	if inferenceId == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "inference_id required")
 	}
-
-	// Convert base64url (RFC 4648) back to standard base64
-	inferenceId := utils.Base64URLToBase64(inferenceIdEncoded)
 
 	if validatorAddress == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "X-Validator-Address header required")

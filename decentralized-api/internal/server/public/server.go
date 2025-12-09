@@ -65,8 +65,8 @@ func NewServer(
 	g.GET("identity", s.getIdentity)
 
 	g.POST("chat/completions", s.postChat)
-	g.GET("chat/completions/:id", s.getChatById)
-	g.GET("inference/:inferenceId/payloads", s.getInferencePayloads)
+	g.GET("chat/completions", s.getChatById)
+	g.GET("inference/payloads", s.getInferencePayloads)
 
 	g.GET("participants/:address", s.getInferenceParticipantByAddress)
 	g.GET("participants", s.getAllParticipants)

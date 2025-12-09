@@ -97,7 +97,7 @@ func NewServer(
 	g.POST("bridge/block", s.postBridgeBlock)
 
 	// Payload storage for testing (allows testermint to store payloads directly)
-	g.POST("payloads/:inferenceId", s.storePayload)
+	g.POST("payloads", s.storePayload)
 
 	return s
 }
