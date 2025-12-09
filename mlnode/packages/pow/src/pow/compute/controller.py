@@ -1,3 +1,4 @@
+import os
 import torch.multiprocessing as mp
 import queue
 import time
@@ -20,7 +21,7 @@ from common.trackable_task import ITrackableTask
 logger = create_logger(__name__)
 
 TERMINATION_TIMEOUT = 10
-
+DEFAULT_NUM_THREADS = 8
 
 class Controller:
     def __init__(
@@ -197,6 +198,8 @@ class ParallelController(ITrackableTask):
         r_target: float,
         devices: Optional[List[str]] = None,
     ):
+        pow_num_threads = os.environ.get("POW_NUM_THREADS", str(DEFAULT_NUM_THREADS))
+        os.environ["OMP_NUM_THREADS"] = pow_num_threads
         ctx = mp.get_context("spawn")
 
         self.phase = ctx.Value('i', Phase.IDLE)
