@@ -6,7 +6,6 @@ import (
 	"decentralized-api/payloadstorage"
 	"decentralized-api/utils"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -37,11 +36,9 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "inference_id required")
 	}
 
-	// URL-decode inferenceId (base64 IDs may contain '/' which gets escaped)
-	inferenceId, err := url.PathUnescape(inferenceIdEncoded)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid inference_id encoding")
-	}
+	// Convert base64url (RFC 4648) back to standard base64
+	inferenceId := utils.Base64URLToBase64(inferenceIdEncoded)
+
 	if validatorAddress == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "X-Validator-Address header required")
 	}

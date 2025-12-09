@@ -29,6 +29,7 @@ This document describes the payload retrieval and validation flow for Phase 4 (V
                               ▼
      ┌────────────────────────────────────────────────┐
      │  HTTP GET /v1/inference/{id}/payloads          │
+     │  (id is base64url encoded: +→- /→_)            │
      │  Headers: X-Validator-Address, X-Timestamp,    │
      │           X-Epoch-Id, Authorization            │
      └────────────────────────────────────────────────┘
