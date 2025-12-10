@@ -34,3 +34,6 @@ prod-local/
 /testermint/logs/
 balances-*.json
 **/target/
+.parallel-test-temp/
+testermint/parallel-test-results/
+run-parallel-tests/
