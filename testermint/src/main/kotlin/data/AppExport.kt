@@ -240,6 +240,8 @@ data class PocParams(
     val validationSampleSize: Int,
     @SerializedName("poc_data_pruning_epoch_threshold")
     val pocDataPruningEpochThreshold: Long,
+    @SerializedName("weight_scale_factor")
+    val weightScaleFactor: Decimal? = null,
 )
 
 data class GovState(
