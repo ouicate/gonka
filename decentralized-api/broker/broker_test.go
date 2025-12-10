@@ -60,6 +60,14 @@ func (m *MockBrokerChainBridge) GetEpochGroupDataByModelId(pocHeight uint64, mod
 	return args.Get(0).(*types.QueryGetEpochGroupDataResponse), args.Error(1)
 }
 
+func (m *MockBrokerChainBridge) GetParams() (*types.QueryParamsResponse, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.QueryParamsResponse), args.Error(1)
+}
+
 func NewTestBroker() *Broker {
 	participantInfo := participant.CosmosInfo{
 		Address: "cosmos1dummyaddress",
@@ -68,7 +76,7 @@ func NewTestBroker() *Broker {
 	phaseTracker := chainphase.NewChainPhaseTracker()
 	phaseTracker.Update(
 		chainphase.BlockInfo{Height: 1, Hash: "hash-1"},
-		&types.Epoch{Index: 0, PocStartBlockHeight: 0},
+		&types.Epoch{Index: 100, PocStartBlockHeight: 100},
 		&types.EpochParams{},
 		true,
 		nil,
@@ -104,6 +112,15 @@ func NewTestBroker() *Broker {
 	}
 
 	mockChainBridge.On("GetCurrentEpochGroupData").Return(parentEpochData, nil)
+	// Mock for parent group query (empty modelId) - returns SubGroupModels list
+	parentGroupResp := &types.QueryGetEpochGroupDataResponse{
+		EpochGroupData: types.EpochGroupData{
+			PocStartBlockHeight: 100,
+			EpochIndex:          100,
+			SubGroupModels:      []string{"model1"},
+		},
+	}
+	mockChainBridge.On("GetEpochGroupDataByModelId", uint64(100), "").Return(parentGroupResp, nil)
 	mockChainBridge.On("GetEpochGroupDataByModelId", uint64(100), "model1").Return(model1EpochData, nil)
 
 	mockConfigManager := &apiconfig.ConfigManager{}
@@ -130,11 +147,11 @@ func TestSingleNode(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	queueMessage(t, broker, LockAvailableNode{Model: "model1", Response: availableNode})
 	if <-availableNode != nil {
-		t.Fatalf("expected nil, got " + runningNode.Id)
+		t.Fatalf("expected nil, got %s", runningNode.Id)
 	}
 }
 
@@ -173,6 +190,23 @@ func registerNodeAndSetInferenceStatus(t *testing.T, broker *Broker, node apicon
 	// Wait for InferenceUpAllCommand to complete
 	<-inferenceUpCommand.Response
 
+	// Wait for reconciliation to actually bring the node to INFERENCE status
+	// by polling until the mock client's InferenceUp has been called
+	mockFactory := broker.mlNodeClientFactory.(*mlnodeclient.MockClientFactory)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		allClients := mockFactory.GetAllClients()
+		for _, client := range allClients {
+			if client.InferenceUpCalled > 0 {
+				// InferenceUp was called, wait a bit for status to propagate
+				time.Sleep(50 * time.Millisecond)
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Fallback: manually set status if reconciliation didn't complete in time
 	setStatusCommand := NewSetNodesActualStatusCommand(
 		[]StatusUpdate{
 			{
@@ -184,7 +218,6 @@ func registerNodeAndSetInferenceStatus(t *testing.T, broker *Broker, node apicon
 		},
 	)
 	queueMessage(t, broker, setStatusCommand)
-
 	<-setStatusCommand.Response
 
 	time.Sleep(50 * time.Millisecond)
@@ -278,7 +311,7 @@ func TestNodeRemoval(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	release := make(chan bool, 2)
 	queueMessage(t, broker, RemoveNode{node.Id, release})
@@ -362,7 +395,7 @@ func TestMultipleNodes(t *testing.T) {
 	}
 	println("First Node: " + firstNode.Id)
 	if firstNode.Id != node1.Id && firstNode.Id != node2.Id {
-		t.Fatalf("expected node1 or node2, got: " + firstNode.Id)
+		t.Fatalf("expected node1 or node2, got: %s", firstNode.Id)
 	}
 	queueMessage(t, broker, LockAvailableNode{Model: "model1", Response: availableNode})
 	secondNode := <-availableNode
@@ -371,14 +404,14 @@ func TestMultipleNodes(t *testing.T) {
 	}
 	println("Second Node: " + secondNode.Id)
 	if secondNode.Id == firstNode.Id {
-		t.Fatalf("expected different node from 1, got: " + secondNode.Id)
+		t.Fatalf("expected different node from 1, got: %s", secondNode.Id)
 	}
 }
 
 func queueMessage(t *testing.T, broker *Broker, command Command) {
 	err := broker.QueueMessage(command)
 	if err != nil {
-		t.Fatalf("error sending message" + err.Error())
+		t.Fatalf("error sending message: %v", err)
 	}
 }
 
@@ -409,6 +442,9 @@ func TestReleaseNode(t *testing.T) {
 }
 
 func TestRoundTripSegment(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping flaky test in short mode")
+	}
 	broker := NewTestBroker()
 	node := apiconfig.InferenceNodeConfig{
 		Host:             "localhost",
@@ -429,11 +465,11 @@ func TestRoundTripSegment(t *testing.T) {
 		t.Fatalf("expected node1, got nil")
 	}
 	if runningNode.Id != node.Id {
-		t.Fatalf("expected node1, got: " + runningNode.Id)
+		t.Fatalf("expected node1, got: %s", runningNode.Id)
 	}
 	if runningNode.InferenceSegment != node.InferenceSegment {
 		slog.Warn("Inference segment not matching", "expected", node, "got", runningNode)
-		t.Fatalf("expected inference segment /is, got: " + runningNode.InferenceSegment)
+		t.Fatalf("expected inference segment /is, got: %s", runningNode.InferenceSegment)
 	}
 }
 
@@ -647,26 +683,14 @@ func TestImmediateClientRefreshLogic(t *testing.T) {
 
 	initialStopCalled := mockClient.StopCalled
 
-	// Test the immediate refresh directly - this should call stop on the old client immediately
+	// Dynamic client creation means refresh is effectively a no-op for the HTTP client.
 	worker.RefreshClientImmediate("v3.0.8", "v3.1.0")
+	time.Sleep(10 * time.Millisecond)
+	assert.Equal(t, initialStopCalled, mockClient.StopCalled, "Stop should not be invoked when clients are created per request")
 
-	// Give some time for the async stop call to complete
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify stop was called on the old client
-	assert.Greater(t, mockClient.StopCalled, initialStopCalled, "Stop should have been called on old client")
-
-	// Test the full immediate refresh flow again
-	previousStopCalled := mockClient.StopCalled
-
-	// Call immediate refresh again with different version
 	worker.RefreshClientImmediate("v3.1.0", "v3.2.0")
-
-	// Give some time for async stop calls to complete
-	time.Sleep(50 * time.Millisecond)
-
-	// Should have called stop again
-	assert.Greater(t, mockClient.StopCalled, previousStopCalled, "Stop should have been called again during second refresh")
+	time.Sleep(10 * time.Millisecond)
+	assert.Equal(t, initialStopCalled, mockClient.StopCalled, "Stop should remain unchanged on repeated refreshes")
 }
 
 func TestUpdateNodeConfiguration(t *testing.T) {

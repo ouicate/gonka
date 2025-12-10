@@ -153,3 +153,23 @@ The commit fixes the MLNode status check to assign status "FAILED" if the node i
 Commit: [cf2d3931d2a1f8f9205194d12a4d7aa9b1d43980](https://github.com/gonka-ai/gonka/pull/404/commits/cf2d3931d2a1f8f9205194d12a4d7aa9b1d43980)
 
 The commit fixes a bug where undistributed rewards paid to the first host included rewards for invalid participants.
+
+
+---
+
+### BLS Signature Fixes: Aggreagation and format 
+
+
+Commit: [e4bbb293f79ed0f368900092c9e65393ca25bfdf](https://github.com/gonka-ai/gonka/pull/404/commits/e4bbb293f79ed0f368900092c9e65393ca25bfdf)
+
+This commit fixes aggregation of partial signatures and align format with Etherium pre-compiled. 
+
+### Changing default MLNode state to INFERENCE
+
+Commit: [deefc869249c873377ae0feb0336aee3ac5034f1](https://github.com/gonka-ai/gonka/pull/404/commits/deefc869249c873377ae0feb0336aee3ac5034f1)
+
+This commite changes default state for ML nodes from STOPPED to INFERENCE. This allows to validate missed inferences for claming a reward even if a node is disabled for the next epoch
+
+Fixed a bug: ML node host and port updates are now correctly propagated, previously old addresses were cached and even after editing them via admin API PoC start requests would be sent to the old address
+
+--

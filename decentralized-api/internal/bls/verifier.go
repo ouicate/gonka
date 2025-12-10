@@ -102,15 +102,17 @@ func (bm *BlsManager) setupAndPerformVerification(epochID uint64, epochData *typ
 		EpochID: epochID,
 	}
 
-	// Set the DKG phase from epoch data
 	verificationResult.DkgPhase = epochData.DkgPhase
 
-	// Validate we're in the correct phase
-	if epochData.DkgPhase != types.DKGPhase_DKG_PHASE_VERIFYING {
-		logging.Debug(verifierLogTag+"DKG not in verifying phase", inferenceTypes.BLS,
+	switch epochData.DkgPhase {
+	case types.DKGPhase_DKG_PHASE_VERIFYING,
+		types.DKGPhase_DKG_PHASE_COMPLETED,
+		types.DKGPhase_DKG_PHASE_SIGNED:
+	default:
+		logging.Debug(verifierLogTag+"DKG not in valid phase for verification", inferenceTypes.BLS,
 			"epochID", epochID,
 			"currentPhase", epochData.DkgPhase)
-		return false, nil // Return false to indicate we should skip verification
+		return false, nil
 	}
 
 	// Find our participant info
@@ -146,13 +148,17 @@ func (bm *BlsManager) setupAndPerformVerification(epochID uint64, epochData *typ
 		"totalSlots", epochData.ITotalSlots,
 		"tDegree", epochData.TSlotsDegree)
 
-	// Perform verification and reconstruction
 	err := bm.performVerificationAndReconstruction(verificationResult, epochData.DealerParts, myParticipantIndex)
 	if err != nil {
 		return false, fmt.Errorf("failed to perform verification and reconstruction: %w", err)
 	}
 
-	// Store the completed verification result in cache
+	if epochData.DkgPhase == types.DKGPhase_DKG_PHASE_COMPLETED ||
+		epochData.DkgPhase == types.DKGPhase_DKG_PHASE_SIGNED {
+		verificationResult.ValidDealers = epochData.ValidDealers
+		verificationResult.GroupPublicKey = epochData.GroupPublicKey
+	}
+
 	bm.storeVerificationResult(verificationResult)
 
 	return true, nil
@@ -392,9 +398,9 @@ func (bm *BlsManager) verifyShareAgainstCommitments(share *fr.Element, slotIndex
 		return false, fmt.Errorf("no commitments provided")
 	}
 
-	// Convert slot index to fr.Element for polynomial evaluation
+	// Convert slot index to fr.Element for polynomial evaluation (x = slotIndex+1, to avoid x=0 and match chain)
 	slotIndexFr := &fr.Element{}
-	slotIndexFr.SetUint64(uint64(slotIndex))
+	slotIndexFr.SetUint64(uint64(slotIndex + 1))
 
 	// Evaluate the polynomial at slotIndex using the commitments
 	// This computes: sum(commitments[j] * slotIndex^j) for j = 0 to degree
@@ -425,7 +431,7 @@ func (bm *BlsManager) verifyShareAgainstCommitments(share *fr.Element, slotIndex
 		// Add to running total
 		expectedCommitment.Add(&expectedCommitment, &scaledCommitment)
 
-		// Update slotIndexPower for next iteration: slotIndexPower *= slotIndex
+		// Update slotIndexPower for next iteration: slotIndexPower *= (slotIndex+1)
 		slotIndexPower.Mul(slotIndexPower, slotIndexFr)
 	}
 
