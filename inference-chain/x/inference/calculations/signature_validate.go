@@ -83,7 +83,7 @@ func VerifyKeys(ctx context.Context, components SignatureComponents, sigData Sig
 }
 
 type SignatureComponents struct {
-	Payload         string
+	ContentHash     string
 	Timestamp       int64
 	TransferAddress string
 	ExecutorAddress string
@@ -94,7 +94,7 @@ type Signer interface {
 }
 
 func Sign(signer Signer, components SignatureComponents, signatureType SignatureType) (string, error) {
-	slog.Debug("Signing components", "type", signatureType, "payload", components.Payload, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
+	slog.Debug("Signing components", "type", signatureType, "contentHash", components.ContentHash, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
 	bytes := getSignatureBytes(components, signatureType)
 	hash := crypto.Sha256(bytes)
 	slog.Info("Hash for signing", "hash", hash)
@@ -108,14 +108,14 @@ func Sign(signer Signer, components SignatureComponents, signatureType Signature
 
 func ValidateSignature(components SignatureComponents, signatureType SignatureType, pubKey string, signature string) error {
 	slog.Info("Validating signature", "type", signatureType, "pubKey", pubKey, "signature", signature)
-	slog.Debug("Components", "payload", components.Payload, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
+	slog.Debug("Components", "contentHash", components.ContentHash, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
 	bytes := getSignatureBytes(components, signatureType)
 	return validateSignature(bytes, pubKey, signature)
 }
 
 func ValidateSignatureWithGrantees(components SignatureComponents, signatureType SignatureType, pubKeys []string, signature string) error {
 	slog.Info("Validating signature with grantees", "type", signatureType, "pubKeys", pubKeys, "signature", signature)
-	slog.Debug("Components", "payload", components.Payload, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
+	slog.Debug("Components", "contentHash", components.ContentHash, "timestamp", components.Timestamp, "transferAddress", components.TransferAddress, "executorAddress", components.ExecutorAddress)
 	bytes := getSignatureBytes(components, signatureType)
 	return validateSignatureWithGrantees(bytes, pubKeys, signature)
 }
@@ -177,7 +177,7 @@ func validateSignature(bytes []byte, pubKey string, signature string) error {
 
 func getDevBytes(components SignatureComponents) []byte {
 	// Create message payload by concatenating components
-	messagePayload := []byte(components.Payload)
+	messagePayload := []byte(components.ContentHash)
 	if components.Timestamp > 0 {
 		messagePayload = append(messagePayload, []byte(strconv.FormatInt(components.Timestamp, 10))...)
 	}

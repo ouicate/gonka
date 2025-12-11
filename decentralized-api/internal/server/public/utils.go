@@ -11,7 +11,7 @@ import (
 func validateTransferRequest(request *ChatRequest, devPubkey string) error {
 	originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
 	components := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       request.Timestamp,
 		TransferAddress: request.TransferAddress,
 		ExecutorAddress: "",
@@ -23,12 +23,13 @@ func validateTransferRequest(request *ChatRequest, devPubkey string) error {
 // TA signs: hash(prompt_payload) + timestamp + ta_address + executor_address
 func validateExecuteRequestWithGrantees(request *ChatRequest, transferPubkeys []string, executorAddress string, transferSignature string) error {
 	// Use prompt_hash from header; fallback to computed hash for direct executor flow
-	payload := request.PromptHash
-	if payload == "" {
-		payload = utils.GenerateSHA256Hash(string(request.Body))
+	modifiedPromptHash := request.ModifiedPromptHash
+	// This will fail...
+	if modifiedPromptHash == "" {
+		modifiedPromptHash = utils.GenerateSHA256Hash(string(request.Body))
 	}
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     modifiedPromptHash,
 		Timestamp:       request.Timestamp,
 		TransferAddress: request.TransferAddress,
 		ExecutorAddress: executorAddress,

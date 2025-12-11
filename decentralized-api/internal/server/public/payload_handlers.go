@@ -19,7 +19,7 @@ import (
 // PayloadResponse is returned by getInferencePayloads
 type PayloadResponse struct {
 	InferenceId       string `json:"inference_id"`
-	PromptPayload     string `json:"prompt_payload"`
+	OriginalPrompt    string `json:"original_prompt"`
 	ResponsePayload   string `json:"response_payload"`
 	ExecutorSignature string `json:"executor_signature"`
 }
@@ -102,7 +102,7 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 		epochId = inferenceResp.Inference.EpochId
 	}
 
-	promptPayload, responsePayload, actualEpochId, err := s.retrievePayloadsWithAdjacentEpochs(ctx.Request().Context(), inferenceId, epochId)
+	originalPrompt, responsePayload, actualEpochId, err := s.retrievePayloadsWithAdjacentEpochs(ctx.Request().Context(), inferenceId, epochId)
 	if err != nil {
 		if err == payloadstorage.ErrNotFound {
 			logging.Info("Payload not found in storage (checked adjacent epochs)", types.Validation,
@@ -119,7 +119,7 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 	}
 
 	// Sign response with executor's warm key
-	executorSignature, err := s.signPayloadResponse(inferenceId, promptPayload, responsePayload)
+	executorSignature, err := s.signPayloadResponse(inferenceId, originalPrompt, responsePayload)
 	if err != nil {
 		logging.Error("Failed to sign payload response", types.Validation,
 			"inferenceId", inferenceId, "error", err)
@@ -131,7 +131,7 @@ func (s *Server) getInferencePayloads(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, PayloadResponse{
 		InferenceId:       inferenceId,
-		PromptPayload:     promptPayload,
+		OriginalPrompt:    originalPrompt,
 		ResponsePayload:   responsePayload,
 		ExecutorSignature: executorSignature,
 	})
@@ -177,7 +177,7 @@ func (s *Server) verifyActiveParticipant(ctx echo.Context, address string, epoch
 // Validator signs: inferenceId + timestamp + validatorAddress
 func validatePayloadRequestSignature(inferenceId string, timestamp int64, validatorAddress string, pubkeys []string, signature string) error {
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -223,14 +223,14 @@ func (s *Server) retrievePayloadsWithAdjacentEpochs(ctx context.Context, inferen
 // signPayloadResponse signs the payload response with executor's key
 // Uses timestamp=0 since the signature is for non-repudiation, not replay protection
 // (replay protection is handled at request level with validator's timestamp)
-func (s *Server) signPayloadResponse(inferenceId, promptPayload, responsePayload string) (string, error) {
+func (s *Server) signPayloadResponse(inferenceId, originalPrompt, responsePayload string) (string, error) {
 	// Sign inferenceId + prompt hash + response hash
-	promptHash := utils.GenerateSHA256Hash(promptPayload)
+	originalPromptHash := utils.GenerateSHA256Hash(originalPrompt)
 	responseHash := utils.GenerateSHA256Hash(responsePayload)
-	payload := inferenceId + promptHash + responseHash
+	contentHash := inferenceId + originalPromptHash + responseHash
 
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     contentHash,
 		Timestamp:       0, // No timestamp - signature is for non-repudiation only
 		TransferAddress: s.recorder.GetAccountAddress(),
 		ExecutorAddress: "",

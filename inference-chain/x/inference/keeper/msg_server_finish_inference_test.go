@@ -240,7 +240,7 @@ func (h *MockInferenceHelper) StartInference(
 
 	// Phase 3: Dev signs original_prompt_hash (no executor address)
 	devComponents := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       requestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: "", // Dev doesn't include executor
@@ -252,7 +252,7 @@ func (h *MockInferenceHelper) StartInference(
 
 	// Phase 3: TA signs prompt_hash (with executor address)
 	taComponents := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       requestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: h.MockExecutor.address,
@@ -318,7 +318,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 
 	// Phase 3: Dev signs original_prompt_hash (no executor address)
 	devComponents := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       h.previousInference.RequestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: "", // Dev doesn't include executor
@@ -330,7 +330,7 @@ func (h *MockInferenceHelper) FinishInference() (*types.Inference, error) {
 
 	// Phase 3: TA and Executor sign prompt_hash (with executor address)
 	taComponents := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       h.previousInference.RequestTimestamp,
 		TransferAddress: h.MockTransferAgent.address,
 		ExecutorAddress: h.MockExecutor.address,

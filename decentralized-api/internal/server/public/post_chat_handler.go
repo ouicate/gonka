@@ -254,7 +254,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 		request.Seed = strconv.Itoa(int(seed))
 		request.TransferAddress = s.recorder.GetAccountAddress()
 		request.TransferSignature = inferenceRequest.TransferSignature
-		request.PromptHash = inferenceRequest.PromptHash
+		request.ModifiedPromptHash = inferenceRequest.ModifiedPromptHash
 
 		logging.Info("Execute request on same node, fill request with extra data", types.Inferences, "inferenceId", request.InferenceId, "seed", request.Seed)
 		return s.handleExecutorRequest(ctx, request, ctx.Response().Writer)
@@ -274,7 +274,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	req.Header.Set(utils.XTransferAddressHeader, request.TransferAddress)
 	req.Header.Set(utils.XRequesterAddressHeader, request.RequesterAddress)
 	req.Header.Set(utils.XTASignatureHeader, inferenceRequest.TransferSignature)
-	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash)
+	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.ModifiedPromptHash)
 	req.Header.Set("Content-Type", request.Request.Header.Get("Content-Type"))
 
 	resp, err := http.DefaultClient.Do(req)
@@ -410,15 +410,15 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return err
 	}
 
-	if request.PromptHash != "" {
-		computedHash, _, err := getPromptHash(modifiedRequestBody.NewBody)
+	if request.ModifiedPromptHash != "" {
+		modifiedPromptHash, _, err := getPromptHash(modifiedRequestBody.NewBody)
 		if err != nil {
 			logging.Error("Failed to compute prompt hash", types.Inferences, "error", err)
 			return echo.NewHTTPError(http.StatusBadRequest, "Failed to compute prompt hash")
 		}
-		if computedHash != request.PromptHash {
+		if modifiedPromptHash != request.ModifiedPromptHash {
 			logging.Error("Prompt hash mismatch", types.Inferences,
-				"expected", request.PromptHash, "computed", computedHash)
+				"expected", request.ModifiedPromptHash, "computed", modifiedPromptHash)
 			return echo.NewHTTPError(http.StatusBadRequest, "Prompt hash mismatch")
 		}
 	}
@@ -476,7 +476,7 @@ func (s *Server) handleExecutorRequest(ctx echo.Context, request *ChatRequest, w
 		return err
 	}
 
-	err = s.sendInferenceTransaction(request.InferenceId, completionResponse, request.Body, s.recorder.GetAccountAddress(), request, promptPayload)
+	err = s.sendInferenceTransaction(request.InferenceId, completionResponse, request.Body, s.recorder.GetAccountAddress(), request, promptPayload, seed)
 	if err != nil {
 		// Not http.Error, because we assume we already returned everything to the client during proxyResponse execution
 		logging.Error("Failed to send inference transaction", types.Inferences, "error", err)
@@ -611,7 +611,7 @@ func (s *Server) getExecutorForRequest(ctx context.Context, model string) (*Exec
 // calculateSignature calculates a signature for the given components and agent type
 func (s *Server) calculateSignature(payload string, timestamp int64, transferAddress string, executorAddress string, agentType calculations.SignatureType) (string, error) {
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     payload,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: executorAddress,
@@ -637,7 +637,7 @@ func (s *Server) calculateSignature(payload string, timestamp int64, transferAdd
 	return signature, nil
 }
 
-func (s *Server) sendInferenceTransaction(inferenceId string, response completionapi.CompletionResponse, requestBody []byte, executorAddress string, request *ChatRequest, promptPayload string) error {
+func (s *Server) sendInferenceTransaction(inferenceId string, response completionapi.CompletionResponse, requestBody []byte, executorAddress string, request *ChatRequest, modifiedPrompt string, seed int) error {
 	responseHash, err := response.GetHash()
 	if err != nil || responseHash == "" {
 		logging.Error("Failed to get responseHash from response", types.Inferences, "error", err)
@@ -685,10 +685,11 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	}
 
 	if s.recorder != nil {
-		promptHash := utils.GenerateSHA256Hash(promptPayload)
-		originalPromptHash := utils.GenerateSHA256Hash(string(request.Body))
+		modifiedPromptHash := utils.GenerateSHA256Hash(modifiedPrompt)
+		originalPrompt := string(request.Body)
+		originalPromptHash := utils.GenerateSHA256Hash(originalPrompt)
 
-		executorSignature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
+		executorSignature, err := s.calculateSignature(modifiedPromptHash, request.Timestamp, request.TransferAddress, executorAddress, calculations.ExecutorAgent)
 		if err != nil {
 			return err
 		}
@@ -706,13 +707,14 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 			RequestTimestamp:     request.Timestamp,
 			RequestedBy:          request.RequesterAddress,
 			Model:                model,
-			PromptHash:           promptHash,
+			ModifiedPromptHash:   modifiedPromptHash,
 			OriginalPromptHash:   originalPromptHash,
+			Seed:                 seed,
 		}
 
 		// Store payloads before broadcasting transaction
 		// If storage fails, we still proceed with broadcast (but log error)
-		s.storePayloadsToStorage(request.Request.Context(), inferenceId, promptPayload, string(bodyBytes))
+		s.storePayloadsToStorage(request.Request.Context(), inferenceId, originalPrompt, string(bodyBytes))
 
 		logging.Info("Submitting MsgFinishInference", types.Inferences, "inferenceId", inferenceId)
 		err = s.recorder.FinishInference(message)
@@ -725,7 +727,7 @@ func (s *Server) sendInferenceTransaction(inferenceId string, response completio
 	return nil
 }
 
-func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, promptPayload, responsePayload string) {
+func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, originalPrompt, responsePayload string) {
 	if s.payloadStorage == nil {
 		logging.Warn("Cannot store payload: payloadStorage is nil", types.Inferences, "inferenceId", inferenceId)
 		return
@@ -742,7 +744,7 @@ func (s *Server) storePayloadsToStorage(ctx context.Context, inferenceId, prompt
 	}
 	epochId := epochState.LatestEpoch.EpochIndex
 
-	err := s.payloadStorage.Store(ctx, inferenceId, epochId, promptPayload, responsePayload)
+	err := s.payloadStorage.Store(ctx, inferenceId, epochId, originalPrompt, responsePayload)
 	if err != nil {
 		logging.Error("Failed to store payloads locally", types.Inferences, "inferenceId", inferenceId, "epochId", epochId, "error", err)
 		return
@@ -765,7 +767,7 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 	if err != nil {
 		return nil, err
 	}
-	promptHash, _, err := getPromptHash(finalRequest.NewBody)
+	modifiedPromptHash, _, err := getPromptHash(finalRequest.NewBody)
 	if err != nil {
 		return nil, err
 	}
@@ -780,7 +782,7 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 
 	transaction := &inference.MsgStartInference{
 		InferenceId:        inferenceId,
-		PromptHash:         promptHash,
+		ModifiedPromptHash: modifiedPromptHash,
 		RequestedBy:        request.RequesterAddress,
 		Model:              request.OpenAiRequest.Model,
 		AssignedTo:         executor.Address,
@@ -789,9 +791,10 @@ func createInferenceStartRequest(s *Server, request *ChatRequest, seed int32, in
 		PromptTokenCount:   uint64(promptTokenCount),
 		RequestTimestamp:   request.Timestamp,
 		OriginalPromptHash: originalPromptHash,
+		Seed:               int64(seed),
 	}
 
-	signature, err := s.calculateSignature(promptHash, request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
+	signature, err := s.calculateSignature(modifiedPromptHash, request.Timestamp, request.TransferAddress, executor.Address, calculations.TransferAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -833,17 +836,17 @@ func readRequest(request *http.Request, transferAddress string) (*ChatRequest, e
 	}
 
 	return &ChatRequest{
-		Body:              body,
-		Request:           request,
-		OpenAiRequest:     openAiRequest,
-		AuthKey:           request.Header.Get(utils.AuthorizationHeader),
-		Seed:              request.Header.Get(utils.XSeedHeader),
-		InferenceId:       request.Header.Get(utils.XInferenceIdHeader),
-		RequesterAddress:  request.Header.Get(utils.XRequesterAddressHeader),
-		Timestamp:         timestamp,
-		TransferAddress:   transferAddress,
-		TransferSignature: request.Header.Get(utils.XTASignatureHeader),
-		PromptHash:        request.Header.Get(utils.XPromptHashHeader),
+		Body:               body,
+		Request:            request,
+		OpenAiRequest:      openAiRequest,
+		AuthKey:            request.Header.Get(utils.AuthorizationHeader),
+		Seed:               request.Header.Get(utils.XSeedHeader),
+		InferenceId:        request.Header.Get(utils.XInferenceIdHeader),
+		RequesterAddress:   request.Header.Get(utils.XRequesterAddressHeader),
+		Timestamp:          timestamp,
+		TransferAddress:    transferAddress,
+		TransferSignature:  request.Header.Get(utils.XTASignatureHeader),
+		ModifiedPromptHash: request.Header.Get(utils.XPromptHashHeader),
 	}, nil
 }
 

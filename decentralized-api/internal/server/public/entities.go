@@ -9,17 +9,17 @@ import (
 )
 
 type ChatRequest struct {
-	Body              []byte
-	Request           *http.Request
-	OpenAiRequest     OpenAiRequest
-	AuthKey           string // signature signing inference request
-	Seed              string
-	InferenceId       string
-	RequesterAddress  string // address of participant, who signed inference request
-	TransferAddress   string
-	Timestamp         int64  // timestamp of the request
-	TransferSignature string // signature of the transfer address
-	PromptHash        string
+	Body               []byte
+	Request            *http.Request
+	OpenAiRequest      OpenAiRequest
+	AuthKey            string // signature signing inference request
+	Seed               string
+	InferenceId        string
+	RequesterAddress   string // address of participant, who signed inference request
+	TransferAddress    string
+	Timestamp          int64  // timestamp of the request
+	TransferSignature  string // signature of the transfer address
+	ModifiedPromptHash string
 }
 
 type OpenAiRequest struct {

@@ -81,7 +81,7 @@ message MsgStartInference {
   option (cosmos.msg.v1.signer) = "creator";
   string creator = 1;
   string inference_id = 2;
-  string prompt_hash = 3;
+  string modified_prompt_hash = 3;
   string prompt_payload = 4 [deprecated = true];    // Phase 3: will be removed in Phase 6
   string model = 6;
   string requested_by = 7;
@@ -93,6 +93,7 @@ message MsgStartInference {
   string transfer_signature = 14;
   string original_prompt = 15 [deprecated = true];  // Phase 3: will be removed in Phase 6
   string original_prompt_hash = 16;                 // Phase 3: for dev signature verification
+  int32  seed = 17;
 }
 
 message MsgStartInferenceResponse {
@@ -115,8 +116,9 @@ message MsgFinishInference {
   string requested_by = 12;
   string original_prompt = 13 [deprecated = true];  // Phase 3: will be removed in Phase 6
   string model = 14;
-  string prompt_hash = 15;                          // Phase 3: for TA/executor signature verification
+  string modified_prompt_hash = 15;                 // Phase 3: for TA/executor signature verification
   string original_prompt_hash = 16;                 // Phase 3: for dev signature verification
+  int32  seed = 17;
 }
 
 message MsgFinishInferenceResponse {

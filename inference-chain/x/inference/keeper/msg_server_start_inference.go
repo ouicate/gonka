@@ -38,7 +38,7 @@ func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInfe
 
 	if found && existingInference.StartProcessed() {
 		k.LogError("StartInference: inference already started", types.Inferences, "inferenceId", msg.InferenceId)
-		return nil, sdkerrors.Wrap(types.ErrInferenceStartProcessed, "inference has already start processed")
+		return nil, sdkerrors.Wrap(types.ErrInferenceStartProcessed, "inference has already started")
 	}
 
 	// Record the current price only if this is the first message (FinishInference not processed yet)
@@ -96,7 +96,8 @@ func (k msgServer) verifyKeys(ctx sdk.Context, msg *types.MsgStartInference, age
 	}
 
 	// Verify TA signature (prompt_hash)
-	if err := calculations.VerifyKeys(ctx, getTASignatureComponents(msg), calculations.SignatureData{
+	taComponents := getTASignatureComponents(msg)
+	if err := calculations.VerifyKeys(ctx, taComponents, calculations.SignatureData{
 		TransferSignature: msg.TransferSignature, TransferAgent: &agent,
 	}, k); err != nil {
 		k.LogError("StartInference: TA signature failed", types.Inferences, "error", err)
@@ -197,7 +198,7 @@ func (k msgServer) processInferencePayments(
 // Dev signs: original_prompt_hash + timestamp + ta_address (no executor)
 func getDevSignatureComponents(msg *types.MsgStartInference) calculations.SignatureComponents {
 	return calculations.SignatureComponents{
-		Payload:         msg.OriginalPromptHash,
+		ContentHash:     msg.OriginalPromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.Creator,
 		ExecutorAddress: "", // Dev doesn't include executor address
@@ -208,7 +209,7 @@ func getDevSignatureComponents(msg *types.MsgStartInference) calculations.Signat
 // TA signs: prompt_hash + timestamp + ta_address + executor_address
 func getTASignatureComponents(msg *types.MsgStartInference) calculations.SignatureComponents {
 	return calculations.SignatureComponents{
-		Payload:         msg.PromptHash,
+		ContentHash:     msg.ModifiedPromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.Creator,
 		ExecutorAddress: msg.AssignedTo,

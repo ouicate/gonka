@@ -35,7 +35,7 @@ var payloadRetrievalClient = apiutils.NewHttpClient(30 * time.Second)
 // PayloadResponse matches the executor endpoint response
 type PayloadResponse struct {
 	InferenceId       string `json:"inference_id"`
-	PromptPayload     string `json:"prompt_payload"`
+	OriginalPrompt    string `json:"original_prompt"`
 	ResponsePayload   string `json:"response_payload"`
 	ExecutorSignature string `json:"executor_signature"`
 }
@@ -48,7 +48,7 @@ func RetrievePayloadsFromExecutor(
 	executorAddress string,
 	epochId uint64,
 	recorder cosmosclient.CosmosMessageClient,
-) (promptPayload, responsePayload string, err error) {
+) (originalPrompt, responsePayload string, err error) {
 	queryClient := recorder.NewInferenceQueryClient()
 	participantResp, err := queryClient.Participant(ctx, &types.QueryGetParticipantRequest{
 		Index: executorAddress,
@@ -136,7 +136,7 @@ func RetrievePayloadsFromExecutor(
 
 	if err := verifyExecutorPayloadSignature(
 		inferenceId,
-		payloadResp.PromptPayload,
+		payloadResp.OriginalPrompt,
 		payloadResp.ResponsePayload,
 		payloadResp.ExecutorSignature,
 		executorAddress,
@@ -158,7 +158,7 @@ func RetrievePayloadsFromExecutor(
 
 	// Check prompt hash
 	if inference.Inference.PromptHash != "" {
-		actualPromptHash, err := payloadstorage.ComputePromptHash(payloadResp.PromptPayload)
+		actualPromptHash, err := payloadstorage.ComputePromptHash(payloadResp.OriginalPrompt)
 		if err != nil {
 			// Hash computation failed - payload is malformed
 			// Executor signed malformed data - immediate invalidation
@@ -203,7 +203,7 @@ func RetrievePayloadsFromExecutor(
 	logging.Debug("Successfully retrieved and verified payloads from executor", types.Validation,
 		"inferenceId", inferenceId, "executorAddress", executorAddress)
 
-	return payloadResp.PromptPayload, payloadResp.ResponsePayload, nil
+	return payloadResp.OriginalPrompt, payloadResp.ResponsePayload, nil
 }
 
 // DEPRECATED: retrievePayloadsFromChain queries chain for payload fields.
@@ -223,7 +223,7 @@ func retrievePayloadsFromChain(
 		return "", "", fmt.Errorf("failed to query inference: %w", err)
 	}
 
-	return response.Inference.PromptPayload, response.Inference.ResponsePayload, nil
+	return response.Inference.OriginalPrompt, response.Inference.ResponsePayload, nil
 }
 
 // signPayloadRequest signs the payload retrieval request with validator's key
@@ -235,7 +235,7 @@ func signPayloadRequest(
 	recorder cosmosclient.CosmosMessageClient,
 ) (string, error) {
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -259,7 +259,7 @@ func signPayloadRequest(
 // Executor signs: inferenceId + promptHash + responseHash (with timestamp=0)
 func verifyExecutorPayloadSignature(
 	inferenceId string,
-	promptPayload string,
+	originalPrompt string,
 	responsePayload string,
 	signature string,
 	executorAddress string,
@@ -269,12 +269,12 @@ func verifyExecutorPayloadSignature(
 		return fmt.Errorf("executor signature is empty")
 	}
 
-	promptHash := apiutils.GenerateSHA256Hash(promptPayload)
+	originalPromptHash := apiutils.GenerateSHA256Hash(originalPrompt)
 	responseHash := apiutils.GenerateSHA256Hash(responsePayload)
-	payload := inferenceId + promptHash + responseHash
+	contentHash := inferenceId + originalPromptHash + responseHash
 
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     contentHash,
 		Timestamp:       0, // Executor uses timestamp=0 for non-repudiation signatures
 		TransferAddress: executorAddress,
 		ExecutorAddress: "",

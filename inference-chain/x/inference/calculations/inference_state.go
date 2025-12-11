@@ -68,9 +68,12 @@ func ProcessStartInference(
 	currentInference.RequestTimestamp = startMessage.RequestTimestamp
 	currentInference.TransferredBy = startMessage.Creator
 	currentInference.TransferSignature = startMessage.TransferSignature
-	currentInference.PromptHash = startMessage.PromptHash
+	currentInference.PromptHash = startMessage.ModifiedPromptHash
 	if currentInference.PromptTokenCount == 0 {
 		currentInference.PromptTokenCount = startMessage.PromptTokenCount
+	}
+	if currentInference.Seed == 0 {
+		currentInference.Seed = startMessage.Seed
 	}
 	currentInference.RequestedBy = startMessage.RequestedBy
 	currentInference.Model = startMessage.Model
@@ -147,6 +150,7 @@ func ProcessFinishInference(
 	currentInference.ExecutedBy = finishMessage.ExecutedBy
 	currentInference.EndBlockHeight = blockContext.BlockHeight
 	currentInference.EndBlockTimestamp = blockContext.BlockTimestamp
+	currentInference.Seed = finishMessage.Seed
 
 	if currentInference.PromptTokenCount == 0 {
 		logger.LogWarn("PromptTokens is 0 when FinishInference is called!", types.Inferences, "inferenceId", currentInference.InferenceId)

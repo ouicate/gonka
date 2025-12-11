@@ -215,7 +215,7 @@ func getSignatureComponents(cmd *cobra.Command, args []string) (calculations.Sig
 	}
 
 	return calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     payload,
 		Timestamp:       timestamp,
 		TransferAddress: endpointAccount,
 		ExecutorAddress: "", // This is not set from CLI flags
@@ -268,7 +268,7 @@ func postSignedRequest(cmd *cobra.Command, args []string) error {
 
 	cmd.Printf("Signature: %s\n", signatureString)
 	// Use the payload from components for the request
-	return sendSignedRequest(cmd, nodeAddress, []byte(components.Payload), signatureString, addr)
+	return sendSignedRequest(cmd, nodeAddress, []byte(components.ContentHash), signatureString, addr)
 }
 
 func sendSignedRequest(cmd *cobra.Command, nodeAddress string, payloadBytes []byte, signature string, requesterAddress sdk.AccAddress) error {

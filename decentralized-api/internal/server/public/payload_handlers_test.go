@@ -20,7 +20,7 @@ func TestValidatePayloadRequestSignature_ValidSignature(t *testing.T) {
 
 	// Validator signs: inferenceId + timestamp + validatorAddress
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -41,7 +41,7 @@ func TestValidatePayloadRequestSignature_InvalidSignature(t *testing.T) {
 
 	// Sign with wrong key
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -62,7 +62,7 @@ func TestValidatePayloadRequestSignature_WrongTimestamp(t *testing.T) {
 
 	// Sign with correct timestamp
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -82,7 +82,7 @@ func TestValidatePayloadRequestSignature_WrongInferenceId(t *testing.T) {
 	validatorAddress := "cosmos1validatoraddress"
 
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -105,7 +105,7 @@ func TestValidatePayloadRequestSignature_MultipleGrantees(t *testing.T) {
 
 	// Sign with grantee2 (warm key)
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		ContentHash:     inferenceId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
@@ -168,7 +168,7 @@ func TestExecutorSignature_Format(t *testing.T) {
 
 	// Sign with timestamp=0 (non-repudiation signature)
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     payload,
 		Timestamp:       0,
 		TransferAddress: executorAddress,
 		ExecutorAddress: "",
@@ -194,7 +194,7 @@ func TestExecutorSignature_HashMismatchDetection(t *testing.T) {
 	payload := inferenceId + promptHash + responseHash
 
 	components := calculations.SignatureComponents{
-		Payload:         payload,
+		ContentHash:     payload,
 		Timestamp:       0,
 		TransferAddress: executorAddress,
 		ExecutorAddress: "",
@@ -206,7 +206,7 @@ func TestExecutorSignature_HashMismatchDetection(t *testing.T) {
 	tamperedPayload := `{"choices":[{"message":{"content":"tampered"}}]}`
 	tamperedResponseHash := utils.GenerateSHA256Hash(tamperedPayload)
 	tamperedComponents := calculations.SignatureComponents{
-		Payload:         inferenceId + promptHash + tamperedResponseHash,
+		ContentHash:     inferenceId + promptHash + tamperedResponseHash,
 		Timestamp:       0,
 		TransferAddress: executorAddress,
 		ExecutorAddress: "",
@@ -219,5 +219,3 @@ func TestExecutorSignature_HashMismatchDetection(t *testing.T) {
 func pubKeyToBase64(key *secp256k1.PrivKey) string {
 	return base64.StdEncoding.EncodeToString(key.PubKey().Bytes())
 }
-
-

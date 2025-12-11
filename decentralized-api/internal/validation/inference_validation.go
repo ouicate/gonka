@@ -9,6 +9,7 @@ import (
 	"decentralized-api/cosmosclient"
 	"decentralized-api/internal/utils"
 	"decentralized-api/logging"
+	utils2 "decentralized-api/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -508,7 +509,7 @@ func logInferencesToValidate(toValidate []string) {
 }
 
 func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Inference, transactionRecorder cosmosclient.InferenceCosmosClient, revalidation bool) {
-	promptPayload, responsePayload, err := s.retrievePayloadsWithRetry(inf)
+	originalPrompt, responsePayload, err := s.retrievePayloadsWithRetry(inf)
 	if err != nil {
 		if errors.Is(err, ErrPayloadUnavailable) {
 			// Post-upgrade inference: executor unavailable after 20 min of retries
@@ -547,7 +548,7 @@ func (s *InferenceValidator) validateInferenceAndSendValMessage(inf types.Infere
 	// Retry logic for LockNode operation
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		valResult, err = broker.LockNode(s.nodeBroker, inf.Model, func(node *broker.Node) (ValidationResult, error) {
-			return s.validateWithPayloads(inf, node, promptPayload, responsePayload)
+			return s.validateWithPayloads(inf, node, originalPrompt, responsePayload)
 		})
 
 		if err == nil {
@@ -624,7 +625,7 @@ func (s *InferenceValidator) isAlreadyValidated(inferenceId string, epochId uint
 }
 
 // retrievePayloadsWithRetry retrieves payloads from executor with retry logic.
-// For pre-upgrade inferences (PromptPayload not empty), falls back to chain retrieval.
+// For pre-upgrade inferences (OriginalPrompt not empty), falls back to chain retrieval.
 // For post-upgrade inferences, returns ErrPayloadUnavailable for caller to handle invalidation.
 // Returns ErrHashMismatch immediately (no retry) when executor serves wrong payload with valid signature.
 // Returns ErrEpochStale if inference epoch becomes too old during retries.
@@ -646,13 +647,13 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 			return "", "", ErrEpochStale
 		}
 
-		promptPayload, responsePayload, err := RetrievePayloadsFromExecutor(
+		originalPrompt, responsePayload, err := RetrievePayloadsFromExecutor(
 			ctx, inf.InferenceId, inf.ExecutedBy, inf.EpochId, s.recorder)
 
 		if err == nil {
 			logging.Debug("Successfully retrieved payloads from executor", types.Validation,
 				"inferenceId", inf.InferenceId, "attempt", attempt)
-			return promptPayload, responsePayload, nil
+			return originalPrompt, responsePayload, nil
 		}
 
 		// Hash mismatch = executor signed wrong data = immediate invalidation (no retry)
@@ -676,7 +677,7 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 	}
 
 	// Check if this is a pre-upgrade inference (has on-chain payload)
-	if inf.PromptPayload != "" {
+	if inf.OriginalPrompt != "" {
 		logging.Warn("Retries exhausted, falling back to chain retrieval for pre-upgrade inference", types.Validation,
 			"inferenceId", inf.InferenceId, "lastError", lastErr)
 		return retrievePayloadsFromChain(ctx, inf.InferenceId, s.recorder)
@@ -776,7 +777,7 @@ func (s *InferenceValidator) submitHashMismatchInvalidation(inf types.Inference,
 }
 
 // validateWithPayloads validates inference using provided payloads.
-func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, promptPayload, responsePayload string) (ValidationResult, error) {
+func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, originalPrompt, responsePayload string) (ValidationResult, error) {
 	logging.Debug("Validating inference", types.Validation, "id", inference.InferenceId)
 
 	if inference.Status == types.InferenceStatus_STARTED {
@@ -784,9 +785,17 @@ func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inf
 		return nil, errors.New("Inference is not finished. id = " + inference.InferenceId)
 	}
 
+	originalPromptHash := utils2.GenerateSHA256Hash(originalPrompt)
+	if inference.OriginalPromptHash != originalPromptHash {
+		logging.Error("Original prompt hash mismatch", types.Validation, "inferenceId", inference.InferenceId, "expected", originalPromptHash, "actual", inference.OriginalPromptHash)
+		return &InvalidInferenceResult{inference.InferenceId, "Original prompt hash mismatch.", nil}, nil
+	}
+
+	modifiedPrompt, err := completionapi.ModifyRequestBody([]byte(originalPrompt), inference.Seed)
+
 	var requestMap map[string]interface{}
-	if err := json.Unmarshal([]byte(promptPayload), &requestMap); err != nil {
-		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal promptPayload.", err}, nil
+	if err := json.Unmarshal(modifiedPrompt.NewBody, &requestMap); err != nil {
+		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal originalPrompt.", err}, nil
 	}
 
 	originalResponse, err := unmarshalResponsePayload(responsePayload)

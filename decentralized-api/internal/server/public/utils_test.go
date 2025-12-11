@@ -42,7 +42,7 @@ func TestValidateTransferRequest_ValidSignature(t *testing.T) {
 	// Phase 3: Dev signs hash(original_prompt) + timestamp + ta_address
 	originalPromptHash := utils.GenerateSHA256Hash(body)
 	components := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: "", // Dev doesn't include executor
@@ -71,7 +71,7 @@ func TestValidateTransferRequest_InvalidSignature(t *testing.T) {
 	// Sign with wrong key
 	originalPromptHash := utils.GenerateSHA256Hash(body)
 	components := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: "",
@@ -100,7 +100,7 @@ func TestValidateTransferRequest_WrongTimestamp(t *testing.T) {
 	// Sign with correct timestamp
 	originalPromptHash := utils.GenerateSHA256Hash(body)
 	components := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: "",
@@ -129,7 +129,7 @@ func TestValidateExecuteRequestWithGrantees_ValidSignature(t *testing.T) {
 
 	// Phase 3: TA signs prompt_hash + timestamp + ta_address + executor_address
 	components := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: executorAddress,
@@ -138,9 +138,9 @@ func TestValidateExecuteRequestWithGrantees_ValidSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &ChatRequest{
-		PromptHash:      promptHash,
-		Timestamp:       timestamp,
-		TransferAddress: transferAddress,
+		ModifiedPromptHash: promptHash,
+		Timestamp:          timestamp,
+		TransferAddress:    transferAddress,
 	}
 
 	err = validateExecuteRequestWithGrantees(request, []string{taKey.GetPubKeyBase64()}, executorAddress, signature)
@@ -157,7 +157,7 @@ func TestValidateExecuteRequestWithGrantees_InvalidSignature(t *testing.T) {
 
 	// Sign with wrong key
 	components := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: executorAddress,
@@ -166,9 +166,9 @@ func TestValidateExecuteRequestWithGrantees_InvalidSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &ChatRequest{
-		PromptHash:      promptHash,
-		Timestamp:       timestamp,
-		TransferAddress: transferAddress,
+		ModifiedPromptHash: promptHash,
+		Timestamp:          timestamp,
+		TransferAddress:    transferAddress,
 	}
 
 	// Validate with TA's pubkey - should fail
@@ -187,7 +187,7 @@ func TestValidateExecuteRequestWithGrantees_MultipleGrantees(t *testing.T) {
 
 	// Sign with grantee2 (not the primary TA)
 	components := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: executorAddress,
@@ -196,9 +196,9 @@ func TestValidateExecuteRequestWithGrantees_MultipleGrantees(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &ChatRequest{
-		PromptHash:      promptHash,
-		Timestamp:       timestamp,
-		TransferAddress: transferAddress,
+		ModifiedPromptHash: promptHash,
+		Timestamp:          timestamp,
+		TransferAddress:    transferAddress,
 	}
 
 	// Should succeed when grantee2's pubkey is in the list
@@ -214,10 +214,10 @@ func TestValidateExecuteRequestWithGrantees_FallbackToHashedBody(t *testing.T) {
 	executorAddress := "cosmos1executoraddress"
 	body := `{"model":"test"}`
 
-	// Phase 3 backward compatibility: When PromptHash is empty, compute hash(Body)
+	// Phase 3 backward compatibility: When ModifiedPromptHash is empty, compute hash(Body)
 	bodyHash := utils.GenerateSHA256Hash(body)
 	components := calculations.SignatureComponents{
-		Payload:         bodyHash,
+		ContentHash:     bodyHash,
 		Timestamp:       timestamp,
 		TransferAddress: transferAddress,
 		ExecutorAddress: executorAddress,
@@ -226,13 +226,12 @@ func TestValidateExecuteRequestWithGrantees_FallbackToHashedBody(t *testing.T) {
 	require.NoError(t, err)
 
 	request := &ChatRequest{
-		Body:            []byte(body),
-		PromptHash:      "", // Empty - should fall back to hash(Body)
-		Timestamp:       timestamp,
-		TransferAddress: transferAddress,
+		Body:               []byte(body),
+		ModifiedPromptHash: "", // Empty - should fall back to hash(Body)
+		Timestamp:          timestamp,
+		TransferAddress:    transferAddress,
 	}
 
 	err = validateExecuteRequestWithGrantees(request, []string{taKey.GetPubKeyBase64()}, executorAddress, signature)
 	require.NoError(t, err)
 }
-

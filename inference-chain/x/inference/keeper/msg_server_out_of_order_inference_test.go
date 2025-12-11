@@ -50,7 +50,7 @@ func TestMsgServer_OutOfOrderInference(t *testing.T) {
 
 	// Phase 3: Dev signs original_prompt_hash
 	devComponents := calculations.SignatureComponents{
-		Payload:         originalPromptHash,
+		ContentHash:     originalPromptHash,
 		Timestamp:       requestTimestamp,
 		TransferAddress: mockTransferAgent.address,
 		ExecutorAddress: "", // Dev doesn't include executor
@@ -60,7 +60,7 @@ func TestMsgServer_OutOfOrderInference(t *testing.T) {
 
 	// Phase 3: TA and Executor sign prompt_hash
 	taComponents := calculations.SignatureComponents{
-		Payload:         promptHash,
+		ContentHash:     promptHash,
 		Timestamp:       requestTimestamp,
 		TransferAddress: mockTransferAgent.address,
 		ExecutorAddress: mockExecutor.address,

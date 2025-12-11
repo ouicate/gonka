@@ -145,7 +145,7 @@ func (k msgServer) verifyTASignature(ctx sdk.Context, msg *types.MsgFinishInfere
 	// Upgrade-epoch fallback: inferences started before hash-based signing use original_prompt_hash
 	// This path will be removed after upgrade epoch completes
 	directComponents := calculations.SignatureComponents{
-		Payload:         msg.OriginalPromptHash,
+		ContentHash:     msg.OriginalPromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.TransferredBy,
 		ExecutorAddress: msg.ExecutedBy,
@@ -165,7 +165,7 @@ func (k msgServer) verifyTASignature(ctx sdk.Context, msg *types.MsgFinishInfere
 // Dev signs: original_prompt_hash + timestamp + ta_address (no executor)
 func getFinishDevSignatureComponents(msg *types.MsgFinishInference) calculations.SignatureComponents {
 	return calculations.SignatureComponents{
-		Payload:         msg.OriginalPromptHash,
+		ContentHash:     msg.OriginalPromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.TransferredBy,
 		ExecutorAddress: "", // Dev doesn't include executor address
@@ -176,7 +176,7 @@ func getFinishDevSignatureComponents(msg *types.MsgFinishInference) calculations
 // TA/Executor sign: prompt_hash + timestamp + ta_address + executor_address
 func getFinishTASignatureComponents(msg *types.MsgFinishInference) calculations.SignatureComponents {
 	return calculations.SignatureComponents{
-		Payload:         msg.PromptHash,
+		ContentHash:     msg.ModifiedPromptHash,
 		Timestamp:       msg.RequestTimestamp,
 		TransferAddress: msg.TransferredBy,
 		ExecutorAddress: msg.ExecutedBy,
