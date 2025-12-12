@@ -628,7 +628,7 @@ func (s *InferenceValidator) isAlreadyValidated(inferenceId string, epochId uint
 // For post-upgrade inferences, returns ErrPayloadUnavailable for caller to handle invalidation.
 // Returns ErrHashMismatch immediately (no retry) when executor serves wrong payload with valid signature.
 // Returns ErrEpochStale if inference epoch becomes too old during retries.
-func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (string, string, error) {
+func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) ([]byte, []byte, error) {
 	const maxRetries = 10
 	const retryInterval = 2 * time.Minute // 10 * 2 min = 20 min total
 
@@ -643,7 +643,7 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 		if s.isEpochStale(inf.EpochId) {
 			logging.Info("Epoch stale, stopping payload retrieval", types.Validation,
 				"inferenceId", inf.InferenceId, "inferenceEpoch", inf.EpochId)
-			return "", "", ErrEpochStale
+			return nil, nil, ErrEpochStale
 		}
 
 		promptPayload, responsePayload, err := RetrievePayloadsFromExecutor(
@@ -659,7 +659,7 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 		if errors.Is(err, ErrHashMismatch) {
 			logging.Error("Hash mismatch detected, will invalidate immediately", types.Validation,
 				"inferenceId", inf.InferenceId, "attempt", attempt)
-			return "", "", ErrHashMismatch
+			return nil, nil, ErrHashMismatch
 		}
 
 		lastErr = err
@@ -685,7 +685,7 @@ func (s *InferenceValidator) retrievePayloadsWithRetry(inf types.Inference) (str
 	// Post-upgrade inference: no on-chain fallback available
 	logging.Warn("Retries exhausted for post-upgrade inference, will invalidate", types.Validation,
 		"inferenceId", inf.InferenceId, "lastError", lastErr)
-	return "", "", ErrPayloadUnavailable
+	return nil, nil, ErrPayloadUnavailable
 }
 
 // checkAndInvalidateUnavailable checks if inference is already invalidated by consensus,
@@ -776,7 +776,7 @@ func (s *InferenceValidator) submitHashMismatchInvalidation(inf types.Inference,
 }
 
 // validateWithPayloads validates inference using provided payloads.
-func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, promptPayload, responsePayload string) (ValidationResult, error) {
+func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inferenceNode *broker.Node, promptPayload, responsePayload []byte) (ValidationResult, error) {
 	logging.Debug("Validating inference", types.Validation, "id", inference.InferenceId)
 
 	if inference.Status == types.InferenceStatus_STARTED {
@@ -785,7 +785,7 @@ func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inf
 	}
 
 	var requestMap map[string]interface{}
-	if err := json.Unmarshal([]byte(promptPayload), &requestMap); err != nil {
+	if err := json.Unmarshal(promptPayload, &requestMap); err != nil {
 		return &InvalidInferenceResult{inference.InferenceId, "Failed to unmarshal promptPayload.", err}, nil
 	}
 
@@ -852,11 +852,11 @@ func (s *InferenceValidator) validateWithPayloads(inference types.Inference, inf
 }
 
 func unmarshalResponse(inference *types.Inference) (completionapi.CompletionResponse, error) {
-	return unmarshalResponsePayload(inference.ResponsePayload)
+	return unmarshalResponsePayload([]byte(inference.ResponsePayload))
 }
 
 // unmarshalResponsePayload parses response payload string into CompletionResponse.
-func unmarshalResponsePayload(responsePayload string) (completionapi.CompletionResponse, error) {
+func unmarshalResponsePayload(responsePayload []byte) (completionapi.CompletionResponse, error) {
 	resp, err := completionapi.NewCompletionResponseFromLinesFromResponsePayload(responsePayload)
 
 	if err != nil {
