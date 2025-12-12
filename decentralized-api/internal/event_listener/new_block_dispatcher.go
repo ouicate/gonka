@@ -367,6 +367,13 @@ func (d *OnNewBlockDispatcher) handlePhaseTransitions(epochState chainphase.Epoc
 	if blockHeight > 500 && participantAddress != "" {
 		hash := sha256.Sum256([]byte(participantAddress))
 		randomDelay = int(binary.BigEndian.Uint64(hash[:8])%500) + 1
+
+		// Cap the delay to not exceed half of the gap until the next PoC start
+		claimHeight := epochContext.ClaimMoney()
+		nextPoCStart := epochContext.NextPoCStart()
+		if nextPoCStart-claimHeight < 1000 {
+			randomDelay = 0
+		}
 	}
 
 	if epochContext.IsClaimMoneyStage(blockHeight - int64(randomDelay)) {
