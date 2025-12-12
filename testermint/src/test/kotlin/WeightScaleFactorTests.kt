@@ -10,6 +10,15 @@ import java.util.concurrent.TimeUnit
 @Timeout(value = 15, unit = TimeUnit.MINUTES)
 class WeightScaleFactorTests : TestermintTest() {
 
+    private fun collectWeights(participants: List<LocalInferencePair>): Map<String, Map<String, Int>> {
+        return participants.associate { p ->
+            p.name to p.api.getNodes().associate { n ->
+                val weight = n.state.epochMlNodes?.values?.firstOrNull()?.pocWeight ?: 0
+                n.node.id to weight
+            }
+        }
+    }
+
     @Test
     fun `test weight scale factor updates`() {
         // 1. Configure the network with 3 participants, each having 3 mlnodes
@@ -68,13 +77,7 @@ class WeightScaleFactorTests : TestermintTest() {
         assertThat(initialScale?.toDouble() ?: 1.0).isEqualTo(1.0)
 
         // Capture initial weights
-        val initialWeights = allParticipants.associate { p ->
-             p.name to p.api.getNodes().associate { n ->
-                 val weight: Int = n.state.epochMlNodes?.values?.firstOrNull()?.pocWeight ?: 0
-                 n.node.id to weight
-             }
-        }
-        
+        val initialWeights = collectWeights(allParticipants)
         logSection("Initial Weights Captured: $initialWeights")
 
         // 4. Change weight_scale_factor to 2.5 via gov proposal
@@ -105,9 +108,9 @@ class WeightScaleFactorTests : TestermintTest() {
             require(it.code == 0) { "Deposit failed: ${it.rawLog}" }
         }
 
-        // Wait for End of PoC
-        logSection("Waiting for End of PoC before voting")
-        genesis.waitForStage(EpochStage.END_OF_POC)
+        // Wait a tiny bit (3-5 seconds) so the thing is actually on chain and proceed to vote
+        logSection("Waiting for 5 seconds before voting")
+        Thread.sleep(5000)
 
         // Capture allocation status during this epoch (before we advance)
         val allocationStatus = allParticipants.associate { p ->
@@ -119,6 +122,10 @@ class WeightScaleFactorTests : TestermintTest() {
              }
         }
         logSection("Allocation Status: $allocationStatus")
+
+        // Query and log gov params before voting
+        val currentGovParams = genesis.node.getGovParams().params
+        logSection("Current Gov Params: $currentGovParams")
 
         // Vote with all participants
         logSection("Voting Yes")
@@ -148,16 +155,24 @@ class WeightScaleFactorTests : TestermintTest() {
             Thread.sleep(1000)
         }
         
-        // Wait for next epoch for weights to update
-        genesis.waitForNextEpoch()
-        
-        // 5. Observe weight changes
-        logSection("Verifying Weight Changes")
-        
-        val newWeights = allParticipants.associate { p ->
-             p.name to p.api.getNodes().associate { it.node.id to (it.state.epochMlNodes?.values?.firstOrNull()?.pocWeight ?: 0L) }
+        // Log weights at each epoch for a few epochs
+        val weightHistory = mutableListOf<Map<String, Map<String, Int>>>()
+        weightHistory.add(initialWeights)
+
+        // Wait for next epoch for weights to update (and maybe one more to be safe/observe history)
+        // We need to check if the change happened.
+        // Let's loop for 2 epochs.
+        for (i in 1..2) {
+             genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
+             val currentWeights = collectWeights(allParticipants)
+             val epochIndex = genesis.getEpochData().latestEpoch.index
+             logSection("Epoch $epochIndex Weights: $currentWeights")
+             weightHistory.add(currentWeights)
         }
-        logSection("New Weights: $newWeights")
+        
+        // 5. Observe weight changes - use the last collected weights (should be after update)
+        val newWeights = weightHistory.last()
+        logSection("New Weights (Last Epoch): $newWeights")
         
         
         allParticipants.forEach { participant ->
