@@ -12,6 +12,8 @@ import com.productscience.logSection
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.data.Offset
 import org.junit.jupiter.api.Test
+import org.tinylog.kotlin.Logger
+import java.time.Instant
 
 class TokenomicsTests : TestermintTest() {
     @Test
@@ -32,7 +34,8 @@ class TokenomicsTests : TestermintTest() {
         val (_, genesis) = initCluster(config = noCappingConfig, reboot = true)
         logSection("Setting PoC weight to 100")
         genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS)
-        genesis.changePoc(100)
+        genesis.setPocWeight(100)
+        genesis.waitForNextEpoch()
         logSection("Verifying top miner added")
         val topMiners = genesis.node.getTopMiners()
         assertThat(topMiners.topMiner).hasSize(1)
@@ -52,8 +55,9 @@ class TokenomicsTests : TestermintTest() {
         assertThat(topMiner2.firstQualifiedStarted).isEqualTo(startTime)
         assertThat(topMiner2.lastQualifiedStarted).isEqualTo(startTime)
         val epochLength = genesis.getParams().epochParams.epochLength
-        // FIXME: try to use block timestamps to get a more precise expected time estimation
-        assertThat(topMiner2.qualifiedTime).isCloseTo(epochLength * 5, Offset.offset(5))
+        val latestBlockTime = Instant.parse(genesis.node.getStatus().syncInfo.latestBlockTime).epochSecond
+        val expectedQualifiedTime = latestBlockTime - startTime
+        assertThat(topMiner2.qualifiedTime).isCloseTo(expectedQualifiedTime, Offset.offset(20))
         assertThat(topMiner2.lastUpdatedTime).isEqualTo(startTime + topMiner2.qualifiedTime!!)
     }
 
@@ -74,7 +78,8 @@ class TokenomicsTests : TestermintTest() {
         val firstJoin = localCluster.joinPairs.first()
         val initialBalance = firstJoin.node.getSelfBalance("ngonka")
         logSection("Setting PoC weight to 100")
-        firstJoin.changePoc(100)
+        firstJoin.setPocWeight(100)
+        firstJoin.waitForNextEpoch()
         val blockUntilReward = genesis.node.getGenesisState().appState.inference.genesisOnlyParams.topRewardPeriod / 5
         val settlesUntilReward = blockUntilReward / genesis.getParams().epochParams.epochLength
         logSection("Making Inferences")

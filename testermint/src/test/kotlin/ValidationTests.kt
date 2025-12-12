@@ -14,7 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertNotNull
 
-@Timeout(value = 15, unit = TimeUnit.MINUTES)
+@Timeout(value = 25, unit = TimeUnit.MINUTES)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class ValidationTests : TestermintTest() {
     @Test
@@ -51,89 +51,6 @@ class ValidationTests : TestermintTest() {
         assertThat(statuses).hasSize(requests)
 
         Thread.sleep(10000)
-    }
-
-    @Test
-    fun `test invalid gets marked invalid`() {
-        var tries = 3
-        val (cluster, genesis) = initCluster(reboot = true)
-        genesis.waitForNextInferenceWindow(10)
-        val oddPair = cluster.joinPairs.last()
-        val badResponse = defaultInferenceResponseObject.withMissingLogit()
-        oddPair.mock?.setInferenceResponse(badResponse)
-        var newState: InferencePayload
-        do {
-            logSection("Trying to get invalid inference. Tries left: $tries")
-            newState = getInferenceValidationState(genesis, oddPair)
-        } while (newState.statusEnum != InferenceStatus.INVALIDATED && tries-- > 0)
-        logSection("Verifying invalidation")
-        assertThat(newState.statusEnum).isEqualTo(InferenceStatus.INVALIDATED)
-    }
-
-    @Test
-    @Timeout(15, unit = TimeUnit.MINUTES)
-    @Order(Int.MAX_VALUE - 1)
-    fun `test invalid gets removed and restored`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
-        cluster.allPairs.forEach { pair ->
-            pair.waitForMlNodesToLoad()
-        }
-        genesis.waitForNextInferenceWindow()
-
-        val dispatcher = Executors.newFixedThreadPool(10).asCoroutineDispatcher()
-        runBlocking(dispatcher) {
-        val deferreds = (1..10).map {
-                async {
-            InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!").runFullInference()
-                }
-            }
-            deferreds.awaitAll()
-        }
-
-        Logger.warn("Got invalid results, waiting for invalidation.")
-
-        genesis.markNeedsReboot()
-        logSection("Waiting for removal")
-        genesis.node.waitForNextBlock(2)
-        val participants = genesis.api.getActiveParticipants()
-        val excluded = participants.excludedParticipants.firstOrNull()
-        assertNotNull(excluded, "Participant was not excluded")
-        assertThat(excluded.address).isEqualTo(genesis.node.getColdAddress())
-        val genesisValidatorInfo = genesis.node.getValidatorInfo()
-        val validators = genesis.node.getValidators()
-        assertThat(validators.validators).hasSize(3)
-        val genesisValidator = validators.validators.first { it.consensusPubkey.value ==  genesisValidatorInfo.key }
-        assertThat(genesisValidator.tokens).isEqualTo(0)
-        genesis.waitForNextEpoch()
-        val newParticipants = genesis.api.getActiveParticipants()
-        assertThat(newParticipants.excludedParticipants).isEmpty()
-        val removedRestored = newParticipants.activeParticipants.getParticipant(genesis)
-        assertNotNull(removedRestored, "Excluded participant was not restored")
-    }
-
-    @Test
-    fun `test valid with invalid validator gets validated`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
-        genesis.waitForNextInferenceWindow()
-        cluster.allPairs.forEach { pair ->
-            pair.waitForMlNodesToLoad()
-        }
-        val oddPair = cluster.joinPairs.last()
-        oddPair.mock?.setInferenceResponse(defaultInferenceResponseObject.withMissingLogit())
-        logSection("Getting invalid invalidation")
-        val invalidResult =
-            generateSequence { getInferenceResult(genesis) }
-                .first { it.executorBefore.id != oddPair.node.getColdAddress() }
-        // The oddPair will mark it as invalid and force a vote, which should fail (valid)
-
-        Logger.warn("Got invalid result, waiting for validation.")
-        logSection("Waiting for revalidation")
-        genesis.node.waitForNextBlock(10)
-        logSection("Verifying revalidation")
-        val newState = genesis.api.getInference(invalidResult.inference.inferenceId)
-
-        assertThat(newState.statusEnum).isEqualTo(InferenceStatus.VALIDATED)
-
     }
 
     @Test
@@ -198,46 +115,7 @@ class ValidationTests : TestermintTest() {
         assertThat(afterClaimBalance).isGreaterThan(beforeClaimBalance)
     }
 
-    @Test
-    fun `full inference with invalid response payload`() {
-        val (cluster, genesis) = initCluster(mergeSpec = alwaysValidate)
-        cluster.allPairs.forEach { pair ->
-            pair.waitForMlNodesToLoad()
-        }
-
-        val helper = InferenceTestHelper(cluster, genesis, responsePayload = "Invalid JSON!!")
-        if (!genesis.getEpochData().safeForInference) {
-            genesis.waitForStage(EpochStage.CLAIM_REWARDS, 3)
-        }
-        val inference = helper.runFullInference()
-        // should be invalidated quickly
-        genesis.node.waitForNextBlock(3)
-        val inferencePayload = genesis.node.getInference(inference.inferenceId)
-        assertNotNull(inferencePayload)
-        assertThat(inferencePayload.inference.status).isEqualTo(InferenceStatus.INVALIDATED.value)
-    }
-
     companion object {
-        val alwaysValidate = spec {
-            this[AppState::inference] = spec<InferenceState> {
-                this[InferenceState::params] = spec<InferenceParams> {
-                    this[InferenceParams::validationParams] = spec<ValidationParams> {
-                        this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
-                        this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
-                        this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
-
-                    }
-                    this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
-                        this[BandwidthLimitsParams::minimumConcurrentInvalidations] = 100L
-                    }
-                    this[InferenceParams::epochParams] = spec<EpochParams> {
-                        this[EpochParams::inferencePruningEpochThreshold] = 100L
-                        // need longer epochs to have time for invalidations
-//                        this[EpochParams::epochLength] = 20L
-                    }
-                }
-            }
-        }
 
         val ignoreDowntime = spec {
             this[AppState::inference] = spec<InferenceState> {
@@ -296,22 +174,16 @@ data class InferenceTestHelper(
     val request: String = inferenceRequest,
     val model: String = defaultModel,
     val promptHash: String = "not_verified",
-    val timestamp: Long = Instant.now().toEpochNanos(),
     val responsePayload: String = defaultInferenceResponse,
 ) {
     val genesisAddress = genesis.node.getColdAddress()
-    val devSignature = genesis.node.signPayload(
-        inferenceRequest,
-        accountAddress = null,
-        timestamp = timestamp,
-        endpointAccount = genesisAddress
-    )
 
     fun runFullInference(): InferencePayload {
-        val startMessage = getStartInference()
+        val timestamp = Instant.now().toEpochNanos()
+        val startMessage = getStartInference(timestamp)
         val response = genesis.submitMessage(startMessage)
         assertThat(response).isSuccess()
-        val finishMessage = getFinishInference()
+        val finishMessage = getFinishInference(timestamp)
         val response2 = genesis.submitMessage(finishMessage)
         assertThat(response2).isSuccess()
         val inference = genesis.node.getInference(finishMessage.inferenceId)?.inference
@@ -319,7 +191,13 @@ data class InferenceTestHelper(
         return inference
     }
 
-    fun getStartInference(): MsgStartInference {
+    fun getStartInference(timestamp: Long): MsgStartInference {
+        val devSignature = genesis.node.signPayload(
+            inferenceRequest,
+            accountAddress = null,
+            timestamp = timestamp,
+            endpointAccount = genesisAddress
+        )
         val taSignature =
             genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgStartInference(
@@ -338,7 +216,13 @@ data class InferenceTestHelper(
         )
     }
 
-    fun getFinishInference(): MsgFinishInference {
+    fun getFinishInference(timestamp: Long): MsgFinishInference {
+        val devSignature = genesis.node.signPayload(
+            inferenceRequest,
+            accountAddress = null,
+            timestamp = timestamp,
+            endpointAccount = genesisAddress
+        )
         val finishTaSignature =
             genesis.node.signPayload(request + timestamp.toString() + genesisAddress + genesisAddress, null)
         return MsgFinishInference(
@@ -357,5 +241,26 @@ data class InferenceTestHelper(
             originalPrompt = request,
             model = model
         )
+    }
+}
+
+val alwaysValidate = spec {
+    this[AppState::inference] = spec<InferenceState> {
+        this[InferenceState::params] = spec<InferenceParams> {
+            this[InferenceParams::validationParams] = spec<ValidationParams> {
+                this[ValidationParams::minValidationAverage] = Decimal.fromDouble(100.0)
+                this[ValidationParams::maxValidationAverage] = Decimal.fromDouble(100.0)
+                this[ValidationParams::downtimeHThreshold] = Decimal.fromDouble(100.0)
+
+            }
+            this[InferenceParams::bandwidthLimitsParams] = spec<BandwidthLimitsParams> {
+                this[BandwidthLimitsParams::minimumConcurrentInvalidations] = 100L
+            }
+            this[InferenceParams::epochParams] = spec<EpochParams> {
+                this[EpochParams::inferencePruningEpochThreshold] = 100L
+                // need longer epochs to have time for invalidations
+//                        this[EpochParams::epochLength] = 20L
+            }
+        }
     }
 }

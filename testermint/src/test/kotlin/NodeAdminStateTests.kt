@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Timeout
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.TimeUnit
 
-@Timeout(value = 10, unit = TimeUnit.MINUTES)
+@Timeout(value = 25, unit = TimeUnit.MINUTES)
 class NodeAdminStateTests : TestermintTest() {
 
     @Test
@@ -55,7 +55,8 @@ class NodeAdminStateTests : TestermintTest() {
         genesis.waitForStage(EpochStage.START_OF_POC)
         
         // Give reconciliation some time to kick in
-        genesis.node.waitForNextBlock(2)
+        val waitBlocks = (genesis.getParams().epochParams.pocStageDuration * 0.8).toInt()
+        genesis.node.waitForNextBlock(waitBlocks)
         
         // At this point, the disabled node should not participate in PoC
         // We can verify this by checking node states or attempting operations
@@ -82,8 +83,11 @@ class NodeAdminStateTests : TestermintTest() {
     fun `test node disable during PoC phase`() {
         val (_, genesis) = initCluster(reboot = true)
         
-        logSection("Waiting for PoC phase")
+        logSection("Waiting for start of PoC phase")
         genesis.waitForStage(EpochStage.START_OF_POC)
+        // Wait 80% of PoC duration to simulate late disable
+        val waitBlocks = (genesis.getParams().epochParams.pocStageDuration * 0.8).toInt()
+        genesis.node.waitForNextBlock(waitBlocks)
         
         logSection("Getting nodes during PoC")
         val nodes = genesis.api.getNodes()
@@ -101,7 +105,7 @@ class NodeAdminStateTests : TestermintTest() {
             .`as`("Node should be disabled")
 
         logSection("Waiting for next epoch to verify node doesn't participate")
-        genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 2)
 
         // It's too late to disable at PoC, so we expect the node to participate and keep its weight
         val genesisStakeValidatorWhenDisabledAtPoc = genesis.node.getStakeValidator()
@@ -109,7 +113,7 @@ class NodeAdminStateTests : TestermintTest() {
         assertThat(genesisStakeValidatorWhenDisabledAtPoc.status).isEqualTo(StakeValidatorStatus.BONDED.value)
 
         genesis.waitForStage(EpochStage.START_OF_POC)
-        genesis.waitForStage(EpochStage.END_OF_POC_VALIDATION, offset = 3)
+        genesis.waitForStage(EpochStage.SET_NEW_VALIDATORS, offset = 2)
 
         // At this point, disabled node should not be participating in new PoC
         val genesisValidatorAfterOneMoreEpoch = genesis.node.getStakeValidator()

@@ -302,6 +302,7 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
             resetMlNodesToDefault(it)
         }
 
+        it.mock?.resetMocks()
         it.mock?.setInferenceResponse(defaultInferenceResponseObject, streamDelay = Duration.ofMillis(200))
         it.getParams()
         it.node.getColdAddress()
@@ -345,7 +346,8 @@ fun initialize(pairs: List<LocalInferencePair>, resetMlNodes: Boolean = true): L
 }
 
 private fun resetMlNodesToDefault(pair: LocalInferencePair) {
-    val defaultNode = validNode.copy(host = "${pair.name.trim('/')}-mock-server")
+    val pairName = pair.name.trim('/')
+    val defaultNode = validNode.copy(host = "ml-0000.$pairName.test")
 
     // We're not really supposed to change nodes in the middle of an epoch
     // This optimization might help avoid unnecessary changes
@@ -366,31 +368,6 @@ private fun resetMlNodesToDefault(pair: LocalInferencePair) {
     Logger.info { "Resetting ml nodes" }
     pair.waitForNextInferenceWindow(windowSizeInBlocks = 5)
     pair.api.setNodesTo(defaultNode)
-}
-
-private fun addUnfundedDirectly(
-    unfunded: List<LocalInferencePair>,
-    currentParticipants: List<Participant>,
-    highestFunded: LocalInferencePair,
-) {
-    for (pair in unfunded) {
-        if (currentParticipants.none { it.id == pair.node.getColdAddress() }) {
-            val selfKey = pair.node.getKeys()[0]
-            val status = pair.node.getStatus()
-            val validatorInfo = status.validatorInfo
-            val valPubKey: PubKey = validatorInfo.pubKey
-            Logger.debug("PubKey extracted pubkey={}", selfKey.pubkey)
-            highestFunded.api.addUnfundedInferenceParticipant(
-                UnfundedInferenceParticipant(
-                    url = "http://${pair.name}-api:8080",
-                    models = listOf(defaultModel),
-                    validatorKey = valPubKey.value,
-                    pubKey = selfKey.pubkey.key,
-                    address = selfKey.address,
-                )
-            )
-        }
-    }
 }
 
 private fun TxResponse.assertSuccess() {
@@ -459,7 +436,7 @@ val inferenceConfig = ApplicationConfig(
     genesisSpec = createSpec()
 )
 
-fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = spec {
+fun createSpec(epochLength: Long = 40L, epochShift: Int = 0): Spec<AppState> = spec {
     this[AppState::gov] = spec<GovState> {
         this[GovState::params] = spec<GovParams> {
             this[GovParams::votingPeriod] = Duration.ofSeconds(30)
@@ -468,12 +445,15 @@ fun createSpec(epochLength: Long = 15L, epochShift: Int = 0): Spec<AppState> = s
     }
     this[AppState::inference] = spec<InferenceState> {
         this[InferenceState::params] = spec<InferenceParams> {
+            // Configure epoch params and confirmation PoC params
+            // epochLength=40 provides sufficient inference phase window for confirmation PoC trigger
+            // pocStageDuration=5, pocValidationDuration=4 gives confirmation PoC enough time to complete
             this[InferenceParams::epochParams] = spec<EpochParams> {
                 this[EpochParams::epochLength] = epochLength
-                this[EpochParams::pocStageDuration] = 2L
-                this[EpochParams::pocExchangeDuration] = 1L
+                this[EpochParams::pocStageDuration] = 5L
+                this[EpochParams::pocExchangeDuration] = 2L
                 this[EpochParams::pocValidationDelay] = 1L
-                this[EpochParams::pocValidationDuration] = 2L
+                this[EpochParams::pocValidationDuration] = 4L
                 this[EpochParams::setNewValidatorsDelay] = 1L
                 this[EpochParams::epochShift] = epochShift
             }
