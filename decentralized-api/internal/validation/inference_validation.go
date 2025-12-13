@@ -105,7 +105,8 @@ func (s *InferenceValidator) shouldValidateInference(
 		uint32(inferenceDetails.TotalPower),
 		uint32(validatorPower),
 		uint32(inferenceDetails.ExecutorPower),
-		validationParams)
+		validationParams,
+		false)
 
 	return shouldValidate, message
 }
