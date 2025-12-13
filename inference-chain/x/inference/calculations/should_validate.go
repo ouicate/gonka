@@ -27,7 +27,7 @@ func ShouldValidate(
 	rangeSize := maxValidationAverage.Sub(minValidationAverage)
 	// algebraic simplification/removal of temp variables
 	targetValidations := maxValidationAverage.Sub(rangeSize.Mul(executorReputation))
-	// 100% rep will be 0, 0% rep will be rangeSize
+	// 100% rep will be minValidationAverage, 0% rep will be maxValidationAverage
 	ourProbability := targetValidations.Mul(decimal.NewFromInt(int64(validatorPower))).Div(decimal.NewFromInt(int64(totalPower - executorPower)))
 	if ourProbability.GreaterThan(one) {
 		ourProbability = one
