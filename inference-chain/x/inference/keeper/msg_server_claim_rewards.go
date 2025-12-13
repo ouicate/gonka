@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -14,6 +15,8 @@ import (
 	"github.com/productscience/inference/x/inference/calculations"
 	"github.com/productscience/inference/x/inference/types"
 )
+
+const maxInferenceSampleSize = 2000
 
 func (k msgServer) ClaimRewards(goCtx context.Context, msg *types.MsgClaimRewards) (*types.MsgClaimRewardsResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -370,36 +373,67 @@ func (k msgServer) getMustBeValidatedInferences(ctx sdk.Context, msg *types.MsgC
 		modelTotalWeights[subModelId] = subTotalWeight
 	}
 
-	skipped := 0
-	mustBeValidated := make([]string, 0)
+	// Seed RNG deterministically using block hash
+	blockHash := ctx.HeaderInfo().Hash
+	blockHashSeed := int64(binary.BigEndian.Uint64(blockHash[:8]))
+	rng := rand.New(rand.NewSource(blockHashSeed))
+
+	// Reservoir sampling: iterate all inferences, filter by model, sample filtered items
+	sample := make([]types.InferenceValidationDetails, 0, maxInferenceSampleSize)
+	totalInferences := 0
+	filteredCount := 0
+
 	finishedInferences := k.GetInferenceValidationDetailsForEpoch(ctx, mainEpochData.EpochIndex)
 	for _, inference := range finishedInferences {
+		totalInferences++
+
+		// Lightweight filters before sampling
 		if inference.ExecutorId == msg.Creator {
 			continue
 		}
 
-		// Determine which model this inference belongs to
 		modelId := inference.Model
-		weightMap, exists := modelWeightMaps[modelId]
-		if !exists {
-			return nil, types.ErrInferenceHasInvalidModel
-		}
-
-		// Check if validator is in the weight map for this model
-		validatorPowerForModel, found := weightMap[msg.Creator]
-		if !found {
-			k.LogDebug("Validator not found in weight map for model", types.Claims, "validator", msg.Creator, "model", modelId)
+		if _, exists := modelWeightMaps[modelId]; !exists {
 			continue
 		}
 
-		// Check if executor is in the weight map for this model
+		if _, found := modelWeightMaps[modelId][msg.Creator]; !found {
+			continue
+		}
+
+		filteredCount++
+
+		// Reservoir sampling: maintain uniform random sample of filtered items
+		if len(sample) < maxInferenceSampleSize {
+			sample = append(sample, inference)
+		} else {
+			j := rng.Intn(filteredCount)
+			if j < maxInferenceSampleSize {
+				sample[j] = inference
+			}
+		}
+	}
+
+	k.LogInfo("Sampled inferences for validation check", types.Claims,
+		"total_inferences", totalInferences,
+		"filtered", filteredCount,
+		"sampled", len(sample),
+		"epoch", mainEpochData.EpochIndex,
+	)
+
+	// Run expensive ShouldValidate only on sampled inferences
+	skipped := 0
+	mustBeValidated := make([]string, 0)
+	for _, inference := range sample {
+		modelId := inference.Model
+		weightMap := modelWeightMaps[modelId]
+		validatorPowerForModel := weightMap[msg.Creator]
 		executorPower, found := weightMap[inference.ExecutorId]
 		if !found {
 			k.LogWarn("Executor not found in weight map", types.Claims, "executor", inference.ExecutorId, "model", modelId)
 			continue
 		}
 
-		// Get the total weight for this model
 		totalWeight := modelTotalWeights[modelId]
 
 		if k.OverlapsWithPoC(&inference, epochContext) && !k.isActiveDuringPoC(&validatorPowerForModel) {
@@ -419,7 +453,7 @@ func (k msgServer) getMustBeValidatedInferences(ctx sdk.Context, msg *types.MsgC
 	k.LogInfo("Must be validated inferences", types.Claims,
 		"count", len(mustBeValidated),
 		"validator_not_available_at_poc_skipped", skipped,
-		"total", len(finishedInferences),
+		"sampled", len(sample),
 	)
 
 	return mustBeValidated, nil
