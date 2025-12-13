@@ -220,7 +220,9 @@ func (k msgServer) hasSignificantMissedValidations(ctx sdk.Context, msg *types.M
 			missed++
 		}
 	}
-	passed, err := calculations.MissedStatTest(missed, total)
+	params := k.GetParams(ctx)
+	p0 := params.ValidationParams.BinomTestP0.ToDecimal()
+	passed, err := calculations.MissedStatTest(missed, total, p0)
 	k.LogInfo("Missed validations", types.Claims, "missed", missed, "totalToBeValidated", total, "passed", passed)
 
 	if err != nil {
