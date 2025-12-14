@@ -69,7 +69,7 @@ func TestMissedStatTestErrorConditions(t *testing.T) {
 
 func TestMissedStatTestBasicBehavior(t *testing.T) {
 	// Test basic behavior: low miss rates should pass, high miss rates should fail
-	// For n=100, p0=0.10, alpha=0.05, the critical value is ~15
+	// For n=100, p0=0.10, alpha=0.05, the critical value is 14 (using normal approximation)
 	testCases := []struct {
 		name     string
 		nMissed  int
@@ -79,8 +79,8 @@ func TestMissedStatTestBasicBehavior(t *testing.T) {
 		{"0% miss rate passes", 0, 100, true},
 		{"5% miss rate passes", 5, 100, true},
 		{"10% miss rate passes", 10, 100, true},
-		{"15% miss rate passes (at boundary)", 15, 100, true},
-		{"16% miss rate fails", 16, 100, false},
+		{"14% miss rate passes (at boundary)", 14, 100, true},
+		{"15% miss rate fails", 15, 100, false},
 		{"20% miss rate fails", 20, 100, false},
 		{"50% miss rate fails", 50, 100, false},
 	}

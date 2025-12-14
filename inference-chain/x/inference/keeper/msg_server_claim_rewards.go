@@ -14,6 +14,7 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/productscience/inference/x/inference/calculations"
 	"github.com/productscience/inference/x/inference/types"
+	"github.com/shopspring/decimal"
 )
 
 const maxInferenceSampleSize = 2000
@@ -221,7 +222,10 @@ func (k msgServer) hasSignificantMissedValidations(ctx sdk.Context, msg *types.M
 		}
 	}
 	params := k.GetParams(ctx)
-	p0 := params.ValidationParams.BinomTestP0.ToDecimal()
+	p0 := decimal.NewFromFloat(0.10)
+	if params.ValidationParams != nil && params.ValidationParams.BinomTestP0 != nil {
+		p0 = params.ValidationParams.BinomTestP0.ToDecimal()
+	}
 	passed, err := calculations.MissedStatTest(missed, total, p0)
 	k.LogInfo("Missed validations", types.Claims, "missed", missed, "totalToBeValidated", total, "passed", passed)
 
@@ -375,7 +379,6 @@ func (k msgServer) getMustBeValidatedInferences(ctx sdk.Context, msg *types.MsgC
 		modelTotalWeights[subModelId] = subTotalWeight
 	}
 
-	// Seed RNG deterministically using block hash
 	blockHash := ctx.HeaderInfo().Hash
 	blockHashSeed := int64(binary.BigEndian.Uint64(blockHash[:8]))
 	rng := rand.New(rand.NewSource(blockHashSeed))
