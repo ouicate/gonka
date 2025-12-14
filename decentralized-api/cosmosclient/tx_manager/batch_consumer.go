@@ -15,6 +15,7 @@ import (
 const (
 	batchStartConsumer  = "batch-start-consumer"
 	batchFinishConsumer = "batch-finish-consumer"
+	batchAckWait        = time.Minute // must exceed FlushTimeout to prevent redelivery
 )
 
 type BatchConfig struct {
@@ -74,11 +75,18 @@ func (c *BatchConsumer) Start() error {
 }
 
 func (c *BatchConsumer) subscribeStream(stream, consumer string, handler func(*nats.Msg)) error {
-	_, err := c.js.Subscribe(stream, handler, nats.Durable(consumer), nats.ManualAck())
+	_, err := c.js.Subscribe(stream, handler,
+		nats.Durable(consumer),
+		nats.ManualAck(),
+		nats.AckWait(batchAckWait),
+	)
 	return err
 }
 
 func (c *BatchConsumer) handleStartMsg(msg *nats.Msg) {
+	if err := msg.InProgress(); err != nil {
+		logging.Error("Failed to mark start msg in progress", types.Messages, "error", err)
+	}
 	sdkMsg, err := c.unmarshalMsg(msg.Data)
 	if err != nil {
 		logging.Error("Failed to unmarshal start msg", types.Messages, "error", err)
@@ -101,6 +109,9 @@ func (c *BatchConsumer) handleStartMsg(msg *nats.Msg) {
 }
 
 func (c *BatchConsumer) handleFinishMsg(msg *nats.Msg) {
+	if err := msg.InProgress(); err != nil {
+		logging.Error("Failed to mark finish msg in progress", types.Messages, "error", err)
+	}
 	sdkMsg, err := c.unmarshalMsg(msg.Data)
 	if err != nil {
 		logging.Error("Failed to unmarshal finish msg", types.Messages, "error", err)
@@ -127,9 +138,24 @@ func (c *BatchConsumer) flushLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		c.extendAckDeadlines()
 		c.checkAndFlushStart()
 		c.checkAndFlushFinish()
 	}
+}
+
+func (c *BatchConsumer) extendAckDeadlines() {
+	c.startMu.Lock()
+	for _, p := range c.startBatch {
+		_ = p.natsMsg.InProgress()
+	}
+	c.startMu.Unlock()
+
+	c.finishMu.Lock()
+	for _, p := range c.finishBatch {
+		_ = p.natsMsg.InProgress()
+	}
+	c.finishMu.Unlock()
 }
 
 func (c *BatchConsumer) checkAndFlushStart() {
