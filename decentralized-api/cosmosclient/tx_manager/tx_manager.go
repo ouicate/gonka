@@ -701,13 +701,17 @@ func (m *manager) unpackTx(bz []byte) (sdk.Msg, error) {
 }
 
 func (m *manager) unpackBatch(rawBatch [][]byte) ([]sdk.Msg, error) {
-	msgs := make([]sdk.Msg, len(rawBatch))
+	msgs := make([]sdk.Msg, 0, len(rawBatch))
 	for i, bz := range rawBatch {
 		msg, err := m.unpackTx(bz)
 		if err != nil {
-			return nil, err
+			logging.Error("skipping invalid message in batch", types.Messages, "index", i, "error", err)
+			continue
 		}
-		msgs[i] = msg
+		msgs = append(msgs, msg)
+	}
+	if len(msgs) == 0 {
+		return nil, errors.New("all messages in batch failed to unpack")
 	}
 	return msgs, nil
 }

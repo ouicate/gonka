@@ -9,7 +9,6 @@ import (
 )
 
 // StorePayloadRequest is the request body for storing payloads
-// Note: EpochId is string because Kotlin's cosmosJson serializes Long as string
 type StorePayloadRequest struct {
 	PromptPayload   string `json:"prompt_payload"`
 	ResponsePayload string `json:"response_payload"`
