@@ -17,7 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const maxInferenceSampleSize = 2000
+const maxInferenceSampleSize = 10000
 
 func (k msgServer) ClaimRewards(goCtx context.Context, msg *types.MsgClaimRewards) (*types.MsgClaimRewardsResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)

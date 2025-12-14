@@ -13,7 +13,7 @@ import (
 
 const (
 	benchmarkInferences = 1_000_000
-	sampleSize          = 2000
+	sampleSize          = 10000
 )
 
 // TestClaimRewardsPerformance measures getMustBeValidatedInferences performance
@@ -70,13 +70,13 @@ func TestClaimRewardsPerformance(t *testing.T) {
 			benchmarkInferences, mustValidate, elapsed, float64(elapsed.Microseconds())/float64(benchmarkInferences))
 	})
 
-	t.Run("Optimized_ReservoirSampling", func(t *testing.T) {
+	runReservoirSampling := func(t *testing.T, testSampleSize int) {
 		start := time.Now()
 
 		blockHashSeed := int64(binary.BigEndian.Uint64(blockHash[:8]))
 		rng := rand.New(rand.NewSource(blockHashSeed))
 
-		sample := make([]types.InferenceValidationDetails, 0, sampleSize)
+		sample := make([]types.InferenceValidationDetails, 0, testSampleSize)
 		filteredCount := 0
 		mustValidate := 0
 
@@ -89,11 +89,11 @@ func TestClaimRewardsPerformance(t *testing.T) {
 			}
 			filteredCount++
 
-			if len(sample) < sampleSize {
+			if len(sample) < testSampleSize {
 				sample = append(sample, inf)
 			} else {
 				j := rng.Intn(filteredCount)
-				if j < sampleSize {
+				if j < testSampleSize {
 					sample[j] = inf
 				}
 			}
@@ -109,7 +109,15 @@ func TestClaimRewardsPerformance(t *testing.T) {
 		}
 
 		elapsed := time.Since(start)
-		t.Logf("Reservoir sampling: %d inferences, %d sampled, %d must validate, took %v (%.2f us/inference)",
-			benchmarkInferences, len(sample), mustValidate, elapsed, float64(elapsed.Microseconds())/float64(benchmarkInferences))
+		t.Logf("Reservoir sampling (size=%d): %d inferences, %d sampled, %d must validate, took %v (%.2f us/inference)",
+			testSampleSize, benchmarkInferences, len(sample), mustValidate, elapsed, float64(elapsed.Microseconds())/float64(benchmarkInferences))
+	}
+
+	t.Run("Optimized_ReservoirSampling_2000", func(t *testing.T) {
+		runReservoirSampling(t, 2000)
+	})
+
+	t.Run("Optimized_ReservoirSampling_10000", func(t *testing.T) {
+		runReservoirSampling(t, 10000)
 	})
 }
