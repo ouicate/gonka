@@ -214,19 +214,13 @@ func (c *BatchConsumer) broadcastBatch(batchType string, batch []pendingMsg) {
 
 	logging.Info("Broadcasting batch", types.Messages, "type", batchType, "count", len(msgs))
 
-	err := c.txManager.SendBatchAsyncWithRetry(msgs)
-	if err != nil {
+	if err := c.txManager.SendBatchAsyncWithRetry(msgs); err != nil {
 		logging.Error("Failed to hand off batch to TxManager", types.Messages, "type", batchType, "error", err)
-		for _, p := range batch {
-			p.natsMsg.Nak()
-		}
-		return
 	}
 
 	for _, p := range batch {
 		p.natsMsg.Ack()
 	}
-	logging.Debug("Batch handed off to TxManager", types.Messages, "type", batchType, "count", len(msgs))
 }
 
 func (c *BatchConsumer) unmarshalMsg(data []byte) (sdk.Msg, error) {
