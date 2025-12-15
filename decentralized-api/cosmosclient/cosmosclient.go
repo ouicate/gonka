@@ -151,6 +151,14 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 		return nil, err
 	}
 
+	// Ensure natsConn is closed on any error to unbind consumers
+	var success bool
+	defer func() {
+		if !success {
+			natsConn.Close()
+		}
+	}()
+
 	mn, err := tx_manager.StartTxManager(ctx, &cosmoclient, apiAccount, time.Second*60, natsConn, accAddress)
 	if err != nil {
 		return nil, err
@@ -185,6 +193,7 @@ func NewInferenceCosmosClient(ctx context.Context, addressPrefix string, config 
 			"flushTimeoutSeconds", batchingCfg.FlushTimeoutSeconds)
 	}
 
+	success = true
 	return client, nil
 }
 

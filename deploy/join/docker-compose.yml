@@ -67,11 +67,11 @@ services:
       - DAPI_API__ML_SERVER_PORT=9100
       - DAPI_API__ADMIN_SERVER_PORT=9200
       # PostgreSQL payload storage (optional, uses file storage if not set)
-      - PGHOST=${PGHOST:-payload-db}
-      - PGPORT=${PGPORT:-5432}
-      - PGDATABASE=${PGDATABASE:-payloads}
-      - PGUSER=${PGUSER:-payloads}
-      - PGPASSWORD=${PGPASSWORD:-}
+      - PGHOST=${POSTGRES_HOST:-}
+      - PGPORT=${POSTGRES_PORT:-5432}
+      - PGDATABASE=${POSTGRES_DB:-payloads}
+      - PGUSER=${POSTGRES_USER:-payloads}
+      - PGPASSWORD=${POSTGRES_PASSWORD:-}
     ports:
       - "9100:9100"
       - "127.0.0.1:9200:9200"
