@@ -59,7 +59,7 @@ Migration sets new parameters:
 - PoC parameters (see "PoC Parameters On-Chain" in Changes section)
 - `ValidationParams.ExpirationBlocks` = 150
 - `ValidationParams.BinomTestP0` = 0.40 (temporary increase to ensure new payload storage stability)
-- `BandwidthLimitsParams.MaxInferencesPerBlock` = 100 (adds absolute inference count limit per block, in addition to existing bandwidth-based KB limiting; divided among participants)
+- `BandwidthLimitsParams.MaxInferencesPerBlock` = 1000 (adds absolute inference count limit per block, in addition to existing bandwidth-based KB limiting; divided among participants)
 
 ## Changes
 

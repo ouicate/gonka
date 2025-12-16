@@ -147,7 +147,7 @@ func setNewPocParams(ctx context.Context, k keeper.Keeper) error {
 	// Temporary increase to make sure new payload storage is stable
 	params.ValidationParams.BinomTestP0 = types.DecimalFromFloat(0.40)
 
-	params.BandwidthLimitsParams.MaxInferencesPerBlock = 2000
+	params.BandwidthLimitsParams.MaxInferencesPerBlock = 1000
 
 	return k.SetParams(ctx, params)
 }
