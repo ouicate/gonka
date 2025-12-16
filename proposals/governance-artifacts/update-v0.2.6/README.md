@@ -55,7 +55,11 @@ We encourage all reviewers to request access to our testnet environment to valid
 
 The on-chain migration logic is defined in [`upgrades.go`](https://github.com/gonka-ai/gonka/blob/gm/dev-0.2.6/inference-chain/app/upgrades/v0_2_6/upgrades.go).
 
-Migration sets new PoC parameters (see "PoC Parameters On-Chain" in Changes section).
+Migration sets new parameters:
+- PoC parameters (see "PoC Parameters On-Chain" in Changes section)
+- `ValidationParams.ExpirationBlocks` = 150
+- `ValidationParams.BinomTestP0` = 0.40 (temporary increase to ensure new payload storage stability)
+- `BandwidthLimitsParams.MaxInferencesPerBlock` = 100 (adds absolute inference count limit per block, in addition to existing bandwidth-based KB limiting; divided among participants)
 
 ## Changes
 

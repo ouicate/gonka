@@ -147,7 +147,7 @@ func setNewPocParams(ctx context.Context, k keeper.Keeper) error {
 	// Temporary increase to make sure new payload storage is stable
 	params.ValidationParams.BinomTestP0 = types.DecimalFromFloat(0.40)
 
-	params.BandwidthLimitsParams.MaxInferencesPerBlock = 100
+	params.BandwidthLimitsParams.MaxInferencesPerBlock = 2000
 
 	return k.SetParams(ctx, params)
 }
@@ -162,16 +162,40 @@ func distributeBountyRewards(ctx context.Context, k keeper.Keeper, distrKeeper d
 		{"bounty_program", bountyProgramRewards},
 	}
 
+	var totalRequired int64
+	for _, section := range sections {
+		for _, bounty := range section.bounties {
+			totalRequired += bounty.Amount
+		}
+	}
+
+	feePool, err := distrKeeper.FeePool.Get(ctx)
+	if err != nil {
+		k.Logger().Warn("failed to get fee pool, skipping bounty distribution", "error", err)
+		return nil
+	}
+
+	available := feePool.CommunityPool.AmountOf(types.BaseCoin).TruncateInt64()
+	if available < totalRequired {
+		k.Logger().Warn("insufficient fee pool balance, skipping bounty distribution",
+			"required", totalRequired, "available", available)
+		return nil
+	}
+
+	k.Logger().Info("fee pool balance sufficient", "required", totalRequired, "available", available)
+
 	for _, section := range sections {
 		for _, bounty := range section.bounties {
 			recipient, err := sdk.AccAddressFromBech32(bounty.Address)
 			if err != nil {
-				return err
+				k.Logger().Error("invalid bounty address", "address", bounty.Address, "error", err)
+				continue
 			}
 
 			coins := sdk.NewCoins(sdk.NewCoin(types.BaseCoin, math.NewInt(bounty.Amount)))
 			if err := distrKeeper.DistributeFromFeePool(ctx, coins, recipient); err != nil {
-				return err
+				k.Logger().Error("failed to distribute bounty", "address", bounty.Address, "error", err)
+				continue
 			}
 
 			k.Logger().Info("bounty distributed", "section", section.name, "address", bounty.Address, "amount", bounty.Amount)
