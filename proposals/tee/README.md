@@ -121,6 +121,7 @@ Note: Metadata can be sent in batches periodically to optimize on-chain transact
 
 Signed metadata from a TEE key is inherently trusted - the execution environment is pre-defined and verified via attestation. The MLNode cannot produce valid signatures without running in the attested TEE, which guarantees the correct binary ran.
 
+![proposed inference flow diagram](./options.png)
 ---
 
 **Open Question 3:** How to provide redundancy when a Confidential MLNode becomes unavailable?
