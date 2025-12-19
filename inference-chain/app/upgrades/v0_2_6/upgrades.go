@@ -87,6 +87,9 @@ var (
 		// Bug Bounty: Vulnerability in Confirmation PoC
 		// https://github.com/gonka-ai/gonka/pull/459/commits/b44d51e0cce56f7d8ea35122e1b49cd4be9dd287
 		{"gonka1gmuxdcxlsxn5z72elx77w9zym7yrgfxqgzg6ry", 20000000000000},
+
+		// Bug Bounty: Bridge Exchange Double Vote Case Bypass
+		{"gonka1s8szs7n43jxgz4a4xaxmzm5emh7fmjxhach7w8", 10000000000000},
 	}
 )
 
