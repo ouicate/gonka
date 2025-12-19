@@ -82,10 +82,10 @@ func (k msgServer) StartInference(goCtx context.Context, msg *types.MsgStartInfe
 	}, nil
 }
 
-func failedStart(errorMessage error, message *types.MsgStartInference) *types.MsgStartInferenceResponse {
+func failedStart(err error, message *types.MsgStartInference) *types.MsgStartInferenceResponse {
 	return &types.MsgStartInferenceResponse{
 		InferenceIndex: message.InferenceId,
-		ErrorMessage:   errorMessage.Error(),
+		ErrorMessage:   err.Error(),
 	}
 }
 
