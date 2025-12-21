@@ -142,4 +142,6 @@ type BlsKeeper interface {
 // UpgradeKeeper defines the expected interface for the upgrade module.
 type UpgradeKeeper interface {
 	GetUpgradePlan(ctx context.Context) (plan upgradetypes.Plan, err error)
+	ClearUpgradePlan(ctx context.Context) error
+	ScheduleUpgrade(ctx context.Context, plan upgradetypes.Plan) error
 }

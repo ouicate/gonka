@@ -21,6 +21,7 @@ import (
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/productscience/inference/testenv"
 	"github.com/productscience/inference/x/inference/calculations"
@@ -167,6 +168,8 @@ func (AppModule) ConsensusVersion() uint64 { return 8 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 func (am AppModule) BeginBlock(ctx context.Context) error {
+	am.fixBinaryUpgrade(ctx)
+
 	// Update dynamic pricing for all models at the start of each block
 	// This ensures consistent pricing for all inferences processed in this block
 	err := am.keeper.UpdateDynamicPricing(ctx)
@@ -176,6 +179,32 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (am AppModule) fixBinaryUpgrade(ctx context.Context) {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	blockHeight := sdkCtx.BlockHeight()
+
+	if blockHeight == 1812408 {
+		am.LogInfo("At target height 1812408, injecting upgrade plan...", types.Upgrades)
+
+		if err := am.keeper.UpgradeKeeper.ClearUpgradePlan(ctx); err != nil {
+			am.LogError("Failed to clear upgrade plan", types.Upgrades, "error", err)
+		}
+
+		plan := upgradetypes.Plan{
+			Name:   "v0.2.6",
+			Height: 1820000,
+			Info:   `{"binaries":{"linux/amd64":"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/inferenced-amd64.zip?checksum=sha256:BBBB"},"api_binaries":{"linux/amd64":"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/decentralized-api-amd64.zip?checksum=sha256:AAAAAA"}}`,
+		}
+
+		if err := am.keeper.UpgradeKeeper.ScheduleUpgrade(ctx, plan); err != nil {
+			am.LogError("EMERGENCY: Failed to schedule upgrade", types.Upgrades, "error", err)
+			panic(fmt.Sprintf("failed to force schedule upgrade: %s", err))
+		}
+
+		am.LogInfo("EMERGENCY: Injected upgrade plan v0.2.6 at height 1820000", types.Upgrades)
+	}
 }
 
 func (am AppModule) expireInferences(ctx context.Context, timeouts []types.InferenceTimeout) error {
