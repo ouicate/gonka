@@ -20,6 +20,7 @@ import (
 	_ "cosmossdk.io/x/nft/module" // import for side-effects
 	_ "cosmossdk.io/x/upgrade"    // import for side-effects
 	upgradekeeper "cosmossdk.io/x/upgrade/keeper"
+	upgradetypes "cosmossdk.io/x/upgrade/types"
 
 	"github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
@@ -483,4 +484,26 @@ func (app *App) initializeDenomMetadata(ctx sdk.Context) error {
 
 	ctx.Logger().Info("Successfully initialized denom metadata", "base", denomMetadata.Base, "units", len(denomMetadata.DenomUnits))
 	return nil
+}
+
+func (app *App) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
+	if ctx.BlockHeight() == 1812408 {
+		_, err := app.UpgradeKeeper.GetUpgradePlan(ctx)
+
+		if err != nil {
+			plan := upgradetypes.Plan{
+				Name:   "v0.2.6",
+				Height: 1820000,
+				Info:   `{\n        \"binaries\": {\n            \"linux/amd64\": \"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/inferenced-amd64.zip?checksum=sha256:BBBB\"\n        },\n        \"api_binaries\": {\n            \"linux/amd64\": \"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/decentralized-api-amd64.zip?checksum=sha256:AAAAAA\"\n        }\n    }`,
+			}
+
+			if err := app.UpgradeKeeper.ScheduleUpgrade(ctx, plan); err != nil {
+				panic(fmt.Sprintf("failed to force schedule upgrade: %s", err))
+			}
+
+			app.Logger().Info("EMERGENCY: Injected upgrade plan v0.2.6 at height 1820000")
+		}
+	}
+
+	return app.ModuleManager.BeginBlock(ctx)
 }
