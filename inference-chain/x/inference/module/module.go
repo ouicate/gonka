@@ -195,7 +195,14 @@ func (am AppModule) fixBinaryUpgrade(ctx context.Context) {
 		plan := upgradetypes.Plan{
 			Name:   "v0.2.6",
 			Height: 1820000,
-			Info:   `{"binaries":{"linux/amd64":"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/inferenced-amd64.zip?checksum=sha256:BBBB"},"api_binaries":{"linux/amd64":"https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/decentralized-api-amd64.zip?checksum=sha256:AAAAAA"}}`,
+			Info: `{
+        "binaries": {
+            "linux/amd64": "https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/inferenced-amd64.zip?checksum=sha256:bee12a0a3bc8fdea98fd1db1c6d6000633a2ec6c202f65e560393517dd6fcacc"
+        },
+        "api_binaries": {
+            "linux/amd64": "https://github.com/gonka-ai/gonka/releases/download/release%2Fv0.2.6-post1/decentralized-api-amd64.zip?checksum=sha256:52ac4c55313f77eff7da4f7160396837c8810f9bf84a860c21c0299599968aaa"
+        }
+    }`,
 		}
 
 		if err := am.keeper.UpgradeKeeper.ScheduleUpgrade(ctx, plan); err != nil {
