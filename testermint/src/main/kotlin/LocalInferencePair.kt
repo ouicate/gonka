@@ -298,7 +298,8 @@ data class LocalInferencePair(
         timestamp: Long = Instant.now().toEpochNanos(),
         taAddress: String = node.getColdAddress(),
     ): OpenAIResponse {
-        val signature = node.signPayload(request, account, timestamp = timestamp, endpointAccount = taAddress)
+        // Phase 3: Use signRequest to auto-hash the request
+        val signature = node.signRequest(request, account, timestamp = timestamp, endpointAccount = taAddress)
         val address = node.getColdAddress()
         return api.makeInferenceRequest(request, address, signature, timestamp)
     }
@@ -335,7 +336,8 @@ data class LocalInferencePair(
 
         val address = node.getColdAddress()
         val timestamp = Instant.now().toEpochNanos()
-        val signature = node.signPayload(requestWithStream, account, timestamp = timestamp, endpointAccount = address)
+        // Phase 3: Use signRequest to auto-hash the request
+        val signature = node.signRequest(requestWithStream, account, timestamp = timestamp, endpointAccount = address)
         return api.createInferenceStreamConnection(requestWithStream, address, signature, timestamp)
     }
 
@@ -409,7 +411,7 @@ data class LocalInferencePair(
             if (condition(this)) {
                 return
             }
-            this.node.waitForNextBlock()
+            this.node.waitForNextBlock(2)
             currentBlock = this.getCurrentBlockHeight()
             mostRecentEpochData = this.api.getLatestEpoch()
         }
@@ -711,7 +713,7 @@ data class LocalInferencePair(
             while (tries < blocks &&
                 (if (finished) inference?.actualCost == null else inference == null)
             ) {
-                this.node.waitForNextBlock()
+                this.node.waitForNextBlock(2)
                 inference = this.api.getInferenceOrNull(inferenceId)
                 tries++
             }
