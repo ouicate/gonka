@@ -803,16 +803,6 @@ func validateInferencePruningEpochThreshold(i interface{}) error {
 	return nil
 }
 
-// ReduceSubsidyPercentage This produces the exact table we expect, as outlined in the whitepaper
-// We round to 4 decimal places, and we use decimal to avoid floating point errors
-func (p *TokenomicsParams) ReduceSubsidyPercentage() *TokenomicsParams {
-	csp := p.CurrentSubsidyPercentage.ToDecimal()
-	sra := p.SubsidyReductionAmount.ToDecimal()
-	newCSP := csp.Mul(decimal.NewFromFloat(1).Sub(sra)).Round(4)
-	p.CurrentSubsidyPercentage = &Decimal{Value: newCSP.CoefficientInt64(), Exponent: newCSP.Exponent()}
-	return p
-}
-
 func (d *Decimal) ToLegacyDec() (math.LegacyDec, error) {
 	return math.LegacyNewDecFromStr(d.ToDecimal().String())
 }

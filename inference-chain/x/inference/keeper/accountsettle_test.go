@@ -14,14 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var defaultSettleParameters = inference.SettleParameters{
-	CurrentSubsidyPercentage: 0.90,
-	TotalSubsidyPaid:         0,
-	StageCutoff:              0.05,
-	StageDecrease:            0.20,
-	TotalSubsidySupply:       600000000000,
-}
-
 // createTestLogger creates a logger for testing
 func createTestLogger(t *testing.T) log.Logger {
 	return log.NewTestLogger(t)
@@ -29,42 +21,6 @@ func createTestLogger(t *testing.T) log.Logger {
 
 func calcExpectedRewards(epochIndex int64, params types.Params) uint64 {
 	return inference.CalculateFixedEpochReward(uint64(epochIndex-1), params.BitcoinRewardParams.InitialEpochReward, params.BitcoinRewardParams.DecayRate)
-}
-
-func TestReduceSubsidy(t *testing.T) {
-	logger := createTestLogger(t)
-	logger.Info("Starting TestReduceSubsidy")
-
-	oParams := types.TokenomicsParams{
-		SubsidyReductionAmount:   types.DecimalFromFloat(0.20),
-		SubsidyReductionInterval: types.DecimalFromFloat(0.05),
-		CurrentSubsidyPercentage: types.DecimalFromFloat(0.90),
-	}
-	logger.Info("Initial tokenomics params", "subsidyPercentage", oParams.CurrentSubsidyPercentage.ToFloat32())
-
-	params := oParams.ReduceSubsidyPercentage()
-	logger.Info("After first reduction", "subsidyPercentage", params.CurrentSubsidyPercentage.ToFloat32())
-	require.Equal(t, float32(0.72), params.CurrentSubsidyPercentage.ToFloat32())
-	params2 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.576), params2.CurrentSubsidyPercentage.ToFloat32())
-	params3 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.4608), params3.CurrentSubsidyPercentage.ToFloat32())
-	params4 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.3686), params4.CurrentSubsidyPercentage.ToFloat32())
-	params5 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.2949), params5.CurrentSubsidyPercentage.ToFloat32())
-	params6 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.2359), params6.CurrentSubsidyPercentage.ToFloat32())
-	params7 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.1887), params7.CurrentSubsidyPercentage.ToFloat32())
-	params8 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.1510), params8.CurrentSubsidyPercentage.ToFloat32())
-	params9 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.1208), params9.CurrentSubsidyPercentage.ToFloat32())
-	params10 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.0966), params10.CurrentSubsidyPercentage.ToFloat32())
-	params11 := oParams.ReduceSubsidyPercentage()
-	require.Equal(t, float32(0.0773), params11.CurrentSubsidyPercentage.ToFloat32())
 }
 
 func TestActualSettle(t *testing.T) {
