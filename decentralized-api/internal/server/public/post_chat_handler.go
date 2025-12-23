@@ -39,6 +39,10 @@ const (
 	BothContexts = TransferContext | ExecutorContext
 )
 
+// HTTP client with timeout for transfer agent requests to executor nodes
+// Prevents request-hang DoS attacks from malicious executor URLs
+var executorHttpClient = utils.NewHttpClient(30 * time.Second)
+
 // Package-level variables for AuthKey reuse prevention
 var (
 	// Map for O(1) lookup of existing AuthKeys and their contexts
@@ -282,7 +286,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash)
 	req.Header.Set("Content-Type", request.Request.Header.Get("Content-Type"))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := executorHttpClient.Do(req)
 	if err != nil {
 		logging.Error("Failed to make http request to executor", types.Inferences, "error", err, "url", executor.Url)
 		return err
