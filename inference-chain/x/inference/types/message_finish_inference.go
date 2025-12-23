@@ -42,7 +42,7 @@ func (msg *MsgFinishInference) ValidateBasic() error {
 	if strings.TrimSpace(msg.ResponseHash) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "response_hash is required")
 	}
-	if strings.TrimSpace(msg.PromptHash) == "" {
+	if strings.TrimSpace(msg.ModifiedPromptHash) == "" {
 		return errorsmod.Wrap(sdkerrors.ErrInvalidRequest, "prompt_hash is required")
 	}
 	if strings.TrimSpace(msg.OriginalPromptHash) == "" {

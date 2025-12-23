@@ -295,14 +295,14 @@ func TestProcessStartInference(t *testing.T) {
 			name:             "New inference",
 			currentInference: &types.Inference{},
 			startMessage: &types.MsgStartInference{
-				InferenceId:      "test-id",
-				PromptHash:       "hash",
-				PromptTokenCount: 10,
-				RequestedBy:      "requester",
-				Model:            "model",
-				MaxTokens:        100,
-				AssignedTo:       "assignee",
-				NodeVersion:      "1.0",
+				InferenceId:        "test-id",
+				ModifiedPromptHash: "hash",
+				PromptTokenCount:   10,
+				RequestedBy:        "requester",
+				Model:              "model",
+				MaxTokens:          100,
+				AssignedTo:         "assignee",
+				NodeVersion:        "1.0",
 			},
 			blockContext: BlockContext{
 				BlockHeight:    100,
@@ -318,14 +318,14 @@ func TestProcessStartInference(t *testing.T) {
 				ExecutedBy:  "executor",
 			},
 			startMessage: &types.MsgStartInference{
-				InferenceId:      "test-id",
-				PromptHash:       "hash",
-				PromptTokenCount: 10,
-				RequestedBy:      "requester",
-				Model:            "model",
-				MaxTokens:        100,
-				AssignedTo:       "assignee",
-				NodeVersion:      "1.0",
+				InferenceId:        "test-id",
+				ModifiedPromptHash: "hash",
+				PromptTokenCount:   10,
+				RequestedBy:        "requester",
+				Model:              "model",
+				MaxTokens:          100,
+				AssignedTo:         "assignee",
+				NodeVersion:        "1.0",
 			},
 			blockContext: BlockContext{
 				BlockHeight:    100,
@@ -355,7 +355,7 @@ func TestProcessStartInference(t *testing.T) {
 			assert.NotNil(t, payments)
 			assert.Equal(t, tt.expectedStatus, inference.Status)
 			assert.Equal(t, tt.startMessage.InferenceId, inference.InferenceId)
-			assert.Equal(t, tt.startMessage.PromptHash, inference.PromptHash)
+			assert.Equal(t, tt.startMessage.ModifiedPromptHash, inference.PromptHash)
 			// Phase 6: PromptPayload no longer stored on-chain
 			// PromptTokenCount is not set in ProcessStartInference anymore - only used for escrow calculation
 			// Real token count is set in ProcessFinishInference
