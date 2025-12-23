@@ -79,7 +79,7 @@ func RetrievePayloadsFromExecutor(
 	timestamp := time.Now().UnixNano()
 	validatorAddress := recorder.GetAccountAddress()
 
-	signature, err := signPayloadRequest(inferenceId, timestamp, validatorAddress, recorder)
+	signature, err := signPayloadRequest(inferenceId, timestamp, validatorAddress, epochId, recorder)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to sign request: %w", err)
 	}
@@ -228,15 +228,19 @@ func retrievePayloadsFromChain(
 }
 
 // signPayloadRequest signs the payload retrieval request with validator's key
-// Validator signs: inferenceId + timestamp + validatorAddress
+// Validator signs: inferenceId + epochId + timestamp + validatorAddress
+// EpochId binding prevents replay attacks within epoch windows
 func signPayloadRequest(
 	inferenceId string,
 	timestamp int64,
 	validatorAddress string,
+	epochId uint64,
 	recorder cosmosclient.CosmosMessageClient,
 ) (string, error) {
+	// Include epochId in payload to bind signature to specific epoch
+	payloadWithEpoch := inferenceId + strconv.FormatUint(epochId, 10)
 	components := calculations.SignatureComponents{
-		Payload:         inferenceId,
+		Payload:         payloadWithEpoch,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
