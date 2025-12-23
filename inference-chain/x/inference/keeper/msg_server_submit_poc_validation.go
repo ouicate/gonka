@@ -52,6 +52,20 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 			return nil, sdkerrors.Wrap(types.ErrPocTooLate, "Confirmation PoC validation window closed")
 		}
 
+		// Check if validation already exists (prevent vote flipping)
+		exists, err := k.HasPoCValidation(ctx, activeEvent.TriggerHeight, msg.ParticipantAddress, msg.Creator)
+		if err != nil {
+			k.LogError(PocFailureTag+"[SubmitPocValidation] Error checking existing validation", types.PoC, "error", err)
+			return nil, err
+		}
+		if exists {
+			k.LogWarn("[SubmitPocValidation] Confirmation PoC: Duplicate validation rejected", types.PoC,
+				"participant", msg.ParticipantAddress,
+				"validatorParticipant", msg.Creator,
+				"triggerHeight", activeEvent.TriggerHeight)
+			return nil, sdkerrors.Wrap(types.ErrPocValidationAlreadyExists, "validation already submitted for this participant")
+		}
+
 		// Store validation using trigger_height as key
 		validation := toPoCValidation(msg, currentBlockHeight)
 		validation.PocStageStartBlockHeight = activeEvent.TriggerHeight // Use trigger_height as key
@@ -101,6 +115,20 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 			"epochContext", epochContext)
 		errMsg := fmt.Sprintf("msg.BlockHeight = %d, currentBlockHeight = %d", startBlockHeight, currentBlockHeight)
 		return nil, sdkerrors.Wrap(types.ErrPocTooLate, errMsg)
+	}
+
+	// Check if validation already exists (prevent vote flipping)
+	exists, err := k.HasPoCValidation(ctx, startBlockHeight, msg.ParticipantAddress, msg.Creator)
+	if err != nil {
+		k.LogError(PocFailureTag+"[SubmitPocValidation] Error checking existing validation", types.PoC, "error", err)
+		return nil, err
+	}
+	if exists {
+		k.LogWarn("[SubmitPocValidation] Duplicate validation rejected", types.PoC,
+			"participant", msg.ParticipantAddress,
+			"validatorParticipant", msg.Creator,
+			"startBlockHeight", startBlockHeight)
+		return nil, sdkerrors.Wrap(types.ErrPocValidationAlreadyExists, "validation already submitted for this participant")
 	}
 
 	validation := toPoCValidation(msg, currentBlockHeight)

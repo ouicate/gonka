@@ -50,6 +50,15 @@ func (k Keeper) GetPoCBatchesCountByStage(ctx context.Context, pocStageStartBloc
 	return count, nil
 }
 
+// HasPoCValidation checks if a validation already exists for the given key combination.
+// Returns true if a validation exists, false otherwise.
+func (k Keeper) HasPoCValidation(ctx context.Context, pocStageStartBlockHeight int64, participantAddress string, validatorAddress string) (bool, error) {
+	pAddr := sdk.MustAccAddressFromBech32(participantAddress)
+	vAddr := sdk.MustAccAddressFromBech32(validatorAddress)
+	pk := collections.Join3(pocStageStartBlockHeight, pAddr, vAddr)
+	return k.PoCValidations.Has(ctx, pk)
+}
+
 func (k Keeper) SetPoCValidation(ctx context.Context, validation types.PoCValidation) {
 	pAddr := sdk.MustAccAddressFromBech32(validation.ParticipantAddress)
 	vAddr := sdk.MustAccAddressFromBech32(validation.ValidatorParticipantAddress)
