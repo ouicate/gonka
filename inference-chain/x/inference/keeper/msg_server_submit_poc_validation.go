@@ -52,28 +52,12 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 			return nil, sdkerrors.Wrap(types.ErrPocTooLate, "Confirmation PoC validation window closed")
 		}
 
-		// Check if validation already exists (prevent vote flipping)
-		exists, err := k.HasPoCValidation(ctx, activeEvent.TriggerHeight, msg.ParticipantAddress, msg.Creator)
+		err = k.checkAndStorePoCValidation(ctx, msg, activeEvent.TriggerHeight, currentBlockHeight, "triggerHeight",
+			"[SubmitPocValidation] Confirmation PoC: Duplicate validation rejected",
+			"[SubmitPocValidation] Confirmation PoC validation stored")
 		if err != nil {
-			k.LogError(PocFailureTag+"[SubmitPocValidation] Error checking existing validation", types.PoC, "error", err)
 			return nil, err
 		}
-		if exists {
-			k.LogWarn("[SubmitPocValidation] Confirmation PoC: Duplicate validation rejected", types.PoC,
-				"participant", msg.ParticipantAddress,
-				"validatorParticipant", msg.Creator,
-				"triggerHeight", activeEvent.TriggerHeight)
-			return nil, sdkerrors.Wrap(types.ErrPocValidationAlreadyExists, "validation already submitted for this participant")
-		}
-
-		// Store validation using trigger_height as key
-		validation := toPoCValidation(msg, currentBlockHeight)
-		validation.PocStageStartBlockHeight = activeEvent.TriggerHeight // Use trigger_height as key
-		k.SetPoCValidation(ctx, *validation)
-		k.LogInfo("[SubmitPocValidation] Confirmation PoC validation stored", types.PoC,
-			"participant", msg.ParticipantAddress,
-			"validatorParticipant", msg.Creator,
-			"triggerHeight", activeEvent.TriggerHeight)
 
 		return &types.MsgSubmitPocValidationResponse{}, nil
 	}
@@ -117,24 +101,49 @@ func (k msgServer) SubmitPocValidation(goCtx context.Context, msg *types.MsgSubm
 		return nil, sdkerrors.Wrap(types.ErrPocTooLate, errMsg)
 	}
 
-	// Check if validation already exists (prevent vote flipping)
-	exists, err := k.HasPoCValidation(ctx, startBlockHeight, msg.ParticipantAddress, msg.Creator)
+	err = k.checkAndStorePoCValidation(ctx, msg, startBlockHeight, currentBlockHeight, "startBlockHeight",
+		"[SubmitPocValidation] Duplicate validation rejected",
+		"")
 	if err != nil {
-		k.LogError(PocFailureTag+"[SubmitPocValidation] Error checking existing validation", types.PoC, "error", err)
 		return nil, err
 	}
+
+	return &types.MsgSubmitPocValidationResponse{}, nil
+}
+
+func (k msgServer) checkAndStorePoCValidation(
+	ctx sdk.Context,
+	msg *types.MsgSubmitPocValidation,
+	pocStageStartBlockHeight int64,
+	currentBlockHeight int64,
+	blockHeightLogKey string,
+	duplicateLogMessage string,
+	storedLogMessage string,
+) error {
+	exists, err := k.HasPoCValidation(ctx, pocStageStartBlockHeight, msg.ParticipantAddress, msg.Creator)
+	if err != nil {
+		k.LogError(PocFailureTag+"[SubmitPocValidation] Error checking existing validation", types.PoC, "error", err)
+		return err
+	}
 	if exists {
-		k.LogWarn("[SubmitPocValidation] Duplicate validation rejected", types.PoC,
+		k.LogWarn(duplicateLogMessage, types.PoC,
 			"participant", msg.ParticipantAddress,
 			"validatorParticipant", msg.Creator,
-			"startBlockHeight", startBlockHeight)
-		return nil, sdkerrors.Wrap(types.ErrPocValidationAlreadyExists, "validation already submitted for this participant")
+			blockHeightLogKey, pocStageStartBlockHeight)
+		return sdkerrors.Wrap(types.ErrPocValidationAlreadyExists, "validation already submitted for this participant")
 	}
 
 	validation := toPoCValidation(msg, currentBlockHeight)
+	validation.PocStageStartBlockHeight = pocStageStartBlockHeight
 	k.SetPoCValidation(ctx, *validation)
+	if storedLogMessage != "" {
+		k.LogInfo(storedLogMessage, types.PoC,
+			"participant", msg.ParticipantAddress,
+			"validatorParticipant", msg.Creator,
+			blockHeightLogKey, pocStageStartBlockHeight)
+	}
 
-	return &types.MsgSubmitPocValidationResponse{}, nil
+	return nil
 }
 
 func toPoCValidation(msg *types.MsgSubmitPocValidation, currentBlockHeight int64) *types.PoCValidation {

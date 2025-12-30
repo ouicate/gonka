@@ -41,7 +41,7 @@ const (
 
 // HTTP client with timeout for transfer agent requests to executor nodes
 // Prevents request-hang DoS attacks from malicious executor URLs
-var executorHttpClient = utils.NewHttpClient(30 * time.Second)
+var executorHttpClient = &http.Client{}
 
 // Package-level variables for AuthKey reuse prevention
 var (

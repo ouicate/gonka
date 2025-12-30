@@ -30,7 +30,7 @@ var ErrHashMismatch = errors.New("hash mismatch: executor served wrong payload w
 var ErrEpochStale = errors.New("inference epoch too old, validation no longer useful")
 
 // HTTP client with timeout for payload retrieval
-var payloadRetrievalClient = apiutils.NewHttpClient(30 * time.Second)
+var payloadRetrievalClient = &http.Client{}
 
 // PayloadResponse matches the executor endpoint response
 type PayloadResponse struct {
@@ -237,10 +237,9 @@ func signPayloadRequest(
 	epochId uint64,
 	recorder cosmosclient.CosmosMessageClient,
 ) (string, error) {
-	// Include epochId in payload to bind signature to specific epoch
-	payloadWithEpoch := inferenceId + strconv.FormatUint(epochId, 10)
 	components := calculations.SignatureComponents{
-		Payload:         payloadWithEpoch,
+		Payload:         inferenceId,
+		EpochId:         epochId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",

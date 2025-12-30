@@ -185,10 +185,9 @@ func (s *Server) verifyActiveParticipant(ctx echo.Context, address string, epoch
 // Validator signs: inferenceId + timestamp + validatorAddress + epochId
 // EpochId binding prevents replay attacks within epoch windows
 func validatePayloadRequestSignature(inferenceId string, timestamp int64, validatorAddress string, epochId uint64, pubkeys []string, signature string) error {
-	// Include epochId in payload to bind signature to specific epoch
-	payloadWithEpoch := inferenceId + strconv.FormatUint(epochId, 10)
 	components := calculations.SignatureComponents{
-		Payload:         payloadWithEpoch,
+		Payload:         inferenceId,
+		EpochId:         epochId,
 		Timestamp:       timestamp,
 		TransferAddress: validatorAddress,
 		ExecutorAddress: "",
