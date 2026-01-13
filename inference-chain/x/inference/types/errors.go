@@ -61,4 +61,7 @@ var (
 	ErrParticipantBlocked                    = sdkerrors.Register(ModuleName, 1155, "participant is blocked from participating in PoC")
 	ErrNewParticipantRegistrationClosed      = sdkerrors.Register(ModuleName, 1156, "new participant registration is closed")
 	ErrPocValidationAlreadyExists            = sdkerrors.Register(ModuleName, 1157, "PoC validation already exists for this participant from this validator")
+	ErrArithmeticOverflow                    = sdkerrors.Register(ModuleName, 1158, "arithmetic overflow")
+	ErrInvalidEscrowAmount                   = sdkerrors.Register(ModuleName, 1159, "invalid escrow amount")
+	ErrTokenCountOutOfRange                  = sdkerrors.Register(ModuleName, 1160, "token count out of range")
 )

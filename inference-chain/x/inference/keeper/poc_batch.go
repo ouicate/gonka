@@ -11,17 +11,17 @@ import (
 )
 
 // SetPocBatch stores a PoCBatch under triple key (epoch, participant addr, batch_id)
-func (k Keeper) SetPocBatch(ctx context.Context, batch types.PoCBatch) {
+func (k Keeper) SetPocBatch(ctx context.Context, batch types.PoCBatch) error {
 	addr, err := sdk.AccAddressFromBech32(batch.ParticipantAddress)
 	if err != nil {
-		k.LogError("PoC: invalid participant address for batch", types.PoC, "participant", batch.ParticipantAddress, "error", err)
-		return
+		return err
 	}
 	pk := collections.Join3(batch.PocStageStartBlockHeight, addr, batch.BatchId)
 	k.LogInfo("PoC: Storing batch", types.PoC, "epoch", batch.PocStageStartBlockHeight, "participant", batch.ParticipantAddress, "batch_id", batch.BatchId)
 	if err := k.PoCBatches.Set(ctx, pk, batch); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 // GetPoCBatchesByStage collects all PoCBatch grouped by participant for a specific epoch
@@ -71,22 +71,21 @@ func (k Keeper) HasPoCValidation(ctx context.Context, pocStageStartBlockHeight i
 	return k.PoCValidations.Has(ctx, pk)
 }
 
-func (k Keeper) SetPoCValidation(ctx context.Context, validation types.PoCValidation) {
+func (k Keeper) SetPoCValidation(ctx context.Context, validation types.PoCValidation) error {
 	pAddr, err := sdk.AccAddressFromBech32(validation.ParticipantAddress)
 	if err != nil {
-		k.LogError("PoC: invalid participant address for validation", types.PoC, "participant", validation.ParticipantAddress, "error", err)
-		return
+		return err
 	}
 	vAddr, err := sdk.AccAddressFromBech32(validation.ValidatorParticipantAddress)
 	if err != nil {
-		k.LogError("PoC: invalid validator address for validation", types.PoC, "validator", validation.ValidatorParticipantAddress, "error", err)
-		return
+		return err
 	}
 	pk := collections.Join3(validation.PocStageStartBlockHeight, pAddr, vAddr)
 	k.LogInfo("PoC: Storing validation", types.PoC, "epoch", validation.PocStageStartBlockHeight, "participant", validation.ParticipantAddress, "validator", validation.ValidatorParticipantAddress)
 	if err := k.PoCValidations.Set(ctx, pk, validation); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func (k Keeper) GetPoCValidationByStage(ctx context.Context, pocStageStartBlockHeight int64) (map[string][]types.PoCValidation, error) {
