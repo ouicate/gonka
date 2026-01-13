@@ -149,7 +149,9 @@ func (k msgServer) checkAndStorePoCValidation(
 
 	validation := toPoCValidation(msg, currentBlockHeight)
 	validation.PocStageStartBlockHeight = pocStageStartBlockHeight
-	k.SetPoCValidation(ctx, *validation)
+	if err := k.SetPoCValidation(ctx, *validation); err != nil {
+		return err
+	}
 	if storedLogMessage != "" {
 		k.LogInfo(storedLogMessage, types.PoC,
 			"participant", msg.ParticipantAddress,

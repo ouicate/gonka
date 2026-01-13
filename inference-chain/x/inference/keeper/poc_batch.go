@@ -74,11 +74,11 @@ func (k Keeper) HasPoCValidation(ctx context.Context, pocStageStartBlockHeight i
 func (k Keeper) SetPoCValidation(ctx context.Context, validation types.PoCValidation) error {
 	pAddr, err := sdk.AccAddressFromBech32(validation.ParticipantAddress)
 	if err != nil {
-		return err
+		return errorsmod.Wrapf(err, "invalid participant address (%s)", err)
 	}
 	vAddr, err := sdk.AccAddressFromBech32(validation.ValidatorParticipantAddress)
 	if err != nil {
-		return err
+		return errorsmod.Wrapf(err, "invalid validator address (%s)", err)
 	}
 	pk := collections.Join3(validation.PocStageStartBlockHeight, pAddr, vAddr)
 	k.LogInfo("PoC: Storing validation", types.PoC, "epoch", validation.PocStageStartBlockHeight, "participant", validation.ParticipantAddress, "validator", validation.ValidatorParticipantAddress)
