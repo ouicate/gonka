@@ -1,6 +1,7 @@
 package calculations
 
 import (
+	"math"
 	"math/bits"
 
 	sdkerrors "cosmossdk.io/errors"
@@ -17,7 +18,7 @@ const (
 	PerTokenCost     = 1000 // Legacy fallback price
 )
 
-const maxInt64Uint64 = uint64(^uint64(0) >> 1)
+const maxInt64Uint64 = uint64(math.MaxInt64)
 
 type BlockContext struct {
 	BlockHeight    int64
@@ -200,7 +201,6 @@ func getMaxTokens(msg *types.MsgStartInference) uint64 {
 	return DefaultMaxTokens
 }
 
-
 func CalculateCost(inference *types.Inference) (int64, error) {
 	// Simply use the per-token price stored in the inference
 	// RecordInferencePrice ensures this is always set to the correct value:
@@ -209,6 +209,7 @@ func CalculateCost(inference *types.Inference) (int64, error) {
 	productHigh1, productLow1 := bits.Mul64(inference.CompletionTokenCount, inference.PerTokenPrice)
 	productHigh2, productLow2 := bits.Mul64(inference.PromptTokenCount, inference.PerTokenPrice)
 	sumLow, carry := bits.Add64(productLow1, productLow2, 0)
+	// While this itself could overflow, this is not going to happen with constraints on token count
 	sumHigh := productHigh1 + productHigh2 + carry
 	if sumHigh != 0 || sumLow > maxInt64Uint64 {
 		return 0, sdkerrors.Wrap(types.ErrArithmeticOverflow, "inference cost out of range")

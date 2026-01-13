@@ -1,3 +1,3 @@
 package types
 
-const MaxAllowedTokens uint64 = 10_000_000
+const MaxAllowedTokens uint64 = 1_000_000
