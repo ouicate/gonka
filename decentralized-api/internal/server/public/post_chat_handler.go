@@ -39,10 +39,6 @@ const (
 	BothContexts = TransferContext | ExecutorContext
 )
 
-// HTTP client with timeout for transfer agent requests to executor nodes
-// Prevents request-hang DoS attacks from malicious executor URLs
-var executorHttpClient = &http.Client{}
-
 // Package-level variables for AuthKey reuse prevention
 var (
 	// Map for O(1) lookup of existing AuthKeys and their contexts
@@ -60,6 +56,14 @@ var (
 	// Reference to the config manager for accessing validation parameters
 	configManagerRef *apiconfig.ConfigManager
 )
+
+func NewNoRedirectClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
 
 // emptyButParseableResponsePayload returns a deterministic "empty" response payload that:
 // - is valid JSON parseable by older validators
@@ -372,7 +376,7 @@ func (s *Server) handleTransferRequest(ctx echo.Context, request *ChatRequest) e
 	req.Header.Set(utils.XPromptHashHeader, inferenceRequest.PromptHash)
 	req.Header.Set("Content-Type", request.Request.Header.Get("Content-Type"))
 
-	resp, err := executorHttpClient.Do(req)
+	resp, err := NewNoRedirectClient().Do(req)
 	if err != nil {
 		logging.Error("Failed to make http request to executor", types.Inferences, "error", err, "url", executor.Url)
 		return err
