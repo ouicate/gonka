@@ -788,8 +788,8 @@ func calculateValidationOutcome(currentValidatorsSet map[string]int64, validatio
 
 // getInferenceServingNodeIds returns a set of node IDs that have POC_SLOT = true in the current epoch.
 // Uses ActiveParticipants which properly stores MlNodes (unlike parent epoch groups which have nil MlNodes).
-func (am AppModule) getInferenceServingNodeIds(ctx context.Context, upcomingEpoch types.Epoch) map[string]bool {
-	inferenceServingNodeIds := make(map[string]bool)
+func (am AppModule) getInferenceServingNodeIds(ctx context.Context, upcomingEpoch types.Epoch) map[string]map[string]bool {
+	inferenceServingNodeIds := make(map[string]map[string]bool)
 
 	// Skip for first epoch
 	if upcomingEpoch.Index <= 1 {
@@ -831,7 +831,10 @@ func (am AppModule) getInferenceServingNodeIds(ctx context.Context, upcomingEpoc
 
 				// POC_SLOT is at index 1 of TimeslotAllocation
 				if len(node.TimeslotAllocation) > 1 && node.TimeslotAllocation[1] {
-					inferenceServingNodeIds[node.NodeId] = true
+					if inferenceServingNodeIds[participant.Index] == nil {
+						inferenceServingNodeIds[participant.Index] = make(map[string]bool)
+					}
+					inferenceServingNodeIds[participant.Index][node.NodeId] = true
 					am.LogInfo("getInferenceServingNodeIds: Found inference-serving node", types.PoC,
 						"nodeId", node.NodeId,
 						"participantAddress", participant.Index)
@@ -848,16 +851,17 @@ func (am AppModule) getInferenceServingNodeIds(ctx context.Context, upcomingEpoc
 }
 
 // filterPoCBatchesFromInferenceNodes removes PoC batches from nodes that should be serving inference
-func (am AppModule) filterPoCBatchesFromInferenceNodes(allBatches map[string][]types.PoCBatch, inferenceServingNodeIds map[string]bool) map[string][]types.PoCBatch {
+func (am AppModule) filterPoCBatchesFromInferenceNodes(allBatches map[string][]types.PoCBatch, inferenceServingNodeIds map[string]map[string]bool) map[string][]types.PoCBatch {
 	filteredBatches := make(map[string][]types.PoCBatch)
 	excludedBatchCount := 0
 
 	for participantAddress, batches := range allBatches {
 		var validBatches []types.PoCBatch
+		participantNodeIds := inferenceServingNodeIds[participantAddress]
 
 		for _, batch := range batches {
 			// Check if this batch is from an inference-serving node
-			if inferenceServingNodeIds[batch.NodeId] {
+			if participantNodeIds != nil && participantNodeIds[batch.NodeId] {
 				// Exclude this batch - the node should have been serving inference, not mining PoC
 				excludedBatchCount++
 				am.LogWarn("filterPoCBatchesFromInferenceNodes: Excluding PoC batch from inference-serving node", types.PoC,
