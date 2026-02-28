@@ -41,6 +41,7 @@ type ValidationConfig struct {
 	RequestTimeout time.Duration
 	MaxRetries     int
 	RetryBackoff   time.Duration
+	DeadlineBuffer time.Duration // Safety buffer subtracted from on-chain window to ensure timely submission
 }
 
 // DefaultValidationConfig returns the default configuration.
@@ -50,6 +51,7 @@ func DefaultValidationConfig() ValidationConfig {
 		RequestTimeout: 20 * time.Second,
 		MaxRetries:     15,
 		RetryBackoff:   3 * time.Second,
+		DeadlineBuffer: 60 * time.Second,
 	}
 }
 
@@ -275,8 +277,19 @@ func (v *OffChainValidator) ValidateAll(pocStageStartBlockHeight int64, pocStart
 	failCount := 0
 	pendingCount := len(workItems)
 
-	// Context for coordinating shutdown
-	ctx, cancel := context.WithCancel(context.Background())
+	// Compute global deadline from on-chain validation window to prevent
+	// workers from continuing past the submission deadline.
+	deadline := v.computeValidationDeadline(epochState)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if deadline > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), deadline)
+		logging.Info("OffChainValidator: set global validation deadline", types.PoC,
+			"deadline", deadline, "deadlineBuffer", v.config.DeadlineBuffer)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+		logging.Warn("OffChainValidator: could not compute deadline, running without global timeout", types.PoC)
+	}
 	defer cancel()
 
 	// Start workers
@@ -324,6 +337,34 @@ func (v *OffChainValidator) ValidateAll(pocStageStartBlockHeight int64, pocStart
 		"failed", failCount)
 }
 
+// computeValidationDeadline calculates a global timeout for the validation run
+// based on the remaining on-chain validation window. This prevents workers from
+// continuing past the point where results can still be submitted on-chain.
+func (v *OffChainValidator) computeValidationDeadline(epochState *chainphase.EpochState) time.Duration {
+	if epochState == nil {
+		return 0
+	}
+
+	endBlock := epochState.LatestEpoch.EndOfPoCValidation()
+	currentBlock := epochState.CurrentBlock.Height
+
+	if endBlock <= currentBlock {
+		return 0
+	}
+
+	remainingBlocks := endBlock - currentBlock
+	// Approximate block duration ~5.41s (matches expectedBlockDurationSec in chainvalidation.go)
+	const approxBlockDurationSec = 5.41
+	estimatedRemaining := time.Duration(float64(remainingBlocks)*approxBlockDurationSec*float64(time.Second))
+
+	deadline := estimatedRemaining - v.config.DeadlineBuffer
+	if deadline <= 0 {
+		return 0
+	}
+
+	return deadline
+}
+
 // worker processes participants from the work channel.
 // Failed items are re-queued for retry instead of blocking on retries.
 func (v *OffChainValidator) worker(
@@ -354,13 +395,19 @@ func (v *OffChainValidator) worker(
 				return
 			}
 
-			// Not ready yet? Put back at end of queue
+			// Not ready yet? Put back at end of queue and sleep briefly to avoid busy-wait spin
 			if time.Now().Before(work.retryAfter) {
-				workChan <- work
+				select {
+				case workChan <- work:
+				case <-ctx.Done():
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 
 			result := v.validateParticipant(
+				ctx,
 				workerID,
 				work,
 				proofClient,
@@ -407,8 +454,7 @@ func (v *OffChainValidator) worker(
 					*pendingCount--
 					logging.Warn("OffChainValidator: max retries exceeded, reporting as invalid", types.PoC,
 						"participant", work.address, "attempts", work.attempt+1)
-					// Report participant as invalid to chain. We probably should separate only to report failed network requests.
-					// reportAddr = work.address
+					reportAddr = work.address
 				}
 			}
 
@@ -432,6 +478,7 @@ func (v *OffChainValidator) worker(
 // samplingBlockHash: fresh hash for random sampling (anti-cheat)
 // pocStartBlockHash: original PoC start block hash (must match generation for MLNode)
 func (v *OffChainValidator) validateParticipant(
+	ctx context.Context,
 	workerID int,
 	work participantWork,
 	proofClient *ProofClient,
@@ -443,7 +490,6 @@ func (v *OffChainValidator) validateParticipant(
 	pocParams *types.PocParams,
 	sampleSize int,
 ) validateResult {
-	ctx := context.Background()
 
 	logging.Debug("OffChainValidator: validating participant", types.PoC,
 		"worker", workerID, "participant", work.address, "count", work.count, "attempt", work.attempt)
