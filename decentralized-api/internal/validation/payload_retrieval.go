@@ -29,8 +29,9 @@ var ErrHashMismatch = errors.New("hash mismatch: executor served wrong payload w
 // Validation is no longer useful - abort without invalidation.
 var ErrEpochStale = errors.New("inference epoch too old, validation no longer useful")
 
-// HTTP client with timeout for payload retrieval
-var payloadRetrievalClient = &http.Client{}
+// HTTP client with timeout for payload retrieval.
+// A 30s timeout prevents goroutines from hanging indefinitely on unresponsive executors.
+var payloadRetrievalClient = &http.Client{Timeout: 30 * time.Second}
 
 // PayloadResponse matches the executor endpoint response
 type PayloadResponse struct {
