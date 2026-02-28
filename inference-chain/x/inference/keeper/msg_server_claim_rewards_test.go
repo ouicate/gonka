@@ -8,6 +8,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	authztypes "github.com/cosmos/cosmos-sdk/x/authz"
 	"github.com/productscience/inference/testutil"
@@ -877,6 +878,225 @@ func TestMsgServer_ClaimRewards_SkippedValidationDuringPoC_NotAvailable(t *testi
 
 func TestMsgServer_ClaimRewards_SkippedValidationDuringPoC_Available(t *testing.T) {
 	pocAvailabilityTest(t, true)
+}
+
+// TestMsgServer_ClaimRewards_EscrowFailurePreservesSettleAmount verifies that when
+// escrow payment fails due to insufficient funds, the settle amount is NOT removed,
+// allowing the participant to retry the claim later.
+func TestMsgServer_ClaimRewards_EscrowFailurePreservesSettleAmount(t *testing.T) {
+	k, ms, ctx, mocks := setupKeeperWithMocks(t)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
+	mockAccount := NewMockAccount(testutil.Creator)
+
+	seed := uint64(1)
+	seedBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(seedBytes, seed)
+
+	signature, err := mockAccount.key.Sign(seedBytes)
+	require.NoError(t, err)
+	signatureHex := hex.EncodeToString(signature)
+
+	// Setup epochs
+	epochIndex := uint64(100)
+	epoch := types.Epoch{Index: epochIndex, PocStartBlockHeight: 1000}
+	k.SetEpoch(sdkCtx, &epoch)
+
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(sdkCtx, &currentEpoch)
+	_ = k.SetEffectiveEpochIndex(sdkCtx, currentEpoch.Index)
+
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{MemberAddress: testutil.Creator, Weight: 10},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData)
+
+	settleAmount := types.SettleAmount{
+		Participant:   testutil.Creator,
+		EpochIndex:    epochIndex,
+		WorkCoins:     1000,
+		RewardCoins:   500,
+		SeedSignature: signatureHex,
+	}
+	_ = k.SetSettleAmount(sdkCtx, settleAmount)
+
+	epochData := types.EpochGroupData{
+		EpochIndex:          epoch.Index,
+		EpochGroupId:        100,
+		PocStartBlockHeight: epochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{MemberAddress: testutil.Creator, Weight: 10},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, epochData)
+
+	perfSummary := types.EpochPerformanceSummary{
+		EpochIndex:    epochIndex,
+		ParticipantId: testutil.Creator,
+		Claimed:       false,
+	}
+	k.SetEpochPerformanceSummary(sdkCtx, perfSummary)
+
+	validations := types.EpochGroupValidations{
+		Participant:         testutil.Creator,
+		EpochIndex:          epochIndex,
+		ValidatedInferences: []string{"inference1"},
+	}
+	k.SetEpochGroupValidations(sdkCtx, validations)
+
+	addr, err := sdk.AccAddressFromBech32(testutil.Creator)
+	require.NoError(t, err)
+
+	mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), addr).Return(mockAccount).AnyTimes()
+	mocks.AuthzKeeper.EXPECT().GranterGrants(gomock.Any(), gomock.Any()).Return(&authztypes.QueryGranterGrantsResponse{Grants: []*authztypes.GrantAuthorization{}}, nil).AnyTimes()
+
+	// Mock escrow payment to fail with ErrInsufficientFunds
+	workCoins := sdk.NewCoins(sdk.NewInt64Coin(types.BaseCoin, 1000))
+	insufficientFundsErr := sdkerrors.ErrInsufficientFunds.Wrapf("spendable balance 0nicoin is smaller than 1000ngonka")
+	mocks.BankKeeper.EXPECT().SendCoinsFromModuleToAccount(
+		gomock.Any(), types.ModuleName, addr, workCoins, gomock.Any(),
+	).Return(insufficientFundsErr)
+
+	resp, err := ms.ClaimRewards(ctx.WithBlockHeight(claimDebounceBlocks+1), &types.MsgClaimRewards{
+		Creator:    testutil.Creator,
+		EpochIndex: epochIndex,
+		Seed:       1,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, uint64(0), resp.Amount)
+	require.Contains(t, resp.Result, "Insufficient funds")
+
+	// CRITICAL: Settle amount must still exist so the participant can retry
+	preserved, found := k.GetSettleAmount(sdkCtx, testutil.Creator)
+	require.True(t, found, "settle amount must be preserved after escrow payment failure")
+	require.Equal(t, uint64(1000), preserved.WorkCoins, "work coins must be unchanged")
+	require.Equal(t, uint64(500), preserved.RewardCoins, "reward coins must be unchanged")
+
+	// Performance summary must NOT be marked as claimed
+	ps, found := k.GetEpochPerformanceSummary(sdkCtx, epochIndex, testutil.Creator)
+	require.True(t, found)
+	require.False(t, ps.Claimed, "performance summary must not be marked as claimed after failure")
+}
+
+// TestMsgServer_ClaimRewards_RewardFailurePreservesRewardCoins verifies that when
+// work payment succeeds but reward payment fails, WorkCoins is zeroed out
+// while RewardCoins is preserved, allowing the participant to retry for rewards.
+func TestMsgServer_ClaimRewards_RewardFailurePreservesRewardCoins(t *testing.T) {
+	k, ms, ctx, mocks := setupKeeperWithMocks(t)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
+	mockAccount := NewMockAccount(testutil.Creator)
+
+	seed := uint64(1)
+	seedBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(seedBytes, seed)
+
+	signature, err := mockAccount.key.Sign(seedBytes)
+	require.NoError(t, err)
+	signatureHex := hex.EncodeToString(signature)
+
+	// Setup epochs
+	epochIndex := uint64(100)
+	epoch := types.Epoch{Index: epochIndex, PocStartBlockHeight: 1000}
+	k.SetEpoch(sdkCtx, &epoch)
+
+	currentEpochIndex := uint64(101)
+	currentEpoch := types.Epoch{Index: currentEpochIndex, PocStartBlockHeight: 2000}
+	k.SetEpoch(sdkCtx, &currentEpoch)
+	_ = k.SetEffectiveEpochIndex(sdkCtx, currentEpoch.Index)
+
+	currentEpochData := types.EpochGroupData{
+		EpochIndex:          currentEpoch.Index,
+		EpochGroupId:        101,
+		PocStartBlockHeight: currentEpochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{MemberAddress: testutil.Creator, Weight: 10},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, currentEpochData)
+
+	settleAmount := types.SettleAmount{
+		Participant:   testutil.Creator,
+		EpochIndex:    epochIndex,
+		WorkCoins:     1000,
+		RewardCoins:   500,
+		SeedSignature: signatureHex,
+	}
+	_ = k.SetSettleAmount(sdkCtx, settleAmount)
+
+	epochData := types.EpochGroupData{
+		EpochIndex:          epoch.Index,
+		EpochGroupId:        100,
+		PocStartBlockHeight: epochIndex,
+		ValidationWeights: []*types.ValidationWeight{
+			{MemberAddress: testutil.Creator, Weight: 10},
+		},
+	}
+	k.SetEpochGroupData(sdkCtx, epochData)
+
+	perfSummary := types.EpochPerformanceSummary{
+		EpochIndex:    epochIndex,
+		ParticipantId: testutil.Creator,
+		Claimed:       false,
+	}
+	k.SetEpochPerformanceSummary(sdkCtx, perfSummary)
+
+	validations := types.EpochGroupValidations{
+		Participant:         testutil.Creator,
+		EpochIndex:          epochIndex,
+		ValidatedInferences: []string{"inference1"},
+	}
+	k.SetEpochGroupValidations(sdkCtx, validations)
+
+	addr, err := sdk.AccAddressFromBech32(testutil.Creator)
+	require.NoError(t, err)
+
+	mocks.AccountKeeper.EXPECT().GetAccount(gomock.Any(), addr).Return(mockAccount).AnyTimes()
+	mocks.AuthzKeeper.EXPECT().GranterGrants(gomock.Any(), gomock.Any()).Return(&authztypes.QueryGranterGrantsResponse{Grants: []*authztypes.GrantAuthorization{}}, nil).AnyTimes()
+
+	// Mock: work (escrow) payment SUCCEEDS
+	workCoins := sdk.NewCoins(sdk.NewInt64Coin(types.BaseCoin, 1000))
+	mocks.BankKeeper.EXPECT().SendCoinsFromModuleToAccount(
+		gomock.Any(), types.ModuleName, addr, workCoins, gomock.Any(),
+	).Return(nil)
+
+	// Mock: reward payment FAILS with ErrInsufficientFunds
+	rewardCoins := sdk.NewCoins(sdk.NewInt64Coin(types.BaseCoin, 500))
+	insufficientFundsErr := sdkerrors.ErrInsufficientFunds.Wrapf("spendable balance 0nicoin is smaller than 500ngonka")
+	mocks.BankKeeper.EXPECT().SendCoinsFromModuleToAccount(
+		gomock.Any(), types.ModuleName, addr, rewardCoins, gomock.Any(),
+	).Return(insufficientFundsErr)
+
+	resp, err := ms.ClaimRewards(ctx.WithBlockHeight(claimDebounceBlocks+1), &types.MsgClaimRewards{
+		Creator:    testutil.Creator,
+		EpochIndex: epochIndex,
+		Seed:       1,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, uint64(1000), resp.Amount, "should report work coins paid")
+	require.Contains(t, resp.Result, "rewards failed")
+	require.Contains(t, resp.Result, "retry")
+
+	// CRITICAL: Settle amount must still exist with WorkCoins zeroed, RewardCoins preserved
+	preserved, found := k.GetSettleAmount(sdkCtx, testutil.Creator)
+	require.True(t, found, "settle amount must be preserved after reward payment failure")
+	require.Equal(t, uint64(0), preserved.WorkCoins, "work coins must be zeroed (already paid)")
+	require.Equal(t, uint64(500), preserved.RewardCoins, "reward coins must be preserved for retry")
+
+	// Performance summary must NOT be marked as claimed
+	ps, found := k.GetEpochPerformanceSummary(sdkCtx, epochIndex, testutil.Creator)
+	require.True(t, found)
+	require.False(t, ps.Claimed, "performance summary must not be marked as claimed after partial payment")
 }
 
 func pocAvailabilityTest(t *testing.T, validatorIsAvailableDuringPoC bool) {

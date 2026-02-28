@@ -76,14 +76,19 @@ func (ms msgServer) payoutClaim(ctx sdk.Context, msg *types.MsgClaimRewards, set
 	rewardVestingPeriod := &params.TokenomicsParams.RewardVestingPeriod
 	if err := ms.PayParticipantFromModule(ctx, msg.Creator, int64(settleAmount.GetRewardCoins()), types.ModuleName, "reward_coins:"+settleAmount.Participant, rewardVestingPeriod); err != nil {
 		if sdkerrors.ErrInsufficientFunds.Is(err) {
-			ms.LogError("Insufficient funds for paying rewards. Work paid, rewards declined", types.Claims, "error", err, "settleAmount", settleAmount)
+			ms.LogError("Insufficient funds for paying rewards. Work paid, rewards pending retry", types.Claims, "error", err, "settleAmount", settleAmount)
 		} else {
 			ms.LogError("Error paying participant for rewards", types.Claims, "error", err)
 		}
-		ms.finishSettle(ctx, settleAmount)
+		// Work was already paid — zero out WorkCoins but preserve RewardCoins
+		// so the participant can retry the claim for the remaining rewards.
+		settleAmount.WorkCoins = 0
+		if setErr := ms.SetSettleAmount(ctx, *settleAmount); setErr != nil {
+			ms.LogError("Failed to update settle amount after partial payment", types.Claims, "error", setErr)
+		}
 		return &types.MsgClaimRewardsResponse{
-			Amount: settleAmount.GetWorkCoins(),
-			Result: "Work paid, but rewards failed.",
+			Amount: escrowPayment,
+			Result: "Work paid, but rewards failed. Rewards preserved for retry.",
 		}, err
 	}
 
@@ -99,12 +104,13 @@ func (ms msgServer) payoutClaim(ctx sdk.Context, msg *types.MsgClaimRewards, set
 }
 
 func (ms msgServer) handleUnderfundedWork(ctx sdk.Context, err error, settleAmount *types.SettleAmount) {
-	ms.LogError("Insufficient funds for paying participant for work! Unpaid settlement", types.Claims, "error", err, "settleAmount", settleAmount)
+	ms.LogError("Insufficient funds for paying participant for work! Unpaid settlement preserved for retry", types.Claims, "error", err, "settleAmount", settleAmount)
 
 	spendable, required := ms.parseBalanceError(err.Error())
 	ms.LogError("Balance details", types.Claims, "spendable", spendable, "required", required)
 
-	ms.finishSettle(ctx, settleAmount)
+	// Do NOT call finishSettle here — the settle amount must be preserved
+	// so the participant can retry when funds become available.
 }
 
 func (ms msgServer) parseBalanceError(errMsg string) (spendable int64, required int64) {
